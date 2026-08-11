@@ -378,3 +378,23 @@ dialog::backdrop{background:rgba(11,22,29,.45)}
     border-radius:12px;
   }
 }
+
+.connection-warning{
+  max-width:1200px;
+  margin:0 auto 16px;
+  padding:13px 16px;
+  border:1px solid #f2cf8b;
+  border-radius:14px;
+  background:#fff8e8;
+  color:#765416;
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  align-items:center;
+}
+.connection-warning strong{font-size:13px}
+.connection-warning span{font-size:12px}
+.btn:disabled{
+  opacity:.55;
+  cursor:not-allowed;
+}

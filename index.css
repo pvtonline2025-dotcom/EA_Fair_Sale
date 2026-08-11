@@ -1,0 +1,380 @@
+
+:root{
+  --bg:#f5f7fb;
+  --surface:#ffffff;
+  --text:#1d2433;
+  --muted:#7b8497;
+  --line:#e5e9f0;
+  --primary:#1597a5;
+  --primary-dark:#0f7f8b;
+  --nav:#10222c;
+  --success:#28a76f;
+  --warning:#f6a91a;
+  --danger:#e45757;
+  --info:#5273d5;
+  --shadow:0 8px 24px rgba(31,45,61,.08);
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:"Noto Sans Thai",Tahoma,Arial,sans-serif}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer}
+.app-shell{display:grid;grid-template-columns:240px 1fr;min-height:100vh}
+.sidebar{background:var(--nav);color:#fff;padding:22px 16px;position:sticky;top:0;height:100vh}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:28px}
+.brand-mark{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,#20afbc,#0f7f8b);font-weight:800}
+.brand strong{display:block;font-size:17px}
+.brand small{color:#a8bbc4}
+.nav{display:grid;gap:8px}
+.nav-item{width:100%;border:0;background:transparent;color:#cfe0e6;padding:12px 14px;border-radius:10px;text-align:left;display:flex;gap:12px;align-items:center}
+.nav-item:hover,.nav-item.active{background:rgba(255,255,255,.1);color:#fff}
+.main{min-width:0}
+.topbar{background:var(--surface);padding:20px 26px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:20px;position:sticky;top:0;z-index:3}
+.topbar h1{margin:0;font-size:22px}
+.topbar p{margin:4px 0 0;color:var(--muted);font-size:13px}
+.top-actions{display:flex;gap:10px;align-items:center}
+.top-actions input{width:260px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;outline:none}
+.profile{width:40px;height:40px;border-radius:50%;border:0;background:var(--primary);color:#fff;font-weight:700}
+.content{padding:24px}
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow)}
+.kpi .label{color:var(--muted);font-size:13px;margin-bottom:8px}
+.kpi .value{font-size:28px;font-weight:800}
+.kpi .hint{font-size:12px;margin-top:7px;color:var(--muted)}
+.kpi.success .value{color:var(--success)}
+.kpi.warning .value{color:var(--warning)}
+.kpi.primary .value{color:var(--primary)}
+.kpi.info .value{color:var(--info)}
+.panel-grid{display:grid;grid-template-columns:1.25fr .75fr;gap:18px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+.card-head{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;border-bottom:1px solid var(--line);gap:12px}
+.card-head h2{font-size:16px;margin:0}
+.card-body{padding:16px 18px}
+.btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-dark)}
+.btn-light{background:#eef4f5;color:var(--primary-dark)}
+.btn-danger{background:#fdecec;color:var(--danger)}
+.table-wrap{overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:12px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{color:var(--muted);font-weight:700;background:#fbfcfe}
+.status{display:inline-flex;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:700}
+.status.ok{background:#e9f7f0;color:var(--success)}
+.status.low{background:#fff4dc;color:#a96900}
+.status.out{background:#fdecec;color:var(--danger)}
+.status.in{background:#e9f7f0;color:var(--success)}
+.status.sale{background:#eaf0ff;color:var(--info)}
+.status.adjust{background:#f3edff;color:#7c57c6}
+.quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.quick{padding:18px;border:1px solid var(--line);border-radius:14px;background:#fbfcfe;text-align:center}
+.quick .icon{font-size:28px;margin-bottom:8px}
+.progress{height:12px;border-radius:999px;background:#e9eef4;overflow:hidden}
+.progress>span{display:block;height:100%;background:linear-gradient(90deg,var(--primary),#50c1cb)}
+.list{display:grid;gap:10px}
+.list-item{display:flex;justify-content:space-between;align-items:center;padding:12px;border:1px solid var(--line);border-radius:12px;gap:12px}
+.list-item strong{display:block;font-size:13px}
+.list-item small{color:var(--muted)}
+.form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.field{display:grid;gap:6px}
+.field label{font-size:13px;font-weight:700}
+.field input,.field select,.field textarea{border:1px solid var(--line);border-radius:10px;padding:11px 12px;background:#fff}
+.field textarea{min-height:88px;resize:vertical}
+.actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+.empty{padding:42px 16px;text-align:center;color:var(--muted)}
+.toast{position:fixed;right:24px;bottom:24px;background:#17232c;color:#fff;padding:12px 16px;border-radius:10px;opacity:0;transform:translateY(10px);transition:.2s;pointer-events:none;z-index:20}
+.toast.show{opacity:1;transform:translateY(0)}
+.mini-actions{display:flex;gap:6px}
+.mini-btn{border:0;padding:6px 8px;border-radius:8px;background:#eef4f5;color:#355}
+.summary-row{display:flex;justify-content:space-between;align-items:end;gap:12px;margin-bottom:14px}
+.summary-row strong{font-size:22px}
+.badge{font-size:11px;padding:5px 8px;border-radius:999px;background:#eef4f5;color:#48616a}
+dialog{border:0;padding:0;border-radius:16px;max-width:560px;width:calc(100% - 28px);box-shadow:0 20px 60px rgba(0,0,0,.25)}
+dialog::backdrop{background:rgba(11,22,29,.45)}
+.modal-card{margin:0}
+.modal-head{display:flex;justify-content:space-between;align-items:center;padding:16px 18px;border-bottom:1px solid var(--line)}
+.modal-head h3{margin:0}
+.modal-body{padding:18px}
+.icon-close{border:0;background:transparent;font-size:18px}
+@media(max-width:1050px){
+  .app-shell{grid-template-columns:78px 1fr}
+  .sidebar{padding:18px 10px}
+  .brand div:not(.brand-mark),.nav-item span{display:none}
+  .brand{justify-content:center}
+  .nav-item{justify-content:center}
+  .kpi-grid{grid-template-columns:repeat(2,1fr)}
+  .panel-grid{grid-template-columns:1fr}
+}
+@media(max-width:700px){
+  .app-shell{display:block}
+  .sidebar{height:auto;position:fixed;left:0;right:0;bottom:0;top:auto;z-index:10;padding:8px}
+  .brand{display:none}
+  .nav{grid-template-columns:repeat(6,1fr)}
+  .nav-item{padding:10px 5px;font-size:18px}
+  .topbar{padding:14px 16px}
+  .top-actions input{display:none}
+  .content{padding:14px 14px 90px}
+  .kpi-grid{grid-template-columns:1fr 1fr;gap:10px}
+  .kpi{padding:14px}
+  .kpi .value{font-size:22px}
+  .form-grid{grid-template-columns:1fr}
+  .quick-grid{grid-template-columns:1fr}
+}
+
+
+/* =========================================================
+   TABLET APP HOME
+   หน้าแรกแบบเมนูแอป เน้นการแตะบนแท็บเล็ต
+========================================================= */
+.app-home{
+  max-width:1180px;
+  margin:0 auto;
+}
+
+.welcome-strip{
+  min-height:150px;
+  padding:24px 28px;
+  margin-bottom:20px;
+  border-radius:24px;
+  color:#fff;
+  background:
+    radial-gradient(circle at 85% 25%,rgba(255,255,255,.17),transparent 30%),
+    linear-gradient(135deg,#0f7f8b,#20aab6);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:24px;
+  box-shadow:0 14px 34px rgba(15,127,139,.20);
+}
+.welcome-strip .eyebrow{
+  font-size:12px;
+  font-weight:800;
+  letter-spacing:1.5px;
+  opacity:.82;
+}
+.welcome-strip h2{
+  margin:6px 0 4px;
+  font-size:28px;
+}
+.welcome-strip p{
+  margin:0;
+  opacity:.85;
+}
+.today-summary{
+  min-width:220px;
+  padding:16px 20px;
+  border-radius:18px;
+  background:rgba(255,255,255,.14);
+  backdrop-filter:blur(8px);
+  text-align:right;
+}
+.today-summary span,
+.today-summary small{
+  display:block;
+  opacity:.88;
+}
+.today-summary strong{
+  display:block;
+  font-size:30px;
+  margin:4px 0;
+}
+
+.app-menu-grid{
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:18px;
+}
+
+.app-tile{
+  position:relative;
+  min-height:180px;
+  padding:22px;
+  border:1px solid var(--line);
+  border-radius:24px;
+  background:var(--surface);
+  color:var(--text);
+  box-shadow:var(--shadow);
+  text-align:left;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  overflow:hidden;
+  transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease;
+  touch-action:manipulation;
+}
+.app-tile::after{
+  content:"";
+  position:absolute;
+  right:-38px;
+  top:-38px;
+  width:120px;
+  height:120px;
+  border-radius:50%;
+  background:var(--tile-soft,#eef7f8);
+}
+.app-tile:hover{
+  transform:translateY(-3px);
+  box-shadow:0 14px 32px rgba(31,45,61,.13);
+}
+.app-tile:active{
+  transform:scale(.985);
+}
+.tile-icon{
+  position:relative;
+  z-index:1;
+  width:64px;
+  height:64px;
+  display:grid;
+  place-items:center;
+  border-radius:18px;
+  font-size:32px;
+  background:var(--tile-soft,#eef7f8);
+}
+.tile-text{
+  position:relative;
+  z-index:1;
+  display:grid;
+  gap:4px;
+}
+.tile-text strong{
+  font-size:20px;
+}
+.tile-text small{
+  color:var(--muted);
+  font-size:13px;
+}
+.tile-arrow{
+  position:absolute;
+  right:20px;
+  bottom:18px;
+  z-index:1;
+  font-size:32px;
+  color:#abb6c3;
+}
+.tile-badge{
+  position:absolute;
+  right:18px;
+  bottom:18px;
+  z-index:1;
+  padding:7px 10px;
+  border-radius:999px;
+  background:#fff4dc;
+  color:#a96900;
+  font-size:11px;
+  font-weight:800;
+}
+
+.tile-sale{--tile-soft:#e8f8f1;border-top:5px solid #28a76f}
+.tile-dashboard{--tile-soft:#eaf0ff;border-top:5px solid #5273d5}
+.tile-movement{--tile-soft:#e9f7fa;border-top:5px solid #1597a5}
+.tile-stock{--tile-soft:#fff4dc;border-top:5px solid #f6a91a}
+.tile-report{--tile-soft:#f2ecff;border-top:5px solid #8061c9}
+.tile-settings{--tile-soft:#eef1f5;border-top:5px solid #778391}
+
+.home-footer{
+  margin:20px 4px 0;
+  color:var(--muted);
+  font-size:12px;
+  display:flex;
+  justify-content:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+/* Tablet landscape: ให้ปุ่มใหญ่ กดง่าย และฟีลแอป */
+@media (min-width:701px) and (max-width:1180px){
+  .app-shell{grid-template-columns:92px 1fr}
+  .sidebar{padding:18px 10px}
+  .brand{justify-content:center}
+  .brand div:not(.brand-mark){display:none}
+  .nav-item{
+    justify-content:center;
+    padding:13px 8px;
+    font-size:20px;
+  }
+  .nav-item span{display:none}
+  .content{padding:20px}
+  .app-menu-grid{grid-template-columns:repeat(3,1fr);gap:14px}
+  .app-tile{min-height:166px;padding:18px}
+  .tile-text strong{font-size:18px}
+}
+
+/* Tablet portrait */
+@media (min-width:701px) and (max-width:900px){
+  .app-menu-grid{grid-template-columns:repeat(2,1fr)}
+}
+
+/* Phone */
+@media(max-width:700px){
+  .app-menu-grid{grid-template-columns:repeat(2,1fr);gap:10px}
+  .app-tile{min-height:145px;padding:15px;border-radius:18px}
+  .tile-icon{width:52px;height:52px;font-size:26px;border-radius:15px}
+  .tile-text strong{font-size:16px}
+  .tile-text small{font-size:11px}
+  .welcome-strip{padding:18px;min-height:120px;border-radius:18px}
+  .welcome-strip h2{font-size:22px}
+  .today-summary{display:none}
+  .nav{grid-template-columns:repeat(7,1fr)}
+}
+
+
+/* =========================================================
+   V4 - FULL SCREEN TABLET APP
+   ไม่มี Sidebar ใช้ปุ่มกลับหน้าหลักแทน
+========================================================= */
+.app-shell{
+  display:block !important;
+  min-height:100vh;
+}
+.main{
+  width:100%;
+  min-width:0;
+}
+.topbar-left{
+  display:flex;
+  align-items:center;
+  gap:14px;
+}
+.back-home-btn{
+  width:46px;
+  height:46px;
+  border:0;
+  border-radius:14px;
+  background:#e9f5f6;
+  color:var(--primary-dark);
+  font-size:26px;
+  font-weight:800;
+  display:grid;
+  place-items:center;
+  flex:0 0 auto;
+}
+.back-home-btn:active{
+  transform:scale(.96);
+}
+.hidden{
+  display:none !important;
+}
+.content{
+  max-width:1400px;
+  margin:0 auto;
+}
+.app-home{
+  max-width:1200px;
+}
+@media(min-width:701px){
+  .content{
+    padding:26px 30px 34px;
+  }
+  .topbar{
+    padding:18px 30px;
+  }
+}
+@media(max-width:700px){
+  .content{
+    padding:14px 14px 24px !important;
+  }
+  .back-home-btn{
+    width:42px;
+    height:42px;
+    border-radius:12px;
+  }
+}

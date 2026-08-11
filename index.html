@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0f7f8b">
+  <title>EA Fair Sale</title>
+  <link rel="stylesheet" href="index.css">
+</head>
+<body>
+  <div class="app-shell">
+<main class="main">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button id="homeBackBtn" class="back-home-btn hidden" type="button" onclick="go('home')" aria-label="กลับหน้าหลัก">←</button>
+          <div>
+            <h1 id="pageTitle">เมนูหลัก</h1>
+            <p id="pageSubtitle">เลือกเมนูที่ต้องการใช้งาน</p>
+          </div>
+        </div>
+        <div class="top-actions">
+          <input id="searchInput" type="search" placeholder="ค้นหา...">
+          <button class="profile">P</button>
+        </div>
+      </header>
+
+      <section id="content" class="content"></section>
+    </main>
+  </div>
+
+  <dialog id="modal">
+    <form method="dialog" class="modal-card">
+      <div class="modal-head">
+        <h3 id="modalTitle">เพิ่มสินค้า</h3>
+        <button class="icon-close" value="cancel">✕</button>
+      </div>
+      <div id="modalBody" class="modal-body"></div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast"></div>
+  <script src="index.js"></script>
+</body>
+</html>

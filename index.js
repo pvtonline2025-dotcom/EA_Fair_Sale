@@ -61,7 +61,268 @@ async function loadAll(){
   state.loading=false;render();
 }
 
+
+function getTodayItemStats(){
+  const salesToday = todaySales();
+  const saleIds = new Set(salesToday.map(s=>s.id));
+  const stats = {};
+
+  for(const item of state.saleItems){
+    if(!saleIds.has(item.sale_id)) continue;
+
+    const key = item.product_id || item.product_name;
+    if(!stats[key]){
+      stats[key] = {
+        product_id:item.product_id,
+        product_name:item.product_name || "ไม่ระบุ",
+        qty:0,
+        revenue:0
+      };
+    }
+
+    stats[key].qty += Number(item.qty || 0);
+    stats[key].revenue += Number(item.line_total || 0);
+  }
+
+  return Object.values(stats);
+}
+
+function getHourlySales(){
+  const buckets = {};
+  for(let h=8; h<=20; h++) buckets[h] = 0;
+
+  for(const sale of todaySales()){
+    const h = Number(String(sale.sale_time || "00:00").slice(0,2));
+    if(Number.isFinite(h)){
+      if(!(h in buckets)) buckets[h] = 0;
+      buckets[h] += Number(sale.total_amount || 0);
+    }
+  }
+
+  return Object.entries(buckets)
+    .map(([hour,total])=>({hour:Number(hour), total:Number(total)}))
+    .sort((a,b)=>a.hour-b.hour);
+}
+
+function buildReorderRecommendations(){
+  const todayStats = getTodayItemStats();
+  const soldMap = new Map(todayStats.map(x=>[x.product_id, x.qty]));
+
+  return state.products
+    .map(p=>{
+      const stock = Number(p.stock_qty || 0);
+      const min = Number(p.min_stock || 0);
+      const sold = Number(soldMap.get(p.id) || 0);
+
+      // คะแนนแนวโน้ม: ของต่ำกว่ากำหนด + ขายเร็วในวันนี้
+      const lowRatio = min > 0 ? Math.max(0, (min - stock) / min) : 0;
+      const velocity = sold / Math.max(stock, 1);
+      const score = lowRatio * 2 + velocity;
+
+      const targetStock = Math.max(min * 2, sold * 2);
+      const suggested = Math.max(0, Math.ceil(targetStock - stock));
+
+      let level = "ปกติ";
+      let className = "ok";
+
+      if(stock <= 0 || score >= 2){
+        level = "ควรสั่งด่วน";
+        className = "out";
+      }else if(stock <= min || score >= 0.8){
+        level = "ควรสั่งเพิ่ม";
+        className = "low";
+      }else if(sold > 0 && stock <= min * 1.5){
+        level = "เฝ้าระวัง";
+        className = "sale";
+      }
+
+      return {
+        ...p,
+        soldToday:sold,
+        score,
+        suggested,
+        level,
+        className
+      };
+    })
+    .filter(x=>x.level !== "ปกติ")
+    .sort((a,b)=>b.score-a.score)
+    .slice(0,8);
+}
+
+function renderHourlyChart(){
+  const data = getHourlySales();
+  const max = Math.max(...data.map(x=>x.total), 1);
+
+  return `
+    <div class="daily-chart">
+      ${data.map(x=>{
+        const height = Math.max(3, Math.round((x.total/max)*100));
+        return `
+          <div class="daily-bar-wrap" title="${String(x.hour).padStart(2,"0")}:00 • ฿${money(x.total)}">
+            <div class="daily-bar-value">${x.total ? "฿"+money(x.total) : ""}</div>
+            <div class="daily-bar-track">
+              <div class="daily-bar" style="height:${height}%"></div>
+            </div>
+            <div class="daily-bar-label">${String(x.hour).padStart(2,"0")}</div>
+          </div>`;
+      }).join("")}
+    </div>`;
+}
+
 function renderHome(){
+  setHeader("HOME","Dashboard รายวัน");
+
+  const total = todayTotal();
+  const bills = todaySales().length;
+  const todayStats = getTodayItemStats();
+  const units = todayStats.reduce((s,x)=>s+x.qty,0);
+  const target = Number(state.settings.target || 0);
+  const targetPct = target > 0 ? Math.min(100, Math.round(total/target*100)) : 0;
+
+  const topQty = [...todayStats].sort((a,b)=>b.qty-a.qty).slice(0,5);
+  const topRevenue = [...todayStats].sort((a,b)=>b.revenue-a.revenue).slice(0,5);
+  const low = lowProducts().sort((a,b)=>Number(a.stock_qty)-Number(b.stock_qty)).slice(0,8);
+  const reorder = buildReorderRecommendations();
+
+  const todayMoves = state.movements
+    .filter(m=>m.movement_date===todayISO())
+    .slice(0,12);
+
+  el("content").innerHTML = `
+    ${connectionNotice()}
+
+    <section class="daily-home">
+      <div class="daily-status-head">
+        <div>
+          <div class="eyebrow">EA FAIR SALE • ${state.terminal}</div>
+          <h2>สถานะวันนี้</h2>
+          <p>${new Date().toLocaleDateString("th-TH",{dateStyle:"full"})}</p>
+        </div>
+        <button class="btn btn-light" onclick="go('menu')">☰ เมนูทั้งหมด</button>
+      </div>
+
+      <div class="kpi-grid daily-kpi-grid">
+        <div class="kpi primary">
+          <div class="label">ยอดขายวันนี้</div>
+          <div class="value">฿${money(total)}</div>
+          <div class="hint">${bills} บิล</div>
+        </div>
+
+        <div class="kpi success">
+          <div class="label">จำนวนสินค้าที่ขาย</div>
+          <div class="value">${units}</div>
+          <div class="hint">${todayStats.length} รายการสินค้า</div>
+        </div>
+
+        <div class="kpi info">
+          <div class="label">เป้าหมายวันนี้</div>
+          <div class="value">${targetPct}%</div>
+          <div class="hint">เป้าหมาย ฿${money(target)}</div>
+        </div>
+
+        <div class="kpi warning">
+          <div class="label">สินค้า Stock ต่ำ</div>
+          <div class="value">${lowProducts().length}</div>
+          <div class="hint">${reorder.length} รายการควรพิจารณาสั่งเพิ่ม</div>
+        </div>
+      </div>
+
+      <div class="dashboard-grid dashboard-grid-main">
+        ${card("กราฟยอดขายระหว่างวัน",`
+          ${renderHourlyChart()}
+        `)}
+
+        ${card("ความเคลื่อนไหวล่าสุดวันนี้",`
+          <div class="activity-list">
+            ${todayMoves.length ? todayMoves.map(m=>`
+              <div class="activity-row">
+                <span class="activity-time">${String(m.movement_time||"").slice(0,5)}</span>
+                <div class="activity-info">
+                  <strong>${escapeHtml(m.product_name)}</strong>
+                  <small>${escapeHtml(m.note||m.movement_type||"")}</small>
+                </div>
+                <span class="activity-change ${Number(m.qty_change)>=0?"plus":"minus"}">
+                  ${Number(m.qty_change)>0?"+":""}${m.qty_change}
+                </span>
+              </div>`).join("") :
+              `<div class="empty">ยังไม่มีความเคลื่อนไหววันนี้</div>`}
+          </div>
+        `)}
+      </div>
+
+      <div class="dashboard-grid">
+        ${card("ขายจำนวนมากที่สุด",`
+          <div class="rank-list">
+            ${topQty.length ? topQty.map((x,i)=>`
+              <div class="rank-row">
+                <span class="rank-no">${i+1}</span>
+                <div class="rank-info">
+                  <strong>${escapeHtml(x.product_name)}</strong>
+                  <small>ยอดขาย ฿${money(x.revenue)}</small>
+                </div>
+                <span class="rank-value">${x.qty} ชิ้น</span>
+              </div>`).join("") :
+              `<div class="empty">ยังไม่มีรายการขายวันนี้</div>`}
+          </div>
+        `)}
+
+        ${card("ยอดขายสูงที่สุด",`
+          <div class="rank-list">
+            ${topRevenue.length ? topRevenue.map((x,i)=>`
+              <div class="rank-row">
+                <span class="rank-no">${i+1}</span>
+                <div class="rank-info">
+                  <strong>${escapeHtml(x.product_name)}</strong>
+                  <small>ขาย ${x.qty} ชิ้น</small>
+                </div>
+                <span class="rank-value">฿${money(x.revenue)}</span>
+              </div>`).join("") :
+              `<div class="empty">ยังไม่มีรายการขายวันนี้</div>`}
+          </div>
+        `)}
+      </div>
+
+      <div class="dashboard-grid">
+        ${card("สินค้าเหลือต่ำกว่ากำหนด",`
+          <div class="low-stock-cards">
+            ${low.length ? low.map(p=>`
+              <button class="low-stock-row" onclick="quickReceive('${p.id}')">
+                <div>
+                  <strong>${escapeHtml(p.product_name)}</strong>
+                  <small>${escapeHtml(p.product_code)} • ขั้นต่ำ ${p.min_stock}</small>
+                </div>
+                <div class="low-stock-right">
+                  <span class="stock-number">${p.stock_qty}</span>
+                  ${statusForProduct(p)}
+                </div>
+              </button>`).join("") :
+              `<div class="empty">Stock อยู่ในระดับปกติ</div>`}
+          </div>
+        `)}
+
+        ${card("แนวโน้มควรสั่งสินค้าเพิ่ม",`
+          <div class="reorder-list">
+            ${reorder.length ? reorder.map(p=>`
+              <div class="reorder-row">
+                <div>
+                  <strong>${escapeHtml(p.product_name)}</strong>
+                  <small>เหลือ ${p.stock_qty} • ขายวันนี้ ${p.soldToday} • ขั้นต่ำ ${p.min_stock}</small>
+                </div>
+                <div class="reorder-action">
+                  <span class="status ${p.className}">${p.level}</span>
+                  <strong>${p.suggested>0 ? "แนะนำ +"+p.suggested : "ติดตาม"}</strong>
+                </div>
+              </div>`).join("") :
+              `<div class="empty">ยังไม่มีรายการที่ต้องสั่งเพิ่มในขณะนี้</div>`}
+          </div>
+          <p class="trend-note">* คำแนะนำคำนวณจาก Stock ปัจจุบัน, จุดแจ้งเตือนขั้นต่ำ และอัตราการขายของวันนี้</p>
+        `)}
+      </div>
+    </section>`;
+}
+
+function renderMenu(){
   setHeader("MENU","เลือกเมนูที่ต้องการใช้งาน");
   const sales=todayTotal();
   const pct=Math.min(100,Math.round(sales/Math.max(1,state.settings.target)*100));
@@ -335,7 +596,19 @@ async function upsertSetting(k,v){return sb.from("ea_settings").upsert({setting_
 async function saveSettings(){if(!sb){toast("ยังไม่ได้ตั้งค่า Supabase");return}const shopName=el("shopName").value.trim()||"EA Fair Sale",target=Number(el("targetInput").value||0),low=Number(el("lowDefault").value||0),rs=await Promise.all([upsertSetting("shop_name",shopName),upsertSetting("daily_target",target),upsertSetting("low_stock_default",low)]);if(rs.find(x=>x.error)){toast("บันทึกไม่สำเร็จ");return}state.settings={shopName,target,lowStockDefault:low};toast("บันทึกแล้ว");renderSettings()}
 
 
-function updateBottomNav(){document.querySelectorAll(".bottom-nav-item").forEach(btn=>{const target=btn.dataset.nav;let active=false;if(["home","dashboardToday","dashboardAll","report","settings"].includes(state.page))active=target==="home";else if(state.page==="sale")active=target==="sale";else if(state.page==="stock"||state.page==="movement"||state.page==="lowStock")active=target==="stock";btn.classList.toggle("active",active)})}
+function updateBottomNav(){
+  document.querySelectorAll(".bottom-nav-item").forEach(btn=>{
+    const target=btn.dataset.nav;
+    let active=false;
+
+    if(state.page==="home") active=target==="home";
+    else if(state.page==="menu" || state.page==="dashboardToday" || state.page==="dashboardAll" || state.page==="report" || state.page==="settings") active=target==="menu";
+    else if(state.page==="sale") active=target==="sale";
+    else if(state.page==="stock" || state.page==="movement" || state.page==="lowStock") active=target==="stock";
+
+    btn.classList.toggle("active",active);
+  });
+}
 
 function toggleSearch(){
   const panel = el("searchPanel");
@@ -360,5 +633,22 @@ function go(page){if(state.page==="sale"&&page!=="sale")stopScanner();state.page
 el("searchInput").addEventListener("input",()=>{if(state.page==="stock")renderStock()});
 el("scannerDialog").addEventListener("close",()=>{try{scannerControls?.stop()}catch{}scannerControls=null});
 Object.assign(window,{go,startScanner,stopScanner,addBarcodeFromInput,addSelectedProduct,changeCartQty,removeCartItem,clearCart,checkoutCart,openProductModal,editProduct,saveProduct,saveMovement,exportSalesCSV,setTerminal,saveSettings});
-function render(){const b=el("homeBackBtn");if(b)b.classList.toggle("hidden",state.page==="home");updateBottomNav();if(state.loading)return;if(state.page==="home")renderHome();else if(state.page==="sale")renderSale();else if(state.page==="dashboardToday")renderDashboardToday();else if(state.page==="dashboardAll")renderDashboardAll();else if(state.page==="stock")renderStock();else if(state.page==="lowStock")renderLowStock();else if(state.page==="movement")renderMovement();else if(state.page==="report")renderReport();else renderSettings()}
+function render(){
+  const backBtn=el("homeBackBtn");
+  if(backBtn) backBtn.classList.toggle("hidden",state.page==="home");
+
+  updateBottomNav();
+  if(state.loading)return;
+
+  if(state.page==="home")renderHome();
+  else if(state.page==="menu")renderMenu();
+  else if(state.page==="sale")renderSale();
+  else if(state.page==="dashboardToday")renderDashboardToday();
+  else if(state.page==="dashboardAll")renderDashboardAll();
+  else if(state.page==="stock")renderStock();
+  else if(state.page==="lowStock")renderLowStock();
+  else if(state.page==="movement")renderMovement();
+  else if(state.page==="report")renderReport();
+  else renderSettings();
+}
 loadAll();

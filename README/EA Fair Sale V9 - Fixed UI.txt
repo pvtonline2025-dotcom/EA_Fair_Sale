@@ -1,0 +1,11 @@
+EA Fair Sale V9 - Fixed UI
+
+- แก้ error renderDashboard is not defined
+- เพิ่ม Dashboard วันนี้
+- เพิ่ม Dashboard รวมทั้งงาน
+- Tablet แนวนอน 3 คอลัมน์
+- Tablet แนวตั้ง 2 คอลัมน์
+- Mobile 2 คอลัมน์
+- POS / Barcode / Multi Tablet / Supabase ยังอยู่ครบ
+
+ไม่ต้อง Run SQL เพิ่ม หาก migration V6 รันแล้ว

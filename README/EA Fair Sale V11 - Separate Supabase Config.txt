@@ -1,0 +1,18 @@
+EA Fair Sale V11 - Separate Supabase Config
+
+เพิ่มไฟล์:
+- supabase-config.js
+- supabase-config.example.js
+- .gitignore
+
+วิธีใช้:
+1. เปิด supabase-config.js
+2. ใส่ Project URL
+3. ใส่ Publishable Key / Anon Key
+4. index.html จะโหลด supabase-config.js ก่อน index.js
+5. index.js อ่านค่าจาก window.EA_SUPABASE_CONFIG
+
+ข้อสำคัญ:
+- ห้ามใช้ service_role key ใน Frontend
+- Publishable/Anon key ใช้ในเว็บได้ แต่ต้องใช้ RLS ป้องกันข้อมูล
+- .gitignore ถูกตั้งให้ไม่ push supabase-config.js ขึ้น Git โดยอัตโนมัติ

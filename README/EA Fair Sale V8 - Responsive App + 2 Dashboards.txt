@@ -1,0 +1,29 @@
+EA Fair Sale V8 - Responsive App + 2 Dashboards
+
+Dashboard แยกเป็น 2 หน้า:
+1. Dashboard วันนี้
+   - ยอดขายวันนี้
+   - เป้าหมายวันนี้
+   - สินค้าใกล้หมด
+   - ยอดขายแยก POS วันนี้
+
+2. Dashboard รวมทั้งงาน
+   - ยอดขายสะสมทั้งหมด
+   - จำนวนบิลทั้งหมด
+   - ค่าเฉลี่ยต่อบิล
+   - จำนวนวันที่มีการขาย
+   - ยอดขายแยก POS
+   - สินค้าขายดี
+   - ตารางยอดขายรายวัน
+
+ระบบเดิมยังอยู่:
+- POS + Barcode
+- Multi Tablet POS-01 / POS-02 ...
+- Stock กลาง Supabase
+- Responsive Tablet/Mobile แนวตั้งและแนวนอน
+
+ไฟล์:
+- index.html
+- index.css
+- index.js
+- migration_v6_pos_barcode.sql

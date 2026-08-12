@@ -10,21 +10,47 @@
 <body>
   <div class="app-shell">
 <main class="main">
-      <header class="topbar">
-        <div class="topbar-left">
-          <button id="homeBackBtn" class="back-home-btn hidden" type="button" onclick="go('home')" aria-label="กลับหน้าหลัก">←</button>
-          <div>
-            <h1 id="pageTitle">เมนูหลัก</h1>
-            <p id="pageSubtitle">เลือกเมนูที่ต้องการใช้งาน</p>
+      <header class="appbar">
+        <div class="appbar-left">
+          <button id="homeBackBtn" class="appbar-icon hidden" type="button" onclick="go('home')" aria-label="กลับหน้าหลัก">←</button>
+          <div class="app-logo">EA</div>
+          <div class="appbar-title-wrap">
+            <h1 id="pageTitle">MENU</h1>
+            <p id="pageSubtitle">EA Fair Sale</p>
           </div>
         </div>
-        <div class="top-actions">
-          <input id="searchInput" type="search" placeholder="ค้นหา...">
-          <button class="profile">P</button>
+
+        <div class="appbar-actions">
+          <button class="appbar-icon" type="button" onclick="toggleSearch()" aria-label="ค้นหา">⌕</button>
+          <button class="appbar-icon" type="button" onclick="refreshData()" aria-label="รีเฟรช">↻</button>
+        </div>
+
+        <div id="searchPanel" class="app-search-panel hidden">
+          <input id="searchInput" type="search" placeholder="ค้นหาสินค้า...">
+          <button class="appbar-icon" type="button" onclick="toggleSearch()">✕</button>
         </div>
       </header>
 
       <section id="content" class="content"></section>
+
+      <nav class="bottom-nav" aria-label="เมนูหลัก">
+        <button class="bottom-nav-item active" data-nav="home" onclick="go('home')">
+          <span class="bottom-nav-icon">⌂</span>
+          <span>HOME</span>
+        </button>
+        <button class="bottom-nav-item" data-nav="sale" onclick="go('sale')">
+          <span class="bottom-nav-icon">🛒</span>
+          <span>POS</span>
+        </button>
+        <button class="bottom-nav-item" data-nav="stock" onclick="go('stock')">
+          <span class="bottom-nav-icon">▣</span>
+          <span>STOCK</span>
+        </button>
+        <button class="bottom-nav-item" data-nav="home" onclick="go('home')">
+          <span class="bottom-nav-icon">☰</span>
+          <span>MENU</span>
+        </button>
+      </nav>
     </main>
   </div>
 

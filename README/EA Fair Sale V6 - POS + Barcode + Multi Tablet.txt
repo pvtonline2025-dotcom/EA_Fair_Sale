@@ -1,0 +1,25 @@
+EA Fair Sale V6 - POS + Barcode + Multi Tablet
+
+อัปเกรดจาก V5:
+1. Supabase > SQL Editor
+2. รัน migration_v6_pos_barcode.sql
+3. ใช้ index.html / index.css / index.js ชุด V6
+4. ใส่ SUPABASE_URL และ SUPABASE_KEY ใน index.js เหมือนเดิม
+5. Deploy ผ่าน HTTPS เช่น Cloudflare Pages
+6. Tablet เครื่องแรก: ตั้งค่า POS-01
+7. Tablet เครื่องที่สอง: ตั้งค่า POS-02
+8. ไปหน้า Stock แล้วกรอก Barcode ให้สินค้า
+9. ไป POS ขายสินค้า > เปิดกล้องสแกน
+
+ฟังก์ชัน V6:
+- กล้องหลังสแกน Barcode
+- POS แบบตะกร้าสินค้า
+- สแกนสินค้าซ้ำเพื่อเพิ่มจำนวน
+- พิมพ์ Barcode เองได้
+- ตะกร้าแต่ละ Tablet แยกกันใน localStorage
+- เมื่อยืนยันการขาย จะบันทึกทั้งตะกร้าและตัด Stock ใน Supabase transaction เดียว
+- รองรับ POS-01 ถึง POS-04
+- Dashboard / Report แยกยอดแต่ละ POS
+- Barcode ไม่ซ้ำกันในฐานข้อมูล
+
+หมายเหตุ: ใช้ Publishable/anon key เท่านั้น ห้ามใช้ service_role key ในหน้าเว็บ

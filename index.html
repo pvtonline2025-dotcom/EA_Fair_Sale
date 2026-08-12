@@ -38,8 +38,26 @@
     </form>
   </dialog>
 
+  <dialog id="scannerDialog" class="scanner-dialog">
+    <div class="scanner-card">
+      <div class="scanner-head">
+        <div><h3>📷 สแกนบาร์โค้ด</h3><p>หันกล้องหลังไปที่บาร์โค้ดสินค้า</p></div>
+        <button class="icon-close" type="button" onclick="stopScanner()">✕</button>
+      </div>
+      <div class="scanner-video-wrap">
+        <video id="scannerVideo" playsinline muted></video>
+        <div class="scan-frame"></div>
+      </div>
+      <div class="scanner-foot">
+        <span id="scannerStatus">กำลังเปิดกล้อง...</span>
+        <button class="btn btn-light" type="button" onclick="stopScanner()">ปิดกล้อง</button>
+      </div>
+    </div>
+  </dialog>
+
   <div id="toast" class="toast"></div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/@zxing/browser@latest"></script>
   <script src="index.js"></script>
 </body>
 </html>

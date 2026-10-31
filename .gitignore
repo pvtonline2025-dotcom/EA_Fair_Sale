@@ -1,2 +1,14 @@
-# EA Fair Sale
+# ไม่ส่งไฟล์ config ที่ตั้งค่าบนเครื่องขึ้น GitHub
 supabase-config.js
+.env
+.env.*
+!.env.example
+
+# Cloudflare build output
+/dist/
+/node_modules/
+
+# OS/IDE
+.DS_Store
+Thumbs.db
+.vscode/

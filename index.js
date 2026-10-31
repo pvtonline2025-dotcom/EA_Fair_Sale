@@ -3,9 +3,13 @@
 // =========================================================
 
 function getSupabaseConfig() {
-  const url = localStorage.getItem("ea_supabase_url") || window.EA_SUPABASE_CONFIG?.url || "";
-  const key = localStorage.getItem("ea_supabase_key") || window.EA_SUPABASE_CONFIG?.key || "";
-  return { url: url.trim(), key: key.trim() };
+  const bundledConfig = window.EA_SUPABASE_CONFIG || {};
+  // ค่าที่ Cloudflare Build ใส่มาให้ต้องมีสิทธิ์เหนือค่าที่เคยบันทึกในเบราว์เซอร์
+  // ป้องกัน DEV / PROD ชี้ผิดฐาน เมื่อผู้ใช้เคยบันทึก URL ใน Settings
+  const managed = bundledConfig.managed === true;
+  const url = managed ? (bundledConfig.url || "") : (localStorage.getItem("ea_supabase_url") || bundledConfig.url || "");
+  const key = managed ? (bundledConfig.key || "") : (localStorage.getItem("ea_supabase_key") || bundledConfig.key || "");
+  return { url: String(url).trim(), key: String(key).trim() };
 }
 
 let activeConfig = getSupabaseConfig();

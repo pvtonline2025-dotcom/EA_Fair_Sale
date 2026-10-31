@@ -1,5 +1,6 @@
-// ตัวอย่างไฟล์ตั้งค่า Supabase
+// สร้างไฟล์ supabase-config.js โดยคัดลอกตัวอย่างนี้ (เฉพาะเวลาทดสอบบนเครื่อง)
+// อย่าใช้ Secret/Service Role Key ในฝั่งเว็บ
 window.EA_SUPABASE_CONFIG = {
-  url: "https://slyfsqacllupfvgjhtuv.supabase.co",
-  key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNseWZzcWFjbGx1cGZ2Z2podHV2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY0NzI0MjksImV4cCI6MjEwMjA0ODQyOX0.MU12To6Xp2k2ka-WgY840DCjlwMeWfLeALh6i765mis"
+  url: "https://YOUR_PROJECT_REF.supabase.co",
+  key: "YOUR_SUPABASE_PUBLISHABLE_KEY"
 };

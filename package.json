@@ -1,0 +1,11 @@
+{
+  "name": "ea-fair-sale",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EA Fair Sale static POS website - Cloudflare Pages build",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-pages.mjs",
+    "check:js": "node --check index.js && node --check js/offline-sync.js && node --check sw.js && node --check fetch-wrapper.js"
+  }
+}

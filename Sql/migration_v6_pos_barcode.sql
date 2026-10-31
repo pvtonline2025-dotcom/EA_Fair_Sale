@@ -50,6 +50,21 @@ begin
     null;
   end loop;
 
+  -- Validate total quantity per product across duplicate cart lines.
+  -- The legacy per-line check alone can oversell when a product appears twice.
+  for v_item in
+    select product_id, sum(qty) as total_qty
+    from jsonb_to_recordset(p_items) as x(product_id uuid, qty numeric, unit_price numeric)
+    group by product_id
+  loop
+    select * into v_product from public.ea_products
+    where id = v_item.product_id and is_active = true;
+    if not found then raise exception 'Product not found'; end if;
+    if v_product.stock_qty < v_item.total_qty then
+      raise exception 'Insufficient stock for %. Available: %', v_product.product_name, v_product.stock_qty;
+    end if;
+  end loop;
+
   -- ตรวจ stock และรวมยอด หลังจาก lock แล้ว
   for v_item in
     select * from jsonb_to_recordset(p_items) as x(product_id uuid, qty numeric, unit_price numeric)

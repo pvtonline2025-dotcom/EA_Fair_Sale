@@ -1,0 +1,350 @@
+/* =========================================================
+   EA FAIR SALE — DASHBOARD & ANALYTICS STYLES
+   Executive KPI widgets, date range filters & D3 charts
+   ========================================================= */
+
+/* Executive Action Toolbar */
+.dashboard-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  background: var(--surface-card, #1e293b);
+  border: 1px solid var(--card-border, #334155);
+  border-radius: var(--radius-lg, 12px);
+  padding: 12px 18px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  flex-wrap: wrap;
+}
+
+.dashboard-toolbar-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 220px;
+}
+
+.dashboard-toolbar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.2px;
+}
+
+.dashboard-toolbar-subtitle {
+  font-size: 11.5px;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.dashboard-date-range-badge {
+  background: rgba(56, 189, 248, 0.14);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 1px 7px;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dashboard-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn-dash-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  min-height: 36px;
+  border-radius: 9px;
+  background: #192a42;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  color: #f8fafc;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.btn-dash-action:hover {
+  background: #0284c7;
+  border-color: #38bdf8;
+  box-shadow: 0 2px 10px rgba(2, 132, 199, 0.4);
+}
+
+/* =========================================================
+   DATE RANGE FILTER BAR (PRESETS & CUSTOM DATES)
+   ========================================================= */
+.dashboard-date-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  background: #0c1422;
+  border: 1px solid rgba(56, 189, 248, 0.16);
+  border-radius: var(--radius-md, 14px);
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  flex-wrap: wrap;
+}
+
+.dashboard-date-presets {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.dash-filter-pill {
+  background: #111c2e;
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  color: #94a3b8;
+  padding: 6px 12px;
+  min-height: 34px;
+  border-radius: 18px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.dash-filter-pill:hover {
+  background: #192a44;
+  color: #ffffff;
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.dash-filter-pill.active {
+  background: linear-gradient(135deg, var(--primary, #0284c7) 0%, var(--primary-hover, #0369a1) 100%) !important;
+  color: #ffffff !important;
+  border-color: var(--primary-light, #38bdf8) !important;
+  box-shadow: 0 2px 10px var(--primary-glow, rgba(2, 132, 199, 0.4)) !important;
+}
+
+.dashboard-custom-range-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dashboard-date-input-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dashboard-date-input-group label {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #cbd5e1;
+}
+
+.dashboard-date-input {
+  background: #111b2d;
+  border: 1.5px solid rgba(56, 189, 248, 0.22);
+  border-radius: 8px;
+  padding: 5px 10px;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  outline: none;
+  transition: all 0.15s ease;
+  min-height: 34px;
+}
+
+.dashboard-date-input:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25);
+}
+
+.btn-dash-date-apply {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  border: 1px solid #38bdf8;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 14px;
+  min-height: 34px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.btn-dash-date-apply:hover {
+  background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
+  box-shadow: 0 2px 10px rgba(2, 132, 199, 0.4);
+}
+
+/* =========================================================
+   KPI CARDS GRID
+   ========================================================= */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: var(--fluid-gap, 14px);
+  margin-bottom: 22px;
+  width: 100%;
+  max-width: 100%;
+}
+
+.kpi {
+  background: var(--surface-card, #142237) !important;
+  border: 1px solid var(--card-border, rgba(56, 189, 248, 0.16)) !important;
+  border-radius: var(--radius-lg, 16px);
+  padding: 16px 18px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35) !important;
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.kpi:hover {
+  transform: translateY(-2px);
+  border-color: rgba(56, 189, 248, 0.4) !important;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45) !important;
+}
+
+.kpi .label {
+  color: #94a3b8 !important;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.kpi .value {
+  font-size: clamp(16px, 4.5vw, 28px) !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.5px;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  margin: 2px 0 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.kpi .hint {
+  font-size: 11.5px;
+  color: #cbd5e1 !important;
+  font-weight: 600;
+}
+
+/* Color Accents */
+.kpi.primary { border-top: 3.5px solid #10b981 !important; }
+.kpi.primary .value { color: #34d399 !important; text-shadow: 0 0 16px rgba(52, 211, 153, 0.3); }
+
+.kpi.success { border-top: 3.5px solid #38bdf8 !important; }
+.kpi.success .value { color: #38bdf8 !important; text-shadow: 0 0 16px rgba(56, 189, 248, 0.3); }
+
+.kpi.warning { border-top: 3.5px solid #f59e0b !important; }
+.kpi.warning .value { color: #fbbf24 !important; text-shadow: 0 0 16px rgba(245, 158, 11, 0.3); }
+
+.kpi.info { border-top: 3.5px solid #818cf8 !important; }
+.kpi.info .value { color: #a5b4fc !important; text-shadow: 0 0 16px rgba(129, 140, 248, 0.3); }
+
+.kpi.teal { border-top: 3.5px solid #06b6d4 !important; }
+.kpi.teal .value { color: #22d3ee !important; text-shadow: 0 0 16px rgba(6, 182, 212, 0.3); }
+
+.kpi.purple { border-top: 3.5px solid #c084fc !important; }
+.kpi.purple .value { color: #d8b4fe !important; text-shadow: 0 0 16px rgba(192, 132, 252, 0.3); }
+
+/* =========================================================
+   ALL-DAYS & HOURLY CHARTS
+   ========================================================= */
+.all-days-chart-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.all-days-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.all-days-metric-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.all-days-metric-btn {
+  background: #101b2d;
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  color: #94a3b8;
+  padding: 6px 12px;
+  min-height: 32px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.all-days-metric-btn:hover {
+  background: #192a44;
+  color: #f8fafc;
+}
+
+.all-days-metric-btn.active {
+  background: linear-gradient(135deg, var(--primary, #0284c7) 0%, var(--primary-hover, #0369a1) 100%) !important;
+  color: #ffffff !important;
+  border-color: var(--primary-light, #38bdf8) !important;
+  box-shadow: 0 2px 8px var(--primary-glow, rgba(2, 132, 199, 0.4));
+}
+
+.all-days-peak-badge {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  color: #fbbf24;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+#d3ChartSvgWrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+#d3ChartSvgWrap svg {
+  display: block;
+  user-select: none;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.4));
+}

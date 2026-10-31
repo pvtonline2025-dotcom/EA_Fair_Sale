@@ -1,0 +1,145 @@
+/* =========================================================
+   EA FAIR SALE — BUTTON & INTERACTIVE CONTROLS
+   Touch-friendly targets, high contrast, tactile feedback
+   ========================================================= */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 18px;
+  min-height: var(--touch-target, 44px);
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: var(--radius-sm, 10px);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+  text-decoration: none;
+  touch-action: manipulation;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn-primary {
+  background: var(--primary, #2563eb);
+  color: #ffffff;
+  border-color: var(--primary, #2563eb);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+.btn-primary:hover {
+  background: var(--primary-hover, #1d4ed8);
+  border-color: var(--primary-hover, #1d4ed8);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
+}
+
+.btn-success {
+  background: #10b981;
+  color: #ffffff;
+  border-color: #10b981;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+.btn-success:hover {
+  background: #059669;
+  border-color: #059669;
+}
+
+.btn-danger {
+  background: #e11d48;
+  color: #ffffff;
+  border-color: #e11d48;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+.btn-danger:hover {
+  background: #be123c;
+  border-color: #be123c;
+}
+
+.btn-light,
+.btn-ghost {
+  background: var(--surface, #1e293b);
+  border-color: var(--card-border, #334155);
+  color: var(--text-sub, #cbd5e1);
+}
+.btn-light:hover,
+.btn-ghost:hover {
+  background: var(--surface-hover, #334155);
+  color: var(--text-main, #f8fafc);
+  border-color: var(--card-border-hover, #475569);
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 11.5px;
+  min-height: 34px;
+  border-radius: 6px;
+}
+
+.btn-lg {
+  padding: 12px 20px;
+  font-size: 14px;
+  min-height: 44px;
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+/* =========================================================
+   SEGMENTED FILTER PILLS & TAB CONTROLS (BUTTONS) - MINIMAL
+   ========================================================= */
+.pill-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pill-btn,
+.dash-filter-pill {
+  background: var(--surface, #1e293b);
+  border: 1px solid var(--card-border, #334155);
+  color: var(--text-muted, #94a3b8);
+  padding: 5px 12px;
+  min-height: 32px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.pill-btn:hover,
+.dash-filter-pill:hover {
+  background: var(--surface-hover, #334155);
+  color: var(--text-main, #f8fafc);
+  border-color: var(--card-border-hover, #475569);
+}
+
+.pill-btn.active,
+.dash-filter-pill.active {
+  background: var(--primary, #2563eb) !important;
+  color: #ffffff !important;
+  border-color: var(--primary, #2563eb) !important;
+  box-shadow: none !important;
+}
+
+/* Form Actions Row */
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}

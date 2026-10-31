@@ -1,0 +1,126 @@
+/* =========================================================
+   EA FAIR SALE — MODALS & DIALOG STYLES
+   Centered viewport placement, glassmorphic backdrop, clean scrolling
+   ========================================================= */
+
+dialog,
+.app-dialog {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: auto;
+  max-width: min(94vw, 580px);
+  width: 100%;
+  border-radius: var(--radius-lg, 16px);
+  outline: none;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.65);
+}
+
+dialog::backdrop,
+.app-dialog::backdrop {
+  background: rgba(5, 9, 16, 0.78);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.modal-card {
+  background: var(--surface-card, #1e293b);
+  border: 1px solid var(--card-border, #334155);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  color: var(--text-main, #f8fafc);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 88vh;
+  max-height: 88dvh;
+}
+
+.modal-head {
+  padding: 14px 18px;
+  background: var(--surface, #1e293b);
+  border-bottom: 1px solid var(--card-border, #334155);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.modal-head h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-main, #f8fafc);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-close {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-muted, #94a3b8);
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.icon-close:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1 1 auto;
+}
+
+.modal-actions {
+  padding: 14px 20px;
+  background: #0c1422;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* Wide Dialog for A4 Report */
+.a4-dialog {
+  max-width: min(94vw, 840px) !important;
+}
+
+/* Receipt Dialog */
+.receipt-dialog {
+  max-width: min(92vw, 440px) !important;
+}
+
+@media (max-width: 767px) {
+  dialog,
+  .app-dialog {
+    width: 100% !important;
+    max-width: 100vw !important;
+    height: 100% !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    top: 0 !important;
+    left: 0 !important;
+  }
+  .modal-card {
+    height: 100% !important;
+    max-height: 100dvh !important;
+    border-radius: 0 !important;
+    border: none !important;
+  }
+}

@@ -1,0 +1,142 @@
+/* =========================================================
+   EA FAIR SALE — PHYSICAL INVENTORY AUDIT
+   Tactile counting station, barcode verification & reconciliation
+   ========================================================= */
+
+.audit-scan-station {
+  background: linear-gradient(135deg, #0d1a29 0%, #08101a 100%);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: var(--radius-lg, 16px);
+  padding: 18px 22px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  margin-bottom: 20px;
+}
+
+.audit-hud-banner {
+  background: rgba(15, 23, 42, 0.92);
+  border: 1.5px solid #0284c7;
+  border-radius: 12px;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 16px rgba(2, 132, 199, 0.25);
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.audit-mode-toggle-group {
+  display: inline-flex;
+  align-items: center;
+  background: #09121d;
+  padding: 3px;
+  border-radius: 9px;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.audit-mode-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.audit-mode-btn.active {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.4);
+}
+
+.audit-mode-btn.bulk-active {
+  background: linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.4);
+}
+
+.audit-qty-input-wrap {
+  display: flex;
+  align-items: center;
+  background: #09121d;
+  border: 1.5px solid rgba(139, 92, 246, 0.5);
+  border-radius: 9px;
+  padding: 2px 4px;
+}
+
+.audit-qty-btn {
+  background: #19293c;
+  border: 1px solid #2d4564;
+  color: #cbd5e1;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.audit-qty-btn:hover {
+  background: #253d5a;
+  color: #38bdf8;
+  border-color: #38bdf8;
+}
+
+.audit-qty-field {
+  width: 55px;
+  height: 30px;
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+  text-align: center;
+  outline: none;
+  font-family: monospace;
+}
+
+/* Sub-Tab Navigation & Batch History */
+.audit-subtab-navigation {
+  background: #0f172a;
+  padding: 10px 16px;
+  border-radius: 14px;
+  border: 1px solid #1e293b;
+}
+
+.audit-subtab-btn {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #94a3b8;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.audit-subtab-btn:hover {
+  color: #f1f5f9;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.audit-subtab-btn.active {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.35);
+  box-shadow: 0 2px 8px rgba(56, 189, 248, 0.2);
+}
+

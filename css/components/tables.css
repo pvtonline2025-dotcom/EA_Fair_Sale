@@ -1,0 +1,100 @@
+/* =========================================================
+   EA FAIR SALE — TABLE & DATA GRID COMPONENTS
+   Fluid horizontal scrolling, sticky headers, tabular alignment
+   ========================================================= */
+
+.table-wrap,
+.table-responsive {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--radius-md, 12px);
+  border: 1px solid var(--card-border, rgba(56, 189, 248, 0.16));
+  background: var(--bg-secondary, #0c1422);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  margin-top: 8px;
+}
+
+table,
+.data-table,
+.stock-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+
+.table-wrap > table,
+.table-responsive > table,
+.data-table.scrollable,
+.stock-table.scrollable {
+  min-width: 580px;
+}
+
+table thead th,
+.data-table th,
+.stock-table th {
+  background: var(--surface, #111c2e);
+  color: var(--text-muted, #94a3b8);
+  font-weight: 800;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--card-border, rgba(56, 189, 248, 0.22));
+  white-space: nowrap;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  user-select: none;
+}
+
+table thead th.sortable,
+.stock-table th.sortable {
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+table thead th.sortable:hover,
+.stock-table th.sortable:hover {
+  color: var(--primary-light, #38bdf8);
+}
+
+table tbody td,
+.data-table td,
+.stock-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--card-border, rgba(255, 255, 255, 0.05));
+  color: var(--text-main, #f8fafc);
+  vertical-align: middle;
+  font-variant-numeric: tabular-nums;
+}
+
+table tbody tr:hover td,
+.data-table tr:hover td,
+.stock-table tr:hover td {
+  background: rgba(56, 189, 248, 0.05);
+}
+
+table tbody tr:last-child td,
+.data-table tr:last-child td,
+.stock-table tr:last-child td {
+  border-bottom: none;
+}
+
+td.empty,
+.empty {
+  padding: 36px 16px !important;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+/* Progress bar inside tables */
+.progress-bar-track {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.progress-bar-fill {
+  background: linear-gradient(90deg, #0284c7 0%, #38bdf8 100%);
+  height: 100%;
+  border-radius: 999px;
+}

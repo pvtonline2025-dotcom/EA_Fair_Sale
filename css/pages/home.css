@@ -1,0 +1,255 @@
+/* =========================================================
+   EA FAIR SALE — HOME & MENU STYLES
+   Balanced grids, tactile menu tiles, glassmorphic headers
+   ========================================================= */
+
+.app-home {
+  width: 100%;
+  max-width: 1320px;
+  margin: 0 auto;
+}
+
+/* =========================================================
+   WELCOME STRIP & DAILY TARGET TRACKER
+   ========================================================= */
+.welcome-strip {
+  background: var(--surface-card, #1e293b);
+  border: 1px solid var(--card-border, #334155);
+  border-radius: var(--radius-lg, 12px);
+  padding: 18px 22px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  margin-bottom: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.welcome-strip-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.welcome-strip .eyebrow {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--primary-light, #38bdf8);
+  margin-bottom: 4px;
+}
+
+.welcome-strip h2 {
+  font-size: 22px;
+  font-weight: 900;
+  color: #ffffff;
+  margin: 0 0 4px;
+  letter-spacing: -0.3px;
+}
+
+.welcome-strip p {
+  font-size: 13px;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.today-summary {
+  background: rgba(11, 19, 34, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 12px;
+  padding: 12px 18px;
+  text-align: right;
+  min-width: 140px;
+  max-width: 100%;
+}
+
+.today-summary span {
+  display: block;
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.today-summary strong {
+  display: block;
+  font-size: clamp(18px, 4.5vw, 26px);
+  font-weight: 900;
+  color: #34d399;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.today-summary small {
+  font-size: 11px;
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+/* =========================================================
+   MENU TILES GRID (MENU & HOME QUICK ACTIONS)
+   ========================================================= */
+.image-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  gap: var(--fluid-gap, 14px);
+  width: 100%;
+  max-width: 100%;
+}
+
+.image-menu-btn {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16/9;
+  min-height: 110px;
+  padding: 0;
+  border: 1.5px solid rgba(56, 189, 248, 0.18);
+  border-radius: var(--radius-md, 14px);
+  background: #111c2e;
+  overflow: hidden;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  touch-action: manipulation;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+}
+
+.image-menu-btn img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  pointer-events: none;
+  user-select: none;
+}
+
+.image-menu-btn:hover {
+  transform: translateY(-2px);
+  border-color: #38bdf8;
+  box-shadow: 0 8px 24px rgba(2, 132, 199, 0.32);
+}
+
+.image-menu-btn:active {
+  transform: scale(0.975);
+}
+
+.menu-with-badge {
+  overflow: visible;
+}
+.menu-with-badge img {
+  border-radius: 12px;
+}
+
+.menu-count-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 900;
+  border: 2px solid #080d16;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+}
+
+/* Custom HTML Menu Tiles (History, Expenses, Scanner, Audit) */
+.menu-custom-tile {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 12px;
+  box-sizing: border-box;
+}
+
+.menu-custom-tile.history-tile,
+.menu-custom-tile.expense-tile,
+.menu-custom-tile.scanner-tile,
+.menu-custom-tile.audit-tile {
+  background: var(--surface-card, #1e293b);
+  border: 1px solid var(--card-border, #334155);
+}
+
+.menu-custom-tile:hover {
+  background: var(--surface-hover, #283548);
+  border-color: var(--card-border-hover, #475569);
+}
+
+.menu-tile-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.menu-tile-icon {
+  font-size: 26px;
+  line-height: 1;
+  margin-bottom: 2px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+}
+
+.menu-tile-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 0.2px;
+  line-height: 1.2;
+}
+
+.menu-tile-subtitle {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.75);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.menu-tile-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 9.5px;
+  font-weight: 800;
+  background: rgba(0, 0, 0, 0.4);
+  color: #f8fafc;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 2px 6px;
+  border-radius: 999px;
+  z-index: 3;
+}
+
+@media (max-width: 600px) {
+  .image-menu-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+  .image-menu-btn {
+    min-height: 94px;
+    border-radius: 11px;
+  }
+  .menu-tile-icon {
+    font-size: 22px;
+  }
+  .menu-tile-title {
+    font-size: 12.5px;
+  }
+  .menu-tile-subtitle {
+    display: none;
+  }
+}

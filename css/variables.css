@@ -1,0 +1,67 @@
+/* =========================================================
+   EA FAIR SALE — CSS VARIABLES & DESIGN TOKENS
+   Minimalist, clean, reduced-color aesthetic
+   ========================================================= */
+
+:root {
+  /* Core Surface Colors (Dark Mode default) */
+  --bg: #0f172a;
+  --bg-secondary: #172033;
+  --surface: #1e293b;
+  --surface-card: #1e293b;
+  --surface-elevated: #283548;
+  --surface-hover: #334155;
+  
+  /* Borders & Subtle Lines - Clean, no harsh neon */
+  --card-border: #334155;
+  --card-border-hover: #475569;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-active: #38bdf8;
+  
+  /* Primary Restrained Accent Palette */
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-light: #60a5fa;
+  --primary-glow: transparent;
+
+  /* Restrained Functional Accents */
+  --accent-cyan: #0ea5e9;
+  --accent-emerald: #10b981;
+  --accent-emerald-light: #34d399;
+  --accent-amber: #d97706;
+  --accent-amber-light: #f59e0b;
+  --accent-rose: #e11d48;
+  --accent-rose-light: #f43f5e;
+  --accent-purple: #6366f1;
+  --accent-purple-light: #818cf8;
+
+  /* Typography Colors - High readability, neutral */
+  --text-main: #f8fafc;
+  --text-sub: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+  
+  /* Consistent Radii */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+  
+  /* Subtle Minimal Shadows (Clean & Flat) */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.12);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.2);
+  --shadow-glow: none;
+  
+  /* Fluid Spacing */
+  --fluid-padding: clamp(14px, 2.5vw, 24px);
+  --fluid-gap: clamp(12px, 2vw, 18px);
+  
+  /* Heights & Ergonomic Touch Targets */
+  --touch-target: 44px;
+  --appbar-height: 58px;
+  --nav-height: 64px;
+}

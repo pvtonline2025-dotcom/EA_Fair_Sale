@@ -1,0 +1,116 @@
+/* EA Fair Sale – additional tablet POS sizing and PWA install interface.
+   Loaded after the legacy styles to avoid changing existing phone/desktop UI. */
+
+/* Install action in the app header */
+#installAppBtn[hidden],
+#installNativeBtn[hidden] { display: none !important; }
+
+#installAppBtn {
+  width: auto;
+  min-width: 42px;
+  min-height: 42px;
+  padding: 0 11px;
+  gap: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid rgba(56, 189, 248, .4);
+  background: rgba(56, 189, 248, .12);
+  color: #d6f5ff;
+  white-space: nowrap;
+}
+#installAppBtn svg { width: 19px; height: 19px; flex-shrink: 0; }
+#installAppBtn .app-install-label { font-size: 12px; font-weight: 700; }
+#installAppBtn:focus-visible { outline: 3px solid #38bdf8; outline-offset: 2px; }
+
+@media (max-width: 1099px) {
+  #installAppBtn { width: 42px; padding: 0; }
+  #installAppBtn .app-install-label { display: none; }
+}
+@media (max-width: 600px) {
+  .appbar-actions { gap: 5px; }
+  #installAppBtn { min-width: 36px; width: 36px; min-height: 38px; }
+}
+
+/* Separate native dialog: does not interfere with POS payment / barcode dialogs */
+#appInstallDialog {
+  border: 0;
+  padding: 0;
+  max-width: min(92vw, 440px) !important;
+  width: 100%;
+  max-height: min(85dvh, 640px);
+  border-radius: 18px !important;
+  color: #e2e8f0;
+  background: #162133;
+  box-shadow: 0 22px 80px rgba(0, 0, 0, .5);
+  overflow: auto;
+}
+#appInstallDialog::backdrop { background: rgba(4, 12, 24, .68); }
+#appInstallDialog .ea-install-card { padding: 24px; }
+#appInstallDialog .ea-install-heading { display: flex; align-items: center; gap: 12px; }
+#appInstallDialog .ea-install-icon { width: 62px; height: 62px; border-radius: 15px; object-fit: contain; background: white; }
+#appInstallDialog h2 { margin: 0; color: #f8fafc; font-size: 19px; }
+#appInstallDialog .ea-install-desc { font-size: 13px; color: #b7c8dc; margin: 6px 0 0; }
+#appInstallDialog .ea-install-steps {
+  margin: 20px 0 12px;
+  padding: 15px;
+  background: rgba(255, 255, 255, .055);
+  border: 1px solid rgba(148, 163, 184, .2);
+  border-radius: 12px;
+  line-height: 1.75;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+#appInstallDialog .ea-install-hint { color: #b7c8dc; font-size: 12px; line-height: 1.65; }
+#appInstallDialog .ea-install-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 22px; }
+#appInstallDialog .ea-install-actions button {
+  min-height: 46px;
+  border-radius: 10px;
+  border: 1px solid rgba(148,163,184,.3);
+  padding: 10px 17px;
+  color: #f8fafc;
+  background: rgba(255,255,255,.07);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+#appInstallDialog #installNativeBtn { background: #2563eb; border-color: #2563eb; }
+#appInstallDialog .ea-install-actions button:focus-visible { outline: 3px solid #38bdf8; outline-offset: 2px; }
+
+/* Tablet POS: portrait keeps the cart full width; landscape uses split panes. */
+@media (min-width: 680px) and (max-width: 899px) {
+  .pos-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 16px !important;
+  }
+  .pos-layout > .pos-panel:last-child {
+    position: static !important;
+  }
+  .pos-product-grid {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) !important;
+    max-height: min(45vh, 530px) !important;
+  }
+  #posCartRowsContainer { max-height: 340px !important; }
+}
+@media (min-width: 900px) and (max-width: 1280px) {
+  .pos-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(310px, 37%) !important;
+    gap: 14px !important;
+  }
+  .pos-layout > .pos-panel { min-width: 0; }
+  .pos-product-grid {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important;
+    align-content: start;
+    max-height: min(67vh, 720px) !important;
+  }
+  .pos-product-card { min-width: 0; }
+  .pos-layout > .pos-panel:last-child { top: 76px !important; }
+}
+@media (min-width: 680px) and (pointer: coarse) {
+  .pos-product-card { min-height: 122px !important; touch-action: manipulation; }
+  .pos-tab-btn, .pos-chip, .pay-method-btn { min-height: 46px !important; touch-action: manipulation; }
+  .qty-control button, .cart-remove-btn { min-width: 44px !important; min-height: 44px !important; }
+}

@@ -2,26 +2,26 @@
    EA FAIR SALE — MASTER STYLESHEET (MODULAR IMPORTS)
    ========================================================= */
 
-@import "css/variables.css";
-@import "css/base.css";
-@import "css/layout.css";
-@import "css/components/buttons.css";
-@import "css/components/cards.css";
-@import "css/components/tables.css";
-@import "css/components/forms.css";
-@import "css/pages/modals.css";
-@import "css/pages/home.css";
-@import "css/pages/pos.css";
-@import "css/pages/dashboard.css";
-@import "css/pages/stock.css";
-@import "css/pages/movement.css";
-@import "css/pages/audit.css";
-@import "css/pages/sales-history.css";
-@import "css/pages/expenses.css";
-@import "css/pages/reports.css";
-@import "css/pages/settings.css";
-@import "css/light-mode.css";
-@import "css/tablet.css";
+@import "./variables.css";
+@import "./base.css";
+@import "./layout.css";
+@import "./components/buttons.css";
+@import "./components/cards.css";
+@import "./components/tables.css";
+@import "./components/forms.css";
+@import "./pages/modals.css";
+@import "./pages/home.css";
+@import "./pages/pos.css";
+@import "./pages/dashboard.css";
+@import "./pages/stock.css";
+@import "./pages/movement.css";
+@import "./pages/audit.css";
+@import "./pages/sales-history.css";
+@import "./pages/expenses.css";
+@import "./pages/reports.css";
+@import "./pages/settings.css";
+@import "./light-mode.css";
+@import "./tablet.css";
 
 *, *::before, *::after {
   box-sizing: border-box;

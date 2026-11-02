@@ -226,44 +226,29 @@
 
 ## 12. โครงสร้างสถาปัตยกรรมไฟล์ (File Architecture Map)
 
+โปรเจกต์ใช้โครงสร้างแบบไม่มี `public/` เพื่อให้แก้ไขไฟล์ได้ตรงตำแหน่งเดียว
+
 ```text
-Ea_Fair_Sale/
-│
-├── 📄 index.html                      # Single-Page HTML Shell & Dialog Host
-├── 📖 PAGE_GUIDE.md                   # คู่มือแนะนำระบบและโครงสร้างหน้าจอฉบับสมบูรณ์ (ไฟล์นี้)
-│
-├── 🎨 css/                            # สไตล์ชีตแยกตามระดับและหน้าจออย่างละเอียด
-│   ├── variables.css                  # โทนสี Dark Theme, รัศมีขอบมน, เงา, และดีไซน์โทเคน
-│   ├── base.css                       # Reset, Typography, Utilities, Scrollbars
-│   ├── layout.css                     # Appbar, Header Badges, Content Layout, Bottom Nav, Toast
-│   │
-│   ├── components/                    # คอมโพเนนต์ UI พื้นฐานที่ใช้ร่วมกัน
-│   │   ├── buttons.css                # ปุ่ม Primary, Success, Danger, Ghost, Pills
-│   │   ├── cards.css                  # Surface Cards, Stat Badges, Card Headers
-│   │   ├── forms.css                  # Input fields, Select dropdowns, Label typography
-│   │   └── tables.css                 # Responsive Data Tables, Sticky Headers, Zebra stripes
-│   │
-│   └── pages/                         # สไตล์เฉพาะแต่ละหน้าจอ
-│       ├── home.css                   # Hero banner, Quick action tiles
-│       ├── pos.css                    # POS Checkout Terminal, Product Grid, Cart, Steppers
-│       ├── dashboard.css              # KPI Metric Cards, Daily Revenue Goal Widget, D3 Charts
-│       ├── stock.css                  # Stock Grid, Low Stock Badges, Auto-Suggest Refill Box
-│       ├── movement.css               # Movement logs, Type badges (IN / OUT / ADJUST)
-│       ├── audit.css                  # Physical Inventory Audit, Batch/Bulk Stepper, HUD banner
-│       ├── sales-history.css          # Sales history transaction cards, Bill pills
-│       ├── expenses.css               # Expense cards, Category tags, Financial summaries
-│       ├── reports.css                # A4 Printable Daily Report Sheet & Thermal Slip styles
-│       ├── settings.css               # Settings sections, Terminal switcher, Cloud DB status
-│       └── modals.css                 # Backdrop blur, Dialog card shells, Modal headers
-│
-├── ⚙️ js/                             # โค้ด JavaScript จัดการข้อมูลและ Logic
-│   ├── core/
-│   │   └── state.js                   # Application State, Local Storage, Web Audio & Haptics
-│   ├── services/
-│   │   └── api.js                     # เชื่อมต่อ Supabase DB, แคชออฟไลน์, ระบบส่งอีเมลแจ้งเตือน
-│   └── pages/
-│       └── home.js                    # Home & Menu Controller Logic
-│
-├── 📦 index.css                       # Master Stylesheet Orchestrator (@import pipeline)
-└── 🚀 index.js                        # Master Application Logic & Routing Controller
+EA-Fair-Sale/
+├── index.html                    # HTML หลักของแอป
+├── js/
+│   ├── app.js                   # POS / สต็อก / หน้ารายงานทั้งหมด
+│   ├── offline-sync.js          # ออฟไลน์และซิงค์ข้อมูล
+│   ├── fetch-wrapper.js         # จัดการคำขอข้อมูล
+│   ├── install-app.js           # ติดตั้ง PWA บนแท็บเล็ต
+│   └── supabase-config.js       # ค่าการเชื่อมต่อ Supabase
+├── css/
+│   ├── app.css                  # รวม CSS จากไฟล์ย่อย
+│   ├── variables.css, base.css, layout.css
+│   ├── tablet.css, tablet-enhancements.css
+│   ├── components/              # ปุ่ม ตาราง การ์ด ฟอร์ม
+│   └── pages/                   # CSS ตามหน้าจอ
+├── images/                      # ภาพประกอบหน้าระบบ
+├── assets/icons/                # ไอคอนแอป
+├── manifest.json, sw.js         # ติดตั้งและออฟไลน์ (PWA)
+├── vite.config.mjs, package.json
+├── database/migrations/          # SQL
+└── docs/                         # เอกสาร
 ```
+
+รัน `npm run build` เพื่อสร้าง `dist/` สำหรับ Deploy โดยไม่เผยแพร่โฟลเดอร์ `docs` และ `database` ไปยังเว็บ

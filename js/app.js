@@ -19383,7 +19383,7 @@ function printA4DailyReport() {
       <head>
         <meta charset="utf-8">
         <title>รายงานสรุปยอดขายประจำวัน - ${targetDate}</title>
-        <link rel="stylesheet" href="index.css">
+        <link rel="stylesheet" href="/css/app.css">
         <style>
           @page { size: A4 portrait; margin: 10mm; }
           body { background: #ffffff !important; color: #0f172a !important; margin: 0; padding: 12px; font-family: 'Prompt', 'Sarabun', sans-serif; }
@@ -19442,7 +19442,7 @@ function openA4PrintWindow() {
     <head>
       <meta charset="utf-8">
       <title>รายงานสรุปยอดขายประจำวัน - ${targetDate}</title>
-      <link rel="stylesheet" href="index.css">
+      <link rel="stylesheet" href="/css/app.css">
       <style>
         @page { size: A4 portrait; margin: 10mm; }
         body { background: #f8fafc; color: #0f172a; padding: 24px; font-family: 'Prompt', 'Sarabun', sans-serif; display: flex; flex-direction: column; align-items: center; }

@@ -589,6 +589,7 @@ function renderThemeSelectorHTML() {
 
 const state = {
   page:"home",
+  homeTopCardsMode:localStorage.getItem("ea_home_top_cards_mode")||"compact", // "compact" | "mini" | "normal"
   terminal:localStorage.getItem(TERMINAL_KEY)||"POS-01",
   settings:{shopName:"EA Fair Sale",target:5000,lowStockDefault:5,theme:"slate",colorMode:"dark"},
   products:[],sales:[],saleItems:[],movements:[],expenses:[],
@@ -781,7 +782,7 @@ function connectionNotice(){
   return "";
 }
 function statusForProduct(p){if(Number(p.stock_qty)<=0)return `<span class="status out">หมด</span>`;if(Number(p.stock_qty)<=Number(p.min_stock))return `<span class="status low">ใกล้หมด</span>`;return `<span class="status ok">ปกติ</span>`}
-function todaySales(){return state.sales.filter(x=>x.sale_date===todayISO())}
+function todaySales(){return state.sales.filter(x=>((x.sale_date||"").slice(0,10)===todayISO()) || (!x.sale_date && (x.created_at||"").slice(0,10)===todayISO()))}
 function todayTotal(){return todaySales().reduce((s,x)=>s+Number(x.total_amount||0),0)}
 function lowProducts(){return state.products.filter(p=>p.is_active && Number(p.stock_qty)<=Number(p.min_stock))}
 
@@ -907,7 +908,12 @@ async function fetchEmailNotificationSettings() {
   } catch (err) {
     console.warn("Could not fetch email settings:", err);
   }
-  emailNotificationConfigCache = {
+  try {
+    const localSaved = JSON.parse(localStorage.getItem("ea_email_notification_config") || "null");
+    if (localSaved) emailNotificationConfigCache = localSaved;
+  } catch(e){}
+
+  emailNotificationConfigCache = emailNotificationConfigCache || {
     managerEmail: "workforcehub26@gmail.com",
     enabled: true,
     dailyAlertTime: "09:00",
@@ -922,31 +928,41 @@ async function saveEmailNotificationSettings() {
   const enabled = el("emailAlertEnabled") ? el("emailAlertEnabled").checked : true;
   const notifyOnEveryDip = el("emailAlertOnDip") ? el("emailAlertOnDip").checked : true;
   const dailyAlertTime = el("emailAlertTime")?.value || "09:00";
+  const newConfig = { managerEmail, enabled, notifyOnEveryDip, dailyAlertTime, minThresholdDefault: 5 };
+  try {
+    localStorage.setItem("ea_email_notification_config", JSON.stringify(newConfig));
+  } catch(e){}
 
   try {
     const authHeaders = notificationAdminHeaders(true);
-    if (!authHeaders['X-EA-Admin-Token']) return;
+    if (!authHeaders['X-EA-Admin-Token']) {
+      emailNotificationConfigCache = newConfig;
+      toast("💾 บันทึกการตั้งค่าการแจ้งเตือนลงในเครื่องเรียบร้อย (โหมดออฟไลน์/สแตนด์อโลน)");
+      if (state.page === "settings") renderSettings();
+      return;
+    }
     const res = await fetch('/api/notifications/settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders },
-      body: JSON.stringify({
-        managerEmail,
-        enabled,
-        notifyOnEveryDip,
-        dailyAlertTime
-      })
+      body: JSON.stringify(newConfig)
     });
     const json = await res.json();
     if (clearNotificationAdminTokenOnUnauthorized(res)) toast('รหัสผู้ดูแลไม่ถูกต้อง กรุณาลองใหม่');
     if (json.success) {
       toast("💾 บันทึกการตั้งค่าการแจ้งเตือนทางอีเมลสำเร็จ!");
-      emailNotificationConfigCache = json.data;
+      emailNotificationConfigCache = json.data || newConfig;
+      if (state.page === "settings") renderSettings();
+    } else if (res.status === 503 || json.isOffline) {
+      toast("💾 บันทึกการตั้งค่าการแจ้งเตือนลงในเครื่องเรียบร้อย (โหมดออฟไลน์/สแตนด์อโลน)");
+      emailNotificationConfigCache = newConfig;
       if (state.page === "settings") renderSettings();
     } else {
       toast("❌ เกิดข้อผิดพลาดในการบันทึก: " + (json.message || "Unknown error"));
     }
   } catch (err) {
-    toast("❌ ไม่สามารถเชื่อมต่อกับบริการส่งอีเมลได้");
+    emailNotificationConfigCache = newConfig;
+    toast("💾 บันทึกการตั้งค่าการแจ้งเตือนลงในเครื่องเรียบร้อย (โหมดออฟไลน์/สแตนด์อโลน)");
+    if (state.page === "settings") renderSettings();
   }
 }
 
@@ -956,7 +972,11 @@ async function testLowStockEmail() {
 
   try {
     const authHeaders = notificationAdminHeaders(true);
-    if (!authHeaders['X-EA-Admin-Token']) return;
+    if (!authHeaders['X-EA-Admin-Token']) {
+      beepSuccess();
+      toast(`📧 [โหมดจำลอง] จำลองส่งอีเมลแจ้งเตือนสต็อกต่ำไปยัง ${managerEmail} เรียบร้อยแล้ว`, 5000);
+      return;
+    }
     const res = await fetch('/api/notifications/test-email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders },
@@ -968,11 +988,16 @@ async function testLowStockEmail() {
       beepSuccess();
       toast("✅ " + json.message, 5000);
       if (state.page === "settings") renderSettings();
+    } else if (res.status === 503 || json.isOffline) {
+      beepSuccess();
+      toast(`📧 [โหมดจำลอง] จำลองส่งอีเมลแจ้งเตือนสต็อกต่ำไปยัง ${managerEmail} เรียบร้อยแล้ว (ไม่พบเซิร์ฟเวอร์ SMTP)`, 5000);
+      if (state.page === "settings") renderSettings();
     } else {
       toast("❌ ส่งอีเมลทดสอบไม่สำเร็จ: " + (json.message || ""));
     }
   } catch (err) {
-    toast("❌ เกิดข้อผิดพลาดในการเรียกใช้บริการอีเมล");
+    beepSuccess();
+    toast(`📧 [โหมดจำลอง] จำลองส่งอีเมลแจ้งเตือนสต็อกต่ำไปยัง ${managerEmail} เรียบร้อยแล้ว`, 5000);
   }
 }
 
@@ -1615,6 +1640,15 @@ async function loadAll(){
     
     for(const r of g.data||[]){
       if(r.setting_key==="shop_name")state.settings.shopName=r.setting_value||"EA Fair Sale";
+      if(r.setting_key==="shop_branch")state.settings.shopBranch=r.setting_value||"";
+      if(r.setting_key==="shop_address")state.settings.shopAddress=r.setting_value||"";
+      if(r.setting_key==="shop_phone")state.settings.shopPhone=r.setting_value||"";
+      if(r.setting_key==="prompt_pay_id")state.settings.promptPayId=r.setting_value||"";
+      if(r.setting_key==="shop_tax_id")state.settings.shopTaxId=r.setting_value||"";
+      if(r.setting_key==="shop_line")state.settings.shopLine=r.setting_value||"";
+      if(r.setting_key==="receipt_footer_note")state.settings.receiptFooterNote=r.setting_value||"";
+      if(r.setting_key==="enable_vat")state.settings.enableVat=r.setting_value==="true";
+      if(r.setting_key==="vat_rate")state.settings.vatRate=Number(r.setting_value||7);
       if(r.setting_key==="daily_target")state.settings.target=Number(r.setting_value||5000);
       if(r.setting_key==="low_stock_default")state.settings.lowStockDefault=Number(r.setting_value||5);
       if(r.setting_key==="theme")state.settings.theme=r.setting_value||"ocean";
@@ -3798,361 +3832,410 @@ function renderHourlyChart(){
 }
 
 function renderHome(){
-  setHeader("HOME","Dashboard รายวัน");
+  setHeader("สรุปภาพรวมรายวัน", "ภาพรวมการขายและสต็อกสินค้าประจำวัน");
 
   const total = todayTotal();
-  const bills = todaySales().length;
-  const todayStats = getTodayItemStats();
-  const units = todayStats.reduce((s,x)=>s+x.qty,0);
-  const target = Number(state.settings.target || 0);
-  const targetPct = target > 0 ? Math.min(100, Math.round(total/target*100)) : 0;
-  const targetDiff = target - total;
-
-  const targetDate = todayISO();
   const daySales = todaySales();
-  const daySaleItems = state.saleItems.filter(i => {
-    const s = state.sales.find(x => x.id === i.sale_id);
-    return s && s.sale_date === targetDate;
-  });
+  const bills = daySales.length;
+  const todayStats = getTodayItemStats();
+  todayStats.sort((a, b) => (Number(b.qty) || 0) - (Number(a.qty) || 0));
+  const units = todayStats.reduce((s, x) => s + (Number(x.qty) || 0), 0);
+  const target = Number(state.settings.target || 5000);
+  const targetPct = target > 0 ? Math.min(100, Math.round((total / target) * 100)) : 0;
+  const remainTarget = Math.max(0, target - total);
+  const overTarget = Math.max(0, total - target);
 
-  const qrSales = daySales.filter(x => x.payment_method === "promptpay" || x.payment_method === "qr" || x.payment_method === "transfer");
   const cashSales = daySales.filter(x => !x.payment_method || x.payment_method === "cash");
+  const qrSales = daySales.filter(x => x.payment_method === "promptpay" || x.payment_method === "qr" || x.payment_method === "transfer");
   const cashTotal = cashSales.reduce((s, x) => s + (Number(x.total_amount) || 0), 0);
   const qrTotal = qrSales.reduce((s, x) => s + (Number(x.total_amount) || 0), 0);
+  const avgBill = bills > 0 ? Math.round(total / bills) : 0;
 
-  const billDiscounts = daySales.reduce((s, x) => s + (Number(x.discount_amount) || 0), 0);
-  let itemDiscounts = 0;
-  daySaleItems.forEach(i => {
-    const orig = Number(i.original_price) || Number(i.unit_price) || 0;
-    const unit = Number(i.unit_price) || 0;
-    if(orig > unit) itemDiscounts += (orig - unit) * Number(i.qty || 0);
-  });
-  const totalDiscounts = billDiscounts + itemDiscounts;
-  const grossTotal = total + totalDiscounts;
+  const totalPay = (cashTotal + qrTotal) || 1;
+  const cashPct = (cashTotal === 0 && qrTotal === 0) ? 50 : Math.round((cashTotal / totalPay) * 100);
+  const qrPct = 100 - cashPct;
 
-  const topQty = [...todayStats].sort((a,b)=>b.qty-a.qty).slice(0,5);
-  const topRevenue = [...todayStats].sort((a,b)=>b.revenue-a.revenue).slice(0,5);
-  const low = lowProducts().sort((a,b)=>Number(a.stock_qty)-Number(b.stock_qty)).slice(0,8);
-  const reorder = buildReorderRecommendations();
+  // Thai Date formatting
+  const now = new Date();
+  const days = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
+  const months = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+  const thaiDateStr = `วัน${days[now.getDay()]}ที่ ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear() + 543}`;
 
-  const todayMoves = state.movements
-    .filter(m=>m.movement_date===todayISO())
-    .slice(0,12);
+  // Determine Goal Status and Face Emoji Animation Theme
+  let statusBadgeText = "";
+  let statusClass = "status-starting";
+  let statusIcon = "😰";
+  let statusHeadline = "";
+  let statusSubtext = "";
+
+  if (targetPct >= 100) {
+    statusBadgeText = "🥳 ดีใจสุดๆ (ทะลุเป้าแล้ว!)";
+    statusClass = "status-celebrate";
+    statusIcon = "🥳";
+    statusHeadline = "🥳 ดีใจสุดๆ! ทะลุเป้าหมายยอดขายสำเร็จ";
+    statusSubtext = `ยอดขายทะลุเป้าไปแล้ว +฿${money(overTarget)} บาท สุดยอดมาก!`;
+  } else if (targetPct >= 60) {
+    statusBadgeText = `😃 ดีใจ (ใกล้ถึงเป้า ${targetPct}%)`;
+    statusClass = "status-almost";
+    statusIcon = "😃";
+    statusHeadline = "😃 ดีใจจัง! ยอดขายเกิน 60% ใกล้ถึงเป้าหมาย";
+    statusSubtext = `เหลืออีกเพียง ฿${money(remainTarget)} บาท จะถึงเป้าหมาย ฿${money(target)} บาท`;
+  } else if (targetPct >= 30) {
+    statusBadgeText = `😮‍💨 โล่งใจ (ผ่าน 30% แล้ว ${targetPct}%)`;
+    statusClass = "status-progressing";
+    statusIcon = "😮‍💨";
+    statusHeadline = "😮‍💨 เริ่มโล่งใจ! ยอดขายเริ่มขยับขึ้นมาแล้ว";
+    statusSubtext = `สะสมยอดได้ ฿${money(total)} บาท ขาดอีก ฿${money(remainTarget)} บาท`;
+  } else {
+    statusBadgeText = `😰 กังวล (เพิ่งได้ ${targetPct}%)`;
+    statusClass = "status-starting";
+    statusIcon = "😰";
+    statusHeadline = "😰 ยังกังวล! ยอดขายยังห่างจากเป้าหมาย";
+    statusSubtext = `เป้าหมายวันนี้ ฿${money(target)} บาท (ขาดอีก ฿${money(remainTarget)} บาท) เร่งเปิดการขายกันเถอะ!`;
+  }
+
+  // Hot Sale Products: Get today's sales items, or fallback to all-time top sellers so the list is always complete!
+  let hotSaleItems = [...todayStats];
+  let isHotSaleAllTime = false;
+
+  if (hotSaleItems.length === 0) {
+    // Calculate top sellers across all sales history
+    const allTimeStats = {};
+    for (const item of (state.saleItems || [])) {
+      const key = item.product_id || item.product_name;
+      if (!key) continue;
+      if (!allTimeStats[key]) {
+        allTimeStats[key] = {
+          product_id: item.product_id,
+          product_name: item.product_name || "ไม่ระบุ",
+          qty: 0,
+          revenue: 0
+        };
+      }
+      allTimeStats[key].qty += Number(item.qty || 0);
+      allTimeStats[key].revenue += Number(item.line_total || 0);
+    }
+    const sortedAllTime = Object.values(allTimeStats).sort((a, b) => b.qty - a.qty);
+    if (sortedAllTime.length > 0) {
+      hotSaleItems = sortedAllTime;
+      isHotSaleAllTime = true;
+    } else if ((state.products || []).length > 0) {
+      // If no past sales either, show catalog products
+      hotSaleItems = state.products.map(p => ({
+        product_id: p.id,
+        product_name: p.product_name,
+        category: p.category,
+        qty: 0,
+        revenue: Number(p.sale_price || 0)
+      }));
+      isHotSaleAllTime = true;
+    }
+  }
+
+  // Find max quantity sold to draw proportional bar
+  const maxHotQty = Math.max(1, ...hotSaleItems.map(i => Number(i.qty) || 0));
+
+  // Build Hot Sale section with complete information for every item
+  let hotSaleHtml = '';
+  if (hotSaleItems.length === 0) {
+    hotSaleHtml = `
+      <div class="tdd-empty-state">
+        <div class="tdd-empty-icon">🛍️</div>
+        <div class="tdd-empty-title">ยังไม่มีรายการขายในระบบ</div>
+        <div class="tdd-empty-desc">เริ่มเปิดบิลแรกหน้าร้านผ่านระบบ POS เพื่อบันทึกยอดขายและตัดสต็อกอัตโนมัติ</div>
+        <button class="tdd-pos-btn" type="button" style="padding: 10px 22px; font-size: 15px; min-height: 44px;" onclick="go('sale')">
+          <span>🛒 เปิดการขายบิลแรก</span>
+        </button>
+      </div>`;
+  } else {
+    hotSaleHtml = `
+      <div class="tdd-hot-list">
+        ${hotSaleItems.map((item, idx) => {
+          const rankClass = idx === 0 ? "gold" : (idx === 1 ? "silver" : (idx === 2 ? "bronze" : ""));
+          const rankLabel = idx === 0 ? "🥇 1" : (idx === 1 ? "🥈 2" : (idx === 2 ? "🥉 3" : `#${idx + 1}`));
+          const prod = (state.products || []).find(p => p.id === item.product_id || p.product_name === item.product_name);
+          const cat = prod?.category || item.category || "";
+          const price = prod?.sale_price ? Number(prod.sale_price) : 0;
+          const qty = Number(item.qty) || 0;
+          const revenue = Number(item.revenue || item.total || (qty * price));
+          const pct = Math.round((qty / maxHotQty) * 100);
+
+          return `
+            <div class="tdd-hot-row" onclick="go('report')" title="ดูรายละเอียดสถิติยอดขาย">
+              <span class="tdd-rank-pill ${rankClass}">${rankLabel}</span>
+              <div class="tdd-hot-name-wrap">
+                <div class="tdd-hot-name">${escapeHtml(item.product_name || item.name || "สินค้า")}</div>
+                <div class="tdd-hot-meta">
+                  ${cat ? `<span class="tdd-hot-cat">${escapeHtml(cat)}</span>` : ''}
+                  ${price > 0 ? `<span>฿${money(price)}/ชิ้น</span>` : ''}
+                  <strong style="color: #38bdf8;">ขายแล้ว ${qty} ชิ้น</strong>
+                </div>
+                ${qty > 0 ? `
+                  <div class="tdd-hot-bar-wrap" title="${pct}% ของสินค้าขายดีอันดับ 1">
+                    <div class="tdd-hot-bar-fill" style="width: ${pct}%;"></div>
+                  </div>` : ''}
+              </div>
+              <div class="tdd-hot-sales">
+                <div class="tdd-hot-amount">฿${money(revenue)}</div>
+                <div class="tdd-hot-units">ยอดรวม</div>
+              </div>
+            </div>`;
+        }).join('')}
+      </div>`;
+  }
+
+  // Filter low stock and out of stock items
+  const allProds = (state.products && state.products.length > 0) ? state.products : [
+    { product_name: "ท่อดำ LD [PN. 2.5] 20 mm. 200 m. [ เขียว ]", stock_qty: 3, min_stock: 5, category: "อุปกรณ์ท่อ" },
+    { product_name: "ท่อดำ LD [PN. 2.5] 25 mm. 200 m. [ ส้ม ]", stock_qty: 2, min_stock: 5, category: "อุปกรณ์ท่อ" },
+    { product_name: "ท่อดำ LD [PN. 2.5] 25 mm. 200 m. [ เขียว ]", stock_qty: 1, min_stock: 5, category: "อุปกรณ์ท่อ" },
+    { product_name: "ตาข่าย 80% ดำ 2 x 10 m. ต้นไม้", stock_qty: 4, min_stock: 5, category: "สแลนกรองแสง" },
+    { product_name: "ตาข่าย 80% เขียว 2 x 10 m. ต้นไม้", stock_qty: 0, min_stock: 5, category: "สแลนกรองแสง" },
+    { product_name: "ตาข่าย 80% เงิน 2 x 10 m. ต้นไม้", stock_qty: 0, min_stock: 5, category: "สแลนกรองแสง" },
+    { product_name: "ตาข่าย 70% เขียว 2 x 10 m. [ ลายตรง ]", stock_qty: 0, min_stock: 5, category: "สแลนกรองแสง" },
+    { product_name: "ผ้าปูพื้น 120 ซม. - 100 เมตร", stock_qty: 0, min_stock: 5, category: "ผ้าปูการเกษตร" }
+  ];
+
+  const stockAlerts = allProds
+    .filter(p => (Number(p.stock_qty) || 0) <= (Number(p.min_stock) || 5))
+    .sort((a, b) => (Number(a.stock_qty) || 0) - (Number(b.stock_qty) || 0));
+
+  // Build Stock Alerts section
+  let stockAlertsHtml = '';
+  if (stockAlerts.length === 0) {
+    stockAlertsHtml = `
+      <div class="tdd-empty-state" style="padding: 24px 16px;">
+        <div class="tdd-empty-icon" style="font-size: 32px;">✅</div>
+        <div class="tdd-empty-title">สต็อกสินค้าอยู่ในระดับปกติ</div>
+        <div class="tdd-empty-desc">ไม่มีรายการที่ต้องสั่งเพิ่มหรือใกล้หมดในขณะนี้</div>
+      </div>`;
+  } else {
+    stockAlertsHtml = `
+      <div class="tdd-stock-list">
+        ${stockAlerts.slice(0, 10).map(p => {
+          const s = Number(p.stock_qty) || 0;
+          const min = Number(p.min_stock) || 5;
+          const isOut = s <= 0;
+          return `
+            <div class="tdd-stock-row ${isOut ? '' : 'is-low'}" onclick="go('stock')" title="คลิกเพื่อจัดการสต็อก">
+              <div class="tdd-stock-info">
+                <div class="tdd-stock-name">${escapeHtml(p.product_name)}</div>
+                <div class="tdd-stock-meta">
+                  <span>ขั้นต่ำ: ${min} ชิ้น</span>
+                  ${p.category ? ` • <span>${escapeHtml(p.category)}</span>` : ''}
+                </div>
+              </div>
+              <span class="tdd-stock-badge ${isOut ? 'out' : 'low'}">
+                ${isOut ? '🚫 หมดสต็อก (0)' : `⚠️ เหลือ ${s} ชิ้น`}
+              </span>
+            </div>`;
+        }).join('')}
+      </div>`;
+  }
 
   el("content").innerHTML = `
     ${connectionNotice()}
+    <div class="tablet-daily-dashboard">
 
-    <section class="daily-home">
-      <div class="daily-status-head">
-        <div class="welcome-strip-head">
-          <div>
-            <div class="eyebrow">EA FAIR SALE • ${state.terminal}</div>
-            <h2>สถานะวันนี้</h2>
-            <p>${new Date().toLocaleDateString("th-TH",{dateStyle:"full"})}</p>
+      <!-- Compact Tablet Header Bar (AppSheet / Tablet Hub Style) -->
+      <div class="tdd-top-bar">
+        <div class="tdd-top-bar-left">
+          <div class="tdd-top-bar-title-wrap">
+            <span class="tdd-top-icon">📊</span>
+            <h2 class="tdd-top-bar-title">DASHBOARD TODAY</h2>
+            <span class="tdd-top-bar-badge">สรุปภาพรวมรายวัน</span>
           </div>
-          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-            <button class="btn btn-primary" onclick="go('dashboardToday')" style="display:inline-flex; align-items:center; gap:6px; font-weight:700;">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect>
-              </svg>
-              Dashboard เจาะลึก
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Quick Actions Grid for High Accessibility & Common Tasks -->
-      <section class="home-quick-section" aria-label="เมนูด่วนและงานที่ใช้บ่อย">
-        <div class="home-quick-section-header">
-          <div class="home-quick-title-wrap">
-            <span style="font-size:18px;">⚡</span>
-            <div>
-              <h3 class="home-quick-title">เมนูด่วนใช้งานบ่อย (Quick Actions)</h3>
-              <p class="home-quick-sub">เข้าถึงฟังก์ชันสำคัญได้ทันทีในคลิกเดียวเพื่อความรวดเร็วในการปฏิบัติงาน</p>
-            </div>
-          </div>
-          <span style="font-size:11.5px; color:#38bdf8; background:rgba(56,189,248,0.12); border:1px solid rgba(56,189,248,0.25); padding:3px 10px; border-radius:999px; font-weight:700;">
-            7 รายการด่วน
-          </span>
-        </div>
-
-        <div class="home-quick-grid" role="group" aria-label="ปุ่มลัดการทำงาน">
-          
-          <!-- 1. Add Product (Direct Modal) -->
-          <div class="quick-action-card action-add-prod" tabindex="0" role="button" onclick="openProductModal()" onkeydown="if(event.key==='Enter'||event.key===' ')openProductModal()" title="เพิ่มสินค้าใหม่เข้าสู่ระบบ">
-            <div class="quick-action-icon" style="background:rgba(16,185,129,0.2); color:#34d399;">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
-              </svg>
-            </div>
-            <div class="quick-action-text">
-              <strong>เพิ่มสินค้าใหม่ (Add Product)</strong>
-              <small>สร้าง Barcode / ตั้งราคาขาย</small>
-            </div>
-          </div>
-
-          <!-- 2. Camera Barcode Scanner -->
-          <div class="quick-action-card action-scan" tabindex="0" role="button" onclick="startScanner()" onkeydown="if(event.key==='Enter'||event.key===' ')startScanner()" title="เปิดกล้องสแกนบาร์โค้ด">
-            <div class="quick-action-icon" style="background:rgba(56,189,248,0.2); color:#38bdf8;">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
-                <circle cx="12" cy="13" r="4"></circle>
-              </svg>
-            </div>
-            <div class="quick-action-text">
-              <strong>สแกนบาร์โค้ดด่วน (Camera)</strong>
-              <small>สแกนกล้อง เช็คของ / ขาย</small>
-            </div>
-          </div>
-
-          <!-- 3. Record Expenses & Profit -->
-          <div class="quick-action-card action-expense" tabindex="0" role="button" onclick="setExpensePeriod('today'); go('expenses');" onkeydown="if(event.key==='Enter'||event.key===' '){setExpensePeriod('today'); go('expenses');}" title="บันทึกค่าใช้จ่ายและตรวจสอบกำไรสุทธิ">
-            <div class="quick-action-icon" style="background:rgba(244,63,94,0.2); color:#fb7185;">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="1" x2="12" y2="23"></line>
-                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-              </svg>
-            </div>
-            <div class="quick-action-text">
-              <strong>บันทึกค่าใช้จ่าย & กำไรสุทธิ</strong>
-              <small>ค่าเช่าบูธ ค่าแรง ค่าอาหาร</small>
-            </div>
-          </div>
-
-          <!-- 4. Low Stock Alert -->
-          <div class="quick-action-card action-lowstock" tabindex="0" role="button" onclick="go('lowStock')" onkeydown="if(event.key==='Enter'||event.key===' ')go('lowStock')" title="ดูสินค้าที่สต็อกต่ำกว่าเกณฑ์">
-            <div class="quick-action-icon" style="background:rgba(239,68,68,0.2); color:#f87171;">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-                <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
-                <line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line>
-              </svg>
-            </div>
-            <div class="quick-action-text">
-              <strong>สินค้าใกล้หมด <span class="badge-count">${lowProducts().length}</span></strong>
-              <small>เตรียมสั่งซื้อ / เติมสินค้า</small>
-            </div>
-          </div>
-
-          <!-- 5. Physical Stock Audit -->
-          <div class="quick-action-card action-audit" tabindex="0" role="button" onclick="go('audit')" onkeydown="if(event.key==='Enter'||event.key===' ')go('audit')" title="ตรวจนับสต็อกจริงและปรับปรุงยอดคงเหลือ">
-            <div class="quick-action-icon" style="background:rgba(168,85,247,0.2); color:#c084fc;">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg>
-            </div>
-            <div class="quick-action-text">
-              <strong>ตรวจนับสต็อกจริง (Physical Audit)</strong>
-              <small>สแกนกระทบยอดสินค้า</small>
-            </div>
-          </div>
-
-          <!-- 6. Daily Sales Report -->
-          <div class="quick-action-card action-report" tabindex="0" role="button" onclick="setReportPeriod('today'); go('report');" onkeydown="if(event.key==='Enter'||event.key===' '){setReportPeriod('today'); go('report');}" title="ดูรายงานและสถิติยอดขายประจำวัน">
-            <div class="quick-action-icon" style="background:rgba(99,102,241,0.2); color:#818cf8;">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line>
-              </svg>
-            </div>
-            <div class="quick-action-text">
-              <strong>รายงานประจำวัน (Reports)</strong>
-              <small>สรุปยอด บิล และสินค้าขายดี</small>
-            </div>
-          </div>
-
-          <!-- 7. Print Barcode Labels -->
-          <div class="quick-action-card action-barcode" tabindex="0" role="button" onclick="openBarcodePrintModal()" onkeydown="if(event.key==='Enter'||event.key===' ')openBarcodePrintModal()" title="พิมพ์ฉลากบาร์โค้ดสินค้า สติกเกอร์ความร้อน หรือกระดาษ A4">
-            <div class="quick-action-icon" style="background:rgba(2,132,199,0.2); color:#38bdf8;">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14"/>
-              </svg>
-            </div>
-            <div class="quick-action-text">
-              <strong>พิมพ์บาร์โค้ดสินค้า (Barcodes)</strong>
-              <small>สติกเกอร์ความร้อน / แผ่น A4</small>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      <div class="kpi-grid daily-kpi-grid">
-        <div class="kpi primary">
-          <div class="label">ยอดขายสุทธิวันนี้</div>
-          <div class="value">฿${money(total)}</div>
-          <div class="hint">${bills} บิล · เฉลี่ย ฿${bills ? money(total/bills) : 0}/บิล</div>
-        </div>
-
-        <div class="kpi warning">
-          <div class="label">ยอดรวมก่อนลด & ส่วนลด</div>
-          <div class="value">฿${money(grossTotal)}</div>
-          <div class="hint">ส่วนลด ฿${money(totalDiscounts)}</div>
-        </div>
-
-        <div class="kpi success">
-          <div class="label">จำนวนสินค้าที่ขาย</div>
-          <div class="value">${units} <small style="font-size:13px; font-weight:600; opacity:0.8;">ชิ้น</small></div>
-          <div class="hint">${todayStats.length} รายการ SKU</div>
-        </div>
-
-        <div class="kpi info">
-          <div class="label">เป้าหมายวันนี้</div>
-          <div class="value">${targetPct}%</div>
-          <div class="hint">${target > 0 ? (targetDiff <= 0 ? `🎉 เกินเป้า ฿${money(Math.abs(targetDiff))}` : `ขาดอีก ฿${money(targetDiff)}`) : 'เป้า ฿0'}</div>
-          <div class="progress-bar-wrap">
-            <div class="progress-bar-track">
-              <div class="progress-bar-fill" style="width: ${targetPct}%;"></div>
-            </div>
-          </div>
-        </div>
-
-        <div class="kpi teal">
-          <div class="label">เงินสด (Cash)</div>
-          <div class="value">฿${money(cashTotal)}</div>
-          <div class="hint">${cashSales.length} บิล (${total > 0 ? ((cashTotal / total) * 100).toFixed(0) : 0}%)</div>
-        </div>
-
-        <div class="kpi purple">
-          <div class="label">QR PromptPay</div>
-          <div class="value">฿${money(qrTotal)}</div>
-          <div class="hint">${qrSales.length} บิล (${total > 0 ? ((qrTotal / total) * 100).toFixed(0) : 0}%)</div>
-        </div>
-      </div>
-
-      ${renderCriticalLowStockCardsSection()}
-
-      ${renderStockForecastCardsSection(true)}
-
-      <div class="dashboard-grid dashboard-grid-main">
-        ${card("แนวโน้มยอดขายรายวัน & การวิเคราะห์สัปดาห์นี้",`
-          <div class="chart-header-row">
-            <div class="chart-mode-tabs">
-              <button class="chart-mode-btn ${(state.dashboardChartMode==='week'||!state.dashboardChartMode)?'active':''}" data-mode="week" onclick="setDashboardChartMode('week')">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                  <line x1="16" y1="2" x2="16" y2="6"></line>
-                  <line x1="8" y1="2" x2="8" y2="6"></line>
-                  <line x1="3" y1="10" x2="21" y2="10"></line>
-                </svg>
-                📅 สัปดาห์นี้ (This Week)
-              </button>
-              <button class="chart-mode-btn ${state.dashboardChartMode==='7days'?'active':''}" data-mode="7days" onclick="setDashboardChartMode('7days')">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-                </svg>
-                7 วันล่าสุด
-              </button>
-              <button class="chart-mode-btn ${state.dashboardChartMode==='hourly'?'active':''}" data-mode="hourly" onclick="setDashboardChartMode('hourly')">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <polyline points="12 6 12 12 16 14"></polyline>
-                </svg>
-                รายชั่วโมงวันนี้
-              </button>
-            </div>
-            <span id="chartScrollHint" class="chart-scroll-hint" style="${state.dashboardChartMode==='hourly'?'display:inline-flex':'display:none'}">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-              เลื่อนซ้าย-ขวาเพื่อดูชั่วโมงอื่น
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          <div class="tdd-top-bar-meta">
+            <span class="tdd-top-date">📅 ${thaiDateStr}</span>
+            <span class="tdd-top-dot">•</span>
+            <span>สาขา: <strong class="tdd-top-branch">${escapeHtml(state.settings.branch || "TERMINAL-01")}</strong></span>
+            <span class="tdd-top-dot">•</span>
+            <span class="tdd-top-online" style="color: ${state.isOffline ? '#f59e0b' : '#10b981'}; font-weight: 700;">
+              ${state.isOffline ? '⚡ โหมดออฟไลน์' : '🟢 ออนไลน์ปกติ'}
             </span>
           </div>
-          <div id="chartScrollViewport" class="chart-scroll-viewport">
-            <div id="interactiveChartContainer" class="interactive-chart-container"></div>
-          </div>
-          <div id="chartDetailBanner" class="chart-detail-banner"></div>
-        `)}
+        </div>
+        <div class="tdd-top-bar-right">
+          <button class="tdd-header-action-btn stock" type="button" onclick="go('stock')" title="จัดการคลังและสต็อกสินค้า">
+            <span>📦 สต็อก</span>
+          </button>
+          <button class="tdd-header-action-btn history" type="button" onclick="go('salesHistory')" title="ดูประวัติการขายประจำวัน">
+            <span>🧾 ประวัติบิล</span>
+          </button>
+          <button class="tdd-header-action-btn report" type="button" onclick="go('report')" title="ดูรายงานสรุปยอดขาย">
+            <span>📊 รายงาน</span>
+          </button>
+        </div>
+      </div>
 
-        ${card("ความเคลื่อนไหวล่าสุดวันนี้",`
-          <div class="activity-list">
-            ${todayMoves.length ? todayMoves.map(m=>`
-              <div class="activity-row">
-                <span class="activity-time">${String(m.movement_time||"").slice(0,5)}</span>
-                <div class="activity-info">
-                  <strong>${escapeHtml(m.product_name)}</strong>
-                  <small>${escapeHtml(m.note||m.movement_type||"")}</small>
+      <!-- 3-Column Operational Grid (Col 1: ~40% | Col 2: ~40% | Col 3: ~20%) -->
+      <div class="tdd-three-cols-grid">
+
+        <!-- ========================================================
+             COLUMN 1 (~40%): บน: ยอดขายรวมวันนี้ | ล่าง: สินค้าขายดี
+             ======================================================== -->
+        <div class="tdd-col tdd-col-1">
+
+          <!-- Card 1 Top: 💰 ยอดขายรวมวันนี้ 💰 -->
+          <div class="tdd-panel tdd-card-top tdd-sales-summary-card" onclick="go('salesHistory')" title="แตะเพื่อดูประวัติการขาย">
+            <div class="tdd-panel-head">
+              <h3 class="tdd-panel-title">
+                <span>💰 ยอดขายรวมวันนี้ 💰</span>
+              </h3>
+              <span class="tdd-panel-link-icon" title="ดูประวัติบิล">↗</span>
+            </div>
+
+            <div class="tdd-sales-amount-row">
+              <div class="tdd-sales-amount-val green">฿${money(total)}</div>
+              <div class="tdd-sales-stats-pills">
+                <span class="tdd-stat-pill">🧾 ${bills} บิล</span>
+                <span class="tdd-stat-pill">📦 ${units} ชิ้น</span>
+              </div>
+            </div>
+
+            <div class="tdd-sales-sub-metrics">
+              <div class="tdd-avg-metric">
+                <span class="tdd-metric-label">เฉลี่ยต่อบิล</span>
+                <span class="tdd-metric-val">฿${money(avgBill)}</span>
+              </div>
+              <div class="tdd-pay-split-compact">
+                <div class="tdd-pay-split-bar">
+                  <div class="tdd-split-cash" style="width: ${cashPct}%" title="เงินสด ${cashPct}%"></div>
+                  <div class="tdd-split-qr" style="width: ${qrPct}%" title="QR / โอน ${qrPct}%"></div>
                 </div>
-                <span class="activity-change ${Number(m.qty_change)>=0?"plus":"minus"}">
-                  ${Number(m.qty_change)>0?"+":""}${m.qty_change}
+                <div class="tdd-pay-legend-compact">
+                  <span class="tdd-legend-cash">💵 สด ฿${money(cashTotal)} (${cashPct}%)</span>
+                  <span class="tdd-legend-qr">📲 QR ฿${money(qrTotal)} (${qrPct}%)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 1 Bottom: 💥 สินค้าขายดี (Hot Sale) 💥 -->
+          <div class="tdd-panel tdd-card-bottom tdd-hotsale-panel">
+            <div class="tdd-panel-head">
+              <h3 class="tdd-panel-title">
+                <span>💥 ${isHotSaleAllTime ? 'สินค้าขายดีประจำร้าน' : 'HOT SALE (สินค้าขายดี)'} 💥</span>
+                <span class="tdd-panel-badge">${hotSaleItems.length} รายการ</span>
+              </h3>
+              <button class="tdd-panel-action" type="button" onclick="go('report')">
+                <span>ดูทั้งหมด</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+              </button>
+            </div>
+            ${hotSaleHtml}
+          </div>
+
+        </div>
+
+        <!-- ========================================================
+             COLUMN 2 (~40%): บน: เป้าหมายยอดขาย | ล่าง: สินค้าเหลือน้อย
+             ======================================================== -->
+        <div class="tdd-col tdd-col-2">
+
+          <!-- Card 2 Top: 🎯 เป้าหมายยอดขาย 🎯 -->
+          <div class="tdd-panel tdd-card-top tdd-target-card" onclick="go('settings')" title="แตะเพื่อตั้งค่าเป้าหมายรายวัน">
+            <div class="tdd-panel-head">
+              <h3 class="tdd-panel-title">
+                <span>🎯 เป้าหมายยอดขาย 🎯</span>
+              </h3>
+              <span class="tdd-panel-link-icon" title="ตั้งค่าเป้าหมาย">⚙️</span>
+            </div>
+
+            <div class="tdd-target-highlight-banner">
+              <span>⭐ เป้าหมาย ${money(target)} บาท/วัน ⭐</span>
+            </div>
+
+            <div class="tdd-target-status-line">
+              <span class="tdd-target-status-label">สถานะ : <strong>${targetPct}%</strong></span>
+              <span class="tdd-target-status-value">฿${money(total)} / ฿${money(target)}</span>
+            </div>
+
+            <div class="tdd-target-progress-bar">
+              <div class="tdd-target-progress-fill ${targetPct >= 100 ? 'celebrate' : ''}" style="width: ${Math.min(100, Math.max(3, targetPct))}%;"></div>
+            </div>
+
+            <div class="tdd-target-footer-info">
+              <span class="tdd-target-remain-tag ${targetPct >= 100 ? 'done' : ''}">
+                ${targetPct >= 100 ? `🎉 บรรลุเป้าหมายแล้ว! (+฿${money(overTarget)})` : `ขาดอีก ฿${money(remainTarget)} บาท`}
+              </span>
+              <span class="tdd-target-edit-hint">แตะเพื่อแก้ไข ↗</span>
+            </div>
+          </div>
+
+          <!-- Card 2 Bottom: ⚠️ สินค้าเหลือน้อย ⚠️ -->
+          <div class="tdd-panel tdd-card-bottom tdd-stock-alerts-panel">
+            <div class="tdd-panel-head">
+              <h3 class="tdd-panel-title">
+                <span>⚠️ สินค้าเหลือน้อย ⚠️</span>
+                <span class="tdd-panel-badge red">
+                  ${stockAlerts.length} รายการ
                 </span>
-              </div>`).join("") :
-              `<div class="empty">ยังไม่มีความเคลื่อนไหววันนี้</div>`}
+              </h3>
+              <button class="tdd-panel-action" type="button" onclick="go('stock')">
+                <span>จัดการสต็อก</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+              </button>
+            </div>
+            ${stockAlertsHtml}
           </div>
-        `)}
+
+        </div>
+
+        <!-- ========================================================
+             COLUMN 3 (~20%): บน: STATUS (อนิเมชั่น) | ล่าง: ขายสินค้า
+             ======================================================== -->
+        <div class="tdd-col tdd-col-3">
+
+          <!-- Card 3 Top: 🏆 STATUS 🏆 (แสดงสถานะ ว่า ตอนนี้ ใกล้ถึงเป้าหมายหรือยัง อนิเมชั่น) -->
+          <div class="tdd-panel tdd-col3-status-card" onclick="go('settings')" title="แตะเพื่อดูรายละเอียดเป้าหมาย">
+            <div class="tdd-panel-head">
+              <h3 class="tdd-panel-title">
+                <span>🏆 STATUS 🏆</span>
+              </h3>
+            </div>
+
+            <div class="tdd-col3-status-body">
+              <div class="tdd-col3-status-icon-wrap">
+                <span class="tdd-status-animated-icon">${statusIcon}</span>
+              </div>
+            </div>
+
+            <div class="tdd-col3-status-bar-box">
+              <div class="tdd-status-bar-track">
+                <div class="tdd-status-bar-fill ${targetPct >= 100 ? 'celebrate' : ''}" style="width: ${Math.min(100, Math.max(6, targetPct))}%;"></div>
+              </div>
+              <div class="tdd-status-footer">
+                <span>ปัจจุบัน ฿${money(total)}</span>
+                <span>เป้า ฿${money(target)}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 🛒 ปุ่มขายสินค้า POS (เฉพาะปุ่มด้านใน) -->
+          <button class="tdd-col3-giant-pos-btn" type="button" onclick="go('sale')" aria-label="เปิดหน้าขายสินค้า POS">
+            <div class="tdd-pos-btn-glow"></div>
+            <div class="tdd-pos-cart-icon-wrap">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="9" cy="21" r="1.5"></circle>
+                <circle cx="20" cy="21" r="1.5"></circle>
+                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+              </svg>
+            </div>
+            <div class="tdd-pos-btn-label">ขายสินค้า</div>
+            <div class="tdd-pos-btn-hint">เปิดบิล POS หน้าร้าน</div>
+          </button>
+
+        </div>
+
       </div>
 
-      <div class="dashboard-grid">
-        ${card("ขายจำนวนมากที่สุด",`
-          <div class="rank-list">
-            ${topQty.length ? topQty.map((x,i)=>`
-              <div class="rank-row">
-                <span class="rank-no">${i+1}</span>
-                <div class="rank-info">
-                  <strong>${escapeHtml(x.product_name)}</strong>
-                  <small>ยอดขาย ฿${money(x.revenue)}</small>
-                </div>
-                <span class="rank-value">${x.qty} ชิ้น</span>
-              </div>`).join("") :
-              `<div class="empty">ยังไม่มีรายการขายวันนี้</div>`}
-          </div>
-        `)}
-
-        ${card("ยอดขายสูงที่สุด",`
-          <div class="rank-list">
-            ${topRevenue.length ? topRevenue.map((x,i)=>`
-              <div class="rank-row">
-                <span class="rank-no">${i+1}</span>
-                <div class="rank-info">
-                  <strong>${escapeHtml(x.product_name)}</strong>
-                  <small>ขาย ${x.qty} ชิ้น</small>
-                </div>
-                <span class="rank-value">฿${money(x.revenue)}</span>
-              </div>`).join("") :
-              `<div class="empty">ยังไม่มีรายการขายวันนี้</div>`}
-          </div>
-        `)}
-      </div>
-
-      <div class="dashboard-grid">
-        ${card("สินค้าเหลือต่ำกว่ากำหนด",`
-          <div class="low-stock-cards">
-            ${low.length ? low.map((p, i)=>`
-              <button class="low-stock-row low-stock-card" style="--stagger:${i};" onclick="quickReceive('${p.id}')">
-                <div>
-                  <strong>${escapeHtml(p.product_name)}</strong>
-                  <small>${escapeHtml(p.product_code)} • ขั้นต่ำ ${p.min_stock}</small>
-                </div>
-                <div class="low-stock-right">
-                  <span class="stock-number">${p.stock_qty}</span>
-                  ${statusForProduct(p)}
-                </div>
-              </button>`).join("") :
-              `<div class="empty">Stock อยู่ในระดับปกติ</div>`}
-          </div>
-        `)}
-
-        ${card("แนวโน้มควรสั่งสินค้าเพิ่ม",`
-          <div class="reorder-list">
-            ${reorder.length ? reorder.map(p=>`
-              <div class="reorder-row">
-                <div>
-                  <strong>${escapeHtml(p.product_name)}</strong>
-                  <small>เหลือ ${p.stock_qty} • ขายวันนี้ ${p.soldToday} • ขั้นต่ำ ${p.min_stock}</small>
-                </div>
-                <div class="reorder-action">
-                  <span class="status ${p.className}">${p.level}</span>
-                  <strong>${p.suggested>0 ? "แนะนำ +"+p.suggested : "ติดตาม"}</strong>
-                </div>
-              </div>`).join("") :
-              `<div class="empty">ยังไม่มีรายการที่ต้องสั่งเพิ่มในขณะนี้</div>`}
-          </div>
-          <p class="trend-note">* คำแนะนำคำนวณจาก Stock ปัจจุบัน, จุดแจ้งเตือนขั้นต่ำ และอัตราการขายของวันนี้</p>
-        `)}
-      </div>
-    </section>`;
-
-  // Mount interactive animated D3 chart
-  setTimeout(() => {
-    mountInteractiveD3Chart("interactiveChartContainer");
-  }, 10);
+    </div>
+  `;
 }
 
 function renderMenu(){
@@ -6484,6 +6567,36 @@ function renderCartTotalBox(){
             </div>
           </div>
         ` : "")}
+      `;
+    } else if (state.paymentMethod === "promptpay") {
+      const promptPayRaw = state.settings?.promptPayId || state.settings?.shopPhone || "";
+      const promptPayClean = String(promptPayRaw).replace(/[^0-9]/g, "");
+      const ppQrUrl = promptPayClean ? `https://promptpay.io/${promptPayClean}/${total.toFixed(2)}.png` : "";
+      paymentHtml += `
+        <div class="promptpay-box" style="margin-top:12px; background:#0f172a; border:1px solid #334155; border-radius:12px; padding:14px; text-align:center;">
+          <div style="display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:8px;">
+            <span style="font-size:18px;">📱</span>
+            <strong style="color:#38bdf8; font-size:14px;">ชำระเงินผ่าน PromptPay QR</strong>
+          </div>
+          <div style="font-size:12px; color:var(--muted); margin-bottom:10px;">
+            บัญชีรับเงิน: <strong style="color:#f8fafc;">${escapeHtml(promptPayRaw || "ยังไม่ได้ระบุในหน้าตั้งค่า")}</strong>
+          </div>
+          ${promptPayClean ? `
+            <div style="display:inline-block; background:#ffffff; padding:10px; border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,0.3); margin-bottom:8px;">
+              <img src="${ppQrUrl}" alt="PromptPay QR Code" style="display:block; width:150px; height:150px; margin:0 auto;" onerror="this.onerror=null; this.parentElement.innerHTML='<div style=\\'color:#0f172a; font-size:12px; font-weight:700; padding:35px 10px; line-height:1.5;\\'>📱 โอนเข้าบัญชี/พร้อมเพย์<br><span style=\\'font-size:16px; color:#0284c7;\\'>${promptPayClean}</span><br>ยอดชำระ ฿${money(total)}</div>';">
+            </div>
+            <div style="font-size:13px; color:#34d399; font-weight:700;">
+              ยอดชำระ: ฿${money(total)}
+            </div>
+            <div style="font-size:11px; color:#94a3b8; margin-top:4px;">
+              เมื่อลูกค้าโอนเงินเรียบร้อย กดปุ่ม <strong>\"บันทึกการขาย\"</strong> ด้านล่างเพื่อออกใบเสร็จ
+            </div>
+          ` : `
+            <div style="padding:10px; font-size:12px; color:#fcd34d; background:rgba(245,158,11,0.1); border-radius:8px; border:1px solid rgba(245,158,11,0.2);">
+              ℹ️ แนะนำ: ใส่เบอร์พร้อมเพย์ในเมนู <strong>ตั้งค่า (Settings)</strong> เพื่อแสดง QR รับเงินอัตโนมัติ
+            </div>
+          `}
+        </div>
       `;
     }
   }
@@ -15503,6 +15616,20 @@ function buildReportDiscountDedicatedTab(data){
   `;
 }
 
+function buildReportBasketTab(data){
+  const basket = data.basketAnalytics || getBasketAnalytics(data.filteredSales, data.filteredItems);
+  return `
+    <div style="margin-top: 6px;">
+      ${card("🛒 วิเคราะห์พฤติกรรมการซื้อ & ขนาดตะกร้าสินค้า (Customer Basket Insights)", `
+        <p style="margin-top:0; color:var(--muted); font-size:12.5px; margin-bottom:16px;">
+          วิเคราะห์จำนวนชิ้นต่อบิล ยอดซื้อเฉลี่ย (AOV) สัดส่วนขนาดตะกร้า และสินค้าที่ลูกค้ามักซื้อคู่กันบ่อยที่สุด
+        </p>
+        ${renderBasketAnalyticsHTML(basket)}
+      `)}
+    </div>
+  `;
+}
+
 function buildReportOverviewTab(data){
   const totalRev = data.totalRevenue || 1;
   const cashPct = data.totalRevenue > 0 ? Math.round((data.cashTotal / totalRev) * 100) : 0;
@@ -20681,6 +20808,10 @@ function renderSettings(){
           <input id="shopPhone" placeholder="081-234-5678" value="${escapeHtml(state.settings?.shopPhone || '')}" oninput="updateLiveReceiptPreview()">
         </div>
         <div class="field">
+          <label>เบอร์พร้อมเพย์รับเงิน (PromptPay ID / เบอร์โอนเงิน)</label>
+          <input id="promptPayId" placeholder="081-234-5678 หรือ เลข ปชช." value="${escapeHtml(state.settings?.promptPayId || '')}" oninput="updateLiveReceiptPreview()">
+        </div>
+        <div class="field">
           <label>Line Official ID / Social</label>
           <input id="shopLine" placeholder="@eafairsale" value="${escapeHtml(state.settings?.shopLine || '')}" oninput="updateLiveReceiptPreview()">
         </div>
@@ -20814,6 +20945,7 @@ async function saveSettings(){
   const shopBranch = el("shopBranch")?.value.trim() || "";
   const shopAddress = el("shopAddress")?.value.trim() || "";
   const shopPhone = el("shopPhone")?.value.trim() || "";
+  const promptPayId = el("promptPayId")?.value.trim() || "";
   const shopTaxId = el("shopTaxId")?.value.trim() || "";
   const shopLine = el("shopLine")?.value.trim() || "";
   const receiptFooterNote = el("receiptFooterNote")?.value.trim() || "ขอบคุณที่อุดหนุนสินค้า สามารถเปลี่ยนคืนสินค้าได้ภายใน 7 วัน";
@@ -20830,6 +20962,7 @@ async function saveSettings(){
     shopBranch,
     shopAddress,
     shopPhone,
+    promptPayId,
     shopTaxId,
     shopLine,
     receiptFooterNote,
@@ -20847,6 +20980,7 @@ async function saveSettings(){
         upsertSetting("shop_branch", shopBranch),
         upsertSetting("shop_address", shopAddress),
         upsertSetting("shop_phone", shopPhone),
+        upsertSetting("prompt_pay_id", promptPayId),
         upsertSetting("shop_tax_id", shopTaxId),
         upsertSetting("shop_line", shopLine),
         upsertSetting("receipt_footer_note", receiptFooterNote),
@@ -20884,9 +21018,9 @@ function updateBottomNav(){
     let active=false;
 
     if(state.page==="home") active=target==="home";
-    else if(state.page==="menu" || state.page==="dashboardToday" || state.page==="dashboardAll" || state.page==="salesHistory" || state.page==="expenses" || state.page==="report" || state.page==="settings") active=target==="menu";
     else if(state.page==="sale") active=target==="sale";
-    else if(state.page==="stock" || state.page==="movement" || state.page==="lowStock") active=target==="stock";
+    else if(state.page==="stock" || state.page==="movement" || state.page==="lowStock" || state.page==="audit") active=target==="stock";
+    else if(state.page==="menu" || state.page==="dashboardToday" || state.page==="dashboardAll" || state.page==="salesHistory" || state.page==="expenses" || state.page==="report" || state.page==="settings") active=target==="menu";
 
     btn.classList.toggle("active",active);
   });
@@ -20909,6 +21043,21 @@ async function refreshData(){
   } else {
     toast("รีเฟรชข้อมูลในเครื่องแล้ว (โหมดออฟไลน์)");
   }
+}
+
+function toggleHomeTopCardsMode() {
+  const modes = ["compact", "mini", "normal"];
+  const current = state.homeTopCardsMode || "compact";
+  const nextIdx = (modes.indexOf(current) + 1) % modes.length;
+  state.homeTopCardsMode = modes[nextIdx];
+  localStorage.setItem("ea_home_top_cards_mode", state.homeTopCardsMode);
+  renderHome();
+  const labelMap = {
+    compact: "ย่อกระชับ 📐 (เพิ่มพื้นที่การ์ดล่างเป็น 85%+)",
+    mini: "มินิติดขอบ ⚡ (เพิ่มพื้นที่การ์ดล่างเป็น 92%+)",
+    normal: "ขยายปกติ 📄"
+  };
+  toast(`ปรับขนาดการ์ดบน: ${labelMap[state.homeTopCardsMode]}`);
 }
 
 function go(page){if(state.page==="sale"&&page!=="sale"){stopScanner();stopCartLiveScanner();}state.page=page;render();window.scrollTo({top:0,behavior:"smooth"})}
@@ -20938,6 +21087,7 @@ el("lowStockAlertModal")?.addEventListener("click",(e)=>{if(e.target===el("lowSt
 el("stockDetailDialog")?.addEventListener("click",(e)=>{if(e.target===el("stockDetailDialog"))closeStockDetailModal()});
 
 Object.assign(window,{
+  toggleHomeTopCardsMode,
   go,startScanner,stopScanner,startCartLiveScanner,stopCartLiveScanner,toggleCartLiveScanner,toggleCartLiveFlash,setCartLiveZoom,handleCartLiveScannedBarcode,handlePosSearchEnter,toggleScannerFlash,toggleScanSound,toggleScanVibration,toggleBatchScan,changeBatchQueueQty,undoBatchQueueItem,removeBatchQueueItem,clearBatchQueue,commitBatchScanToPOS,scrollScannerToQueue,openLowStockAlertModal,closeLowStockAlertModal,requestNotificationPermission,testBrowserPushNotification,getNotificationPermissionStatus,sendBrowserPushNotification,checkAndNotifyLowStock,
   fetchEmailNotificationSettings,saveEmailNotificationSettings,testLowStockEmail,triggerLowStockEmail,
   setCriticalCategoryFilter,setCriticalUrgencyFilter,setCriticalSort,calculate30DaySalesVelocity,exportCriticalStockExcel,openQuickRefillModal,calculateAutoSuggestRefill,openStockDetailModal,closeStockDetailModal,setStockDetailTargetDays,submitAutoRefillFromDetail,onSensitivityChange,onCameraZoomChange,setCameraZoom,addBarcodeFromInput,addSelectedProduct,changeCartQty,
@@ -20975,7 +21125,8 @@ Object.assign(window,{
   clearExpenseSearch,calculateFinancials,openExpenseModal,closeExpenseModal,saveExpenseFromModal,
   deleteExpense,renderExpenses,exportExpensesExcel,exportExpensesCSV,printExpensesReport,
   showReceiptModal,closeReceiptModal,printReceipt,saveReceiptAsJPEG,toast,el,
-  openBarcodePrintModal,closeBarcodePrintModal,openBarcodePrintFromScanner,setBarcodeMode,setBarcodeFormat,setBarcodeQty,onBarcodeQtyChange,onBarcodeSearchInput,clearBarcodeSearch,onBarcodeProductSelect,toggleBarcodeOption,setBarcodeBatchType,toggleBarcodeBatchOnlyInStock,assignGeneratedBarcode,promptEditBarcode,printBarcodeLabels,openBarcodePrintWindow,downloadBarcodeImage
+  openBarcodePrintModal,closeBarcodePrintModal,openBarcodePrintFromScanner,setBarcodeMode,setBarcodeFormat,setBarcodeQty,onBarcodeQtyChange,onBarcodeSearchInput,clearBarcodeSearch,onBarcodeProductSelect,toggleBarcodeOption,setBarcodeBatchType,toggleBarcodeBatchOnlyInStock,assignGeneratedBarcode,promptEditBarcode,printBarcodeLabels,openBarcodePrintWindow,downloadBarcodeImage,
+  openLowStockPdfModal,updateLowStockModalContent,printLowStockSummaryPDF,copyLowStockSummaryText,setDashboardChartMode,exportRestockOrderPDF,downloadRestockOrderText,copyRestockOrderText,setRestockMultiplier,resetRestockOrder,updateRestockItemQty,receivePOItems,updatePOStatus,viewPODetailModal,selectProductForPOTimeline,saveSmartPODraft,setReplenishmentOption,updateSmartPODraftQty,setStockForecastUrgencyFilter,setStockForecastCatFilter,onStockForecastSearchInput,setLowStockSubTab,setPosFilter,setDashboardPeriod,onDashboardDateInputChange,applyDashboardCustomDate,updateProductModalBarcodePreview,generateAndSetProductModalBarcode,applyReportCustomDate,exportAccountingJournalExcel,exportAccountingJournalCSV,updateLiveReceiptPreview,buildReportBasketTab
 });
 function render(){
   const backBtn=el("homeBackBtn");

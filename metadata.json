@@ -1,0 +1,6 @@
+{
+  "name": "EA Fair Sale - ระบบ POS และจัดการสต็อกสินค้า",
+  "description": "ระบบจัดการร้านค้า POS และสต็อกสินค้า PWA (EA Fair Sale) รองรับการขายหน้าร้าน พิมพ์บาร์โค้ด และการทำงานออฟไลน์",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

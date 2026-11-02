@@ -1,5 +1,5 @@
 // EA Fair Sale - Service Worker with Background Sync & Offline Support
-const CACHE_NAME = 'ea-fair-sale-v4';
+const CACHE_NAME = 'ea-fair-sale-v5';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -8,9 +8,39 @@ const STATIC_ASSETS = [
   '/supabase-config.js',
   '/fetch-wrapper.js',
   '/manifest.json',
+  '/js/offline-sync.js',
+  '/css/variables.css',
+  '/css/base.css',
+  '/css/layout.css',
+  '/css/light-mode.css',
+  '/css/tablet.css',
+  '/css/components/buttons.css',
+  '/css/components/cards.css',
+  '/css/components/tables.css',
+  '/css/components/forms.css',
+  '/css/pages/home.css',
   '/css/pages/pos.css',
   '/css/pages/dashboard.css',
-  '/assets/icons/logo-192.png'
+  '/css/pages/stock.css',
+  '/css/pages/movement.css',
+  '/css/pages/audit.css',
+  '/css/pages/sales-history.css',
+  '/css/pages/expenses.css',
+  '/css/pages/reports.css',
+  '/css/pages/settings.css',
+  '/css/pages/modals.css',
+  '/images/btn-sale.png',
+  '/images/btn-dashboard-today.png',
+  '/images/btn-dashboard-all.png',
+  '/images/btn-add-stock.png',
+  '/images/btn-out-stock.png',
+  '/images/btn-new-product.png',
+  '/images/btn-stock.png',
+  '/images/btn-low-stock.png',
+  '/images/btn-export.png',
+  '/images/btn-setting.png',
+  '/assets/icons/logo-192.png',
+  '/assets/icons/logo-512.png'
 ];
 
 // Never replay sales from a service worker using an anonymous credential.
@@ -66,8 +96,10 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache only same-origin static assets. Never store third-party API responses.
-  if (url.origin !== self.location.origin) return;
+  // Cache same-origin static assets and known CDN libraries (d3, supabase, zxing, jsbarcode)
+  const isCdnAsset = (url.hostname === 'cdn.jsdelivr.net' || url.hostname === 'unpkg.com') &&
+                     (url.pathname.endsWith('.js') || url.pathname.endsWith('.css'));
+  if (url.origin !== self.location.origin && !isCdnAsset) return;
 
   // Stale-While-Revalidate for app assets
   event.respondWith(

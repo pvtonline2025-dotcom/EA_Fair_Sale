@@ -21,6 +21,7 @@
 @import "css/pages/reports.css";
 @import "css/pages/settings.css";
 @import "css/light-mode.css";
+@import "css/tablet.css";
 
 *, *::before, *::after {
   box-sizing: border-box;
@@ -216,6 +217,7 @@ button { cursor: pointer; }
   border-radius: 50%;
   background-color: currentColor;
 }
+.kpi-beacon-ping {
   position: relative;
   display: inline-block;
   width: 8px;

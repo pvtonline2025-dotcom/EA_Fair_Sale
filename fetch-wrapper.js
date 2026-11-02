@@ -45,7 +45,7 @@
   try {
     Object.defineProperty(window, 'fetch', {
       value: wrappedFetch,
-      writable: false,
+      writable: true,
       configurable: true // Allow some flexibility if absolutely needed by platform
     });
   } catch (e) {

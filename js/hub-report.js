@@ -282,6 +282,7 @@
         .promo { color: #e11d48; font-weight: 700; } .muted { color: #777; }
         .grand { display: flex; justify-content: flex-end; align-items: baseline; gap: 24px; margin-top: 10px; padding-top: 8px; border-top: 2px solid #999; }
         .grand span { font-weight: 700; } .grand strong { font-size: 24px; }
+        .ea-ic { display: inline-block; width: 1.15em; height: 1.15em; vertical-align: -0.2em; }
         .qrs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
         .qrc { border: 2px dashed #555; padding: 16px; text-align: center; page-break-inside: avoid; }
         .qrc svg { width: 220px; height: 220px; } .qrc h3 { font-size: 26px; margin: 6px 0; }
@@ -305,10 +306,11 @@
           })();
         <\/script>
       </body></html>`;
+    const finalHtml = window.EaIcons ? window.EaIcons.htmlWithIcons(html) : html;
     const w = window.open('', '_blank');
     if (w) {
       w.__eaAutoPrint = true;
-      w.document.open(); w.document.write(html); w.document.close();
+      w.document.open(); w.document.write(finalHtml); w.document.close();
       return;
     }
     // Popup blocked: print through a hidden iframe
@@ -316,7 +318,7 @@
     f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
     document.body.appendChild(f);
     f.contentWindow.__eaAutoPrint = true;
-    f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
+    f.contentDocument.open(); f.contentDocument.write(finalHtml); f.contentDocument.close();
     setTimeout(() => f.remove(), 60000);
   }
 

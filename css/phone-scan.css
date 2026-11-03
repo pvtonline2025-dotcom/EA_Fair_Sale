@@ -547,3 +547,40 @@ html.ps-booting body::before {
   margin-top: 6px; height: 50px; padding: 0 28px; border-radius: 999px;
   border: 0; background: #0f172a; color: #fff; font-size: 16px; font-weight: 800;
 }
+
+/* ---- Price sheet: quantity picker + manual discount ---- */
+.ps-qtypick {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 8px; margin-bottom: 4px; border-radius: 14px; background: var(--ps-surface);
+  font-size: 15px; font-weight: 700; color: var(--ps-sub);
+}
+.ps-qtypick strong { min-width: 34px; text-align: center; font-size: 22px; color: var(--ps-text); }
+.ps-disc {
+  margin-top: 8px; padding: 12px; border-radius: 14px;
+  border: 2px solid var(--ps-border); background: var(--ps-surface);
+}
+.ps-disc.is-active { border-color: #f59e0b; }
+.ps-disc-head { font-size: 16px; font-weight: 800; color: #fbbf24; }
+.ps-disc-head small { font-size: 12.5px; font-weight: 600; color: var(--ps-sub); }
+.ps-disc-quick, .ps-disc-reasons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.ps-disc-quick button, .ps-disc-reasons button {
+  min-height: 40px; padding: 0 12px; border-radius: 10px;
+  border: 1px solid var(--ps-border); background: var(--ps-surface-2); color: var(--ps-text);
+  font-size: 14px; font-weight: 700;
+}
+.ps-disc-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.ps-disc-row span { font-size: 14px; font-weight: 700; color: var(--ps-sub); white-space: nowrap; }
+.ps-disc-row input, .ps-disc-note {
+  flex: 1; min-width: 0; height: 48px; padding: 0 12px; border-radius: 12px;
+  border: 1px solid var(--ps-border); background: var(--ps-bg); color: var(--ps-text);
+  font-size: 18px; font-weight: 800;
+}
+.ps-disc-row input { text-align: right; }
+.ps-disc-note { width: 100%; margin-top: 8px; font-size: 16px; font-weight: 600; }
+.ps-disc-preview { margin-top: 6px; font-size: 13.5px; font-weight: 700; color: #fbbf24; min-height: 1em; }
+.ps-disc-preview.is-bad { color: #f87171; }
+.ps-disc-apply {
+  width: 100%; height: 50px; margin-top: 8px; border: 0; border-radius: 12px;
+  background: #f59e0b; color: #111; font-size: 16px; font-weight: 900;
+}
+[data-color-mode="light"] .ps-disc-head, [data-color-mode="light"] .ps-disc-preview { color: #b45309; }

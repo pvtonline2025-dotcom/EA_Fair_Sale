@@ -1,0 +1,8 @@
+/* Line icons that replace emoji everywhere (js/icons.js) */
+.ea-ic { display: inline-block; width: 1.15em; height: 1.15em; vertical-align: -0.2em; flex-shrink: 0; }
+.ea-ic.ic-red { color: #ef4444; }
+.ea-ic.ic-green { color: #22c55e; }
+.ea-ic.ic-yellow, .ea-ic.ic-gold { color: #eab308; }
+.ea-ic.ic-orange { color: #f97316; }
+.ea-ic.ic-silver { color: #94a3b8; }
+.ea-ic.ic-bronze { color: #c2410c; }

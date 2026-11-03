@@ -194,12 +194,16 @@
 
   // Line key: same product can appear on several lines with different prices
   // opt: '' = ราคาปกติ, 'promo:<label>' = ราคาโปร, 'free' = แถม
-  function lineKey(it) { return `${it.product_id}|${it.opt || ''}|${it.opt === 'free' ? (it.free_note || '') : ''}`; }
+  function lineKey(it) {
+    const note = it.opt === 'free' ? (it.free_note || '') : String(it.opt || '').startsWith('custom:') ? (it.disc_note || '') : '';
+    return `${it.product_id}|${it.opt || ''}|${note}`;
+  }
   function qtyInBill(productId) { return items.filter(x => x.product_id === productId).reduce((a, x) => a + x.qty, 0); }
   function findPromo(p, label) { return (Array.isArray(p?.promotions) ? p.promotions : []).find(x => x.label === label) || null; }
   function promoPrice(pr) { return Math.round((Number(pr.price) / Number(pr.qty)) * 10000) / 10000; }
   function optPrice(p, opt) {
     if (opt === 'free') return 0;
+    if (String(opt || '').startsWith('custom:')) return Math.max(0, Number(opt.slice(7)) || 0);
     if (String(opt || '').startsWith('promo:')) {
       const pr = findPromo(p, opt.slice(6));
       if (pr) return promoPrice(pr);
@@ -209,6 +213,7 @@
   function optNote(it) {
     if (it.opt === 'free') return it.free_note ? `แถม ${it.free_note}` : 'แถม';
     if (String(it.opt || '').startsWith('promo:')) return it.opt.slice(6);
+    if (String(it.opt || '').startsWith('custom:')) return it.disc_note ? `ลดราคา ${it.disc_note}` : 'ลดราคา';
     return '';
   }
   function fmtPrice(n) {
@@ -298,52 +303,137 @@
 
   // ---------- Price option sheet (ปกติ / โปร / แถม) ----------
   let priceKey = null;
+  const DISC_REASONS = ['ลูกค้าประจำ', 'สินค้ามีตำหนิ', 'ซื้อจำนวนมาก', 'ล้างสต็อก'];
+  let priceQty = 1;
+
   function openPriceSheet(key) {
     const it = items.find(x => lineKey(x) === key);
     if (!it) return;
     const p = products().find(x => x.id === it.product_id);
     priceKey = key;
+    priceQty = it.qty;
     const promos = Array.isArray(p?.promotions) ? p.promotions : [];
     const unit = it.unit || 'ชิ้น';
+    const normal = Number(p?.sale_price || 0);
+    const isCustom = String(it.opt || '').startsWith('custom:');
     $('psPriceTitle').textContent = it.product_name;
     $('psPriceBody').innerHTML = `
-      <div class="ps-price-sub">${it.qty} ${escapeHtml(unit)} ในบรรทัดนี้ • เลือกราคาที่ใช้</div>
+      ${it.qty > 1 ? `
+        <div class="ps-qtypick">
+          <span>ใช้กับ</span>
+          <button type="button" class="ps-qty-btn" onclick="phonePriceQty(-1)">−</button>
+          <strong id="psPriceQty">${it.qty}</strong>
+          <button type="button" class="ps-qty-btn" onclick="phonePriceQty(1)">+</button>
+          <span>จาก ${it.qty} ${escapeHtml(unit)}</span>
+        </div>` : `<div class="ps-price-sub">1 ${escapeHtml(unit)} • เลือกราคาที่ใช้</div>`}
+
       <button type="button" class="ps-opt ${!it.opt ? 'is-active' : ''}" onclick="setPhoneLinePrice('')">
-        <span>ราคาปกติ</span><strong>฿${fmtPrice(p?.sale_price)}/${escapeHtml(unit)}</strong>
+        <span>ราคาปกติ</span><strong>฿${fmtPrice(normal)}/${escapeHtml(unit)}</strong>
       </button>
       ${promos.map(pr => `
         <button type="button" class="ps-opt is-promo ${it.opt === 'promo:' + pr.label ? 'is-active' : ''}" onclick="setPhoneLinePrice('promo:' + ${JSON.stringify(pr.label).replace(/"/g, '&quot;')})">
           <span>โปร ${escapeHtml(pr.label)}</span><strong>฿${fmtPrice(promoPrice(pr))}/${escapeHtml(unit)}</strong>
         </button>`).join('')}
+
+      <div class="ps-disc ${isCustom ? 'is-active' : ''}">
+        <div class="ps-disc-head">✏️ ลดราคา <small>(ราคาปกติ ฿${fmtPrice(normal)}/${escapeHtml(unit)})</small></div>
+        <div class="ps-disc-quick">
+          ${[5, 10, 20].filter(v => v < normal).map(v => `<button type="button" onclick="phoneDiscQuick(${normal - v})">ลด ${v} บาท</button>`).join('')}
+          ${[10, 20].map(pc => `<button type="button" onclick="phoneDiscQuick(${Math.round(normal * (100 - pc)) / 100})">ลด ${pc}%</button>`).join('')}
+        </div>
+        <label class="ps-disc-row">
+          <span>ราคาใหม่ /${escapeHtml(unit)}</span>
+          <input id="psDiscPrice" type="number" inputmode="decimal" min="0" step="any" value="${isCustom ? it.price : ''}" placeholder="${fmtPrice(normal)}" oninput="phoneDiscPreview(${normal})">
+        </label>
+        <div class="ps-disc-reasons">
+          ${DISC_REASONS.map(r => `<button type="button" onclick="phoneDiscReason('${r}')">${r}</button>`).join('')}
+        </div>
+        <input id="psDiscNote" class="ps-disc-note" type="text" maxlength="40" placeholder="เหตุผลที่ลด (ต้องใส่)" value="${escapeHtml(it.disc_note || '')}">
+        <div id="psDiscPreview" class="ps-disc-preview"></div>
+        <button type="button" class="ps-disc-apply" onclick="applyPhoneDiscount(${normal})">ใช้ราคาลดนี้</button>
+      </div>
+
       <div class="ps-opt-free ${it.opt === 'free' ? 'is-active' : ''}">
         <button type="button" class="ps-opt is-free ${it.opt === 'free' ? 'is-active' : ''}" onclick="setPhoneLinePrice('free')">
           <span>🎁 แถมฟรี</span><strong>฿0</strong>
         </button>
         <input id="psFreeNote" type="text" maxlength="40" placeholder="เหตุผล เช่น ลูกค้ามียอดสูง" value="${escapeHtml(it.free_note || '')}">
       </div>
-      ${promos.length ? '' : '<div class="ps-price-hint">ยังไม่มีราคาโปรของสินค้านี้ • ตั้งได้ในแอปเต็ม → แก้ไขสินค้า</div>'}
     `;
+    phoneDiscPreview(normal);
     showSheet('psPrice');
   }
   function closePriceSheet() { priceKey = null; hideSheet('psPrice'); resumeIfIdle(); }
-  function setPhoneLinePrice(opt) {
+
+  function phonePriceQty(d) {
+    const it = items.find(x => lineKey(x) === priceKey);
+    if (!it) return;
+    priceQty = Math.min(it.qty, Math.max(1, priceQty + d));
+    const el2 = $('psPriceQty');
+    if (el2) el2.textContent = priceQty;
+    const p = products().find(x => x.id === it.product_id);
+    phoneDiscPreview(Number(p?.sale_price || 0));
+  }
+  function phoneDiscQuick(price) {
+    const i = $('psDiscPrice');
+    if (i) i.value = Math.max(0, Math.round(price * 100) / 100);
+    const it = items.find(x => lineKey(x) === priceKey);
+    const p = it && products().find(x => x.id === it.product_id);
+    phoneDiscPreview(Number(p?.sale_price || 0));
+  }
+  function phoneDiscReason(r) {
+    const i = $('psDiscNote');
+    if (i) i.value = r;
+  }
+  function phoneDiscPreview(normal) {
+    const box = $('psDiscPreview');
+    if (!box) return;
+    const v = $('psDiscPrice')?.value;
+    if (v === '' || v === undefined) { box.textContent = ''; return; }
+    const price = Number(v);
+    if (!(price >= 0) || price >= normal) { box.className = 'ps-disc-preview is-bad'; box.textContent = 'ราคาใหม่ต้องต่ำกว่าราคาปกติ'; return; }
+    box.className = 'ps-disc-preview';
+    box.textContent = `ลด ฿${fmtPrice(normal - price)}/หน่วย × ${priceQty} = ลดทั้งหมด ฿${money((normal - price) * priceQty)}`;
+  }
+  function applyPhoneDiscount(normal) {
+    const price = Math.round(Number($('psDiscPrice')?.value) * 10000) / 10000;
+    const note = String($('psDiscNote')?.value || '').trim();
+    if (!($('psDiscPrice')?.value !== '' && price >= 0 && price < normal)) { notice('ใส่ราคาใหม่ที่ต่ำกว่าราคาปกติ', 'warn'); return; }
+    if (!note) { notice('กรุณาใส่เหตุผลที่ลดราคา', 'warn'); $('psDiscNote')?.focus(); return; }
+    if (price === 0) { const f = $('psFreeNote'); if (f) f.value = note; setPhoneLinePrice('free'); return; }
+    setPhoneLinePrice('custom:' + price, note);
+  }
+
+  function setPhoneLinePrice(opt, discNote) {
     const it = items.find(x => lineKey(x) === priceKey);
     if (!it) { closePriceSheet(); return; }
     const p = products().find(x => x.id === it.product_id);
     const freeNote = String($('psFreeNote')?.value || '').trim();
-    it.opt = opt;
-    it.free_note = opt === 'free' ? freeNote : '';
-    it.price = optPrice(p, opt);
+    const n = Math.min(it.qty, Math.max(1, priceQty || it.qty));
+    // Apply to n units: split them off the current line when only part of it changes
+    let target = it;
+    if (n < it.qty) {
+      const moved = (it.weights || []).slice(it.qty - n);
+      target = { ...it, qty: n, weights: moved.length ? moved : undefined };
+      it.qty -= n;
+      if (Array.isArray(it.weights)) it.weights = it.weights.slice(0, it.qty);
+      items.splice(items.indexOf(it), 0, target);
+    }
+    target.opt = opt;
+    target.free_note = opt === 'free' ? freeNote : '';
+    target.disc_note = String(opt).startsWith('custom:') ? String(discNote || '').trim() : '';
+    target.price = optPrice(p, opt);
     // Merge with an existing line that already uses this price
-    const same = items.find(x => x !== it && lineKey(x) === lineKey(it));
+    const same = items.find(x => x !== target && lineKey(x) === lineKey(target));
     if (same) {
-      same.qty += it.qty;
-      same.weights = [...(same.weights || []), ...(it.weights || [])];
-      items = items.filter(x => x !== it);
+      same.qty += target.qty;
+      same.weights = [...(same.weights || []), ...(target.weights || [])];
+      items = items.filter(x => x !== target);
     }
     saveItems();
     closePriceSheet();
-    renderList(lineKey(same || it));
+    const nb = $('psNotice'); if (nb) nb.hidden = true;
+    renderList(lineKey(same || target));
   }
 
   function feedback(text, type) {
@@ -485,7 +575,7 @@
         <div class="ps-row ${key === highlightId ? 'is-new' : ''}">
           <button type="button" class="ps-row-info" onclick="openPhonePriceSheet('${escapeHtml(key)}')" aria-label="เลือกราคา / โปร / แถม">
             <div class="ps-row-name">${escapeHtml(it.product_name)}${note ? ` <span class="ps-row-tag ${it.opt === 'free' ? 'is-free' : ''}">** ${escapeHtml(note)} **</span>` : ''}</div>
-            <div class="ps-row-price">฿${fmtPrice(it.price)} × ${it.qty} = <strong>฿${money(it.price * it.qty)}</strong> <span class="ps-row-edit">ราคา/โปร ›</span></div>
+            <div class="ps-row-price">฿${fmtPrice(it.price)} × ${it.qty} = <strong>฿${money(it.price * it.qty)}</strong> <span class="ps-row-edit">ลดราคา/โปร ›</span></div>
             ${Array.isArray(it.weights) && it.weights.length ? `<div class="ps-row-weights">⚖️ ${it.weights.map(w => escapeHtml(String(w))).join(', ')} กก.</div>` : ''}
           </button>
           <div class="ps-qty">
@@ -1082,6 +1172,11 @@
     openPhonePriceSheet: openPriceSheet,
     closePhonePriceSheet: closePriceSheet,
     setPhoneLinePrice,
+    phonePriceQty,
+    phoneDiscQuick,
+    phoneDiscReason,
+    phoneDiscPreview,
+    applyPhoneDiscount,
     closePhoneWeightPad: closeWeightPad,
     savePhoneWeightPad: saveWeightPad,
     closePhonePay,

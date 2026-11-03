@@ -87,11 +87,12 @@
     const client = window.getEaSupabaseClient?.();
     if (!client) return { ok: false, transient: true, error: { message: 'Supabase client not ready' } };
 
-    const items = (sale.items || []).map(it => ({
-      product_id: it.product_id,
-      qty: Number(it.qty),
-      unit_price: Number(it.unit_price)
-    }));
+    const items = (sale.items || []).map(it => {
+      const row = { product_id: it.product_id, qty: Number(it.qty), unit_price: Number(it.unit_price) };
+      if (it.price_note) row.price_note = String(it.price_note).slice(0, 100);
+      if (Array.isArray(it.weights) && it.weights.length) row.weights = it.weights.map(Number).filter(w => w > 0);
+      return row;
+    });
     const paymentMethod = sale.payment_method === 'promptpay' ? 'promptpay' : 'cash';
     const billDiscount = Math.max(0, Number(sale.bill_discount || 0));
     const note = sale.note || 'ขายออฟไลน์ (Auto-Synced)';

@@ -36,7 +36,7 @@
   function lsGet(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
   function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
   function loadItems() {
-    try { return JSON.parse(localStorage.getItem(STORE_KEY) || '[]').filter(x => x && x.product_id); }
+    try { return JSON.parse(localStorage.getItem(STORE_KEY) || '[]').filter(x => x && x.product_id).map(x => ({ opt: '', ...x })); }
     catch (e) { return []; }
   }
   function saveItems() { lsSet(STORE_KEY, JSON.stringify(items)); }
@@ -54,7 +54,7 @@
     const dlg = $('phoneScanDialog');
     if (!dlg) return;
     try { if (typeof stopScanner === 'function') stopScanner(); } catch (e) {}
-    hideSheet('psPay'); hideSheet('psSummary'); hideSheet('psDone');
+    hideSheet('psPay'); hideSheet('psSummary'); hideSheet('psDone'); hideSheet('psWeight'); hideSheet('psPrice');
     renderList();
     renderTally();
     if (!dlg.open) dlg.showModal();
@@ -82,7 +82,7 @@
 
   function showSheet(id) { const s = $(id); if (s) s.hidden = false; paused = true; }
   function hideSheet(id) { const s = $(id); if (s) s.hidden = true; }
-  function anySheetOpen() { return ['psPay', 'psSummary', 'psDone'].some(id => $(id) && !$(id).hidden); }
+  function anySheetOpen() { return ['psPay', 'psSummary', 'psDone', 'psWeight', 'psPrice'].some(id => $(id) && !$(id).hidden); }
   function resumeIfIdle() { if (!anySheetOpen()) paused = false; }
 
   // ---------------------------------------------------------
@@ -182,16 +182,44 @@
     addProduct(p, 1);
   }
 
-  function addProduct(p, qty) {
+  // Line key: same product can appear on several lines with different prices
+  // opt: '' = ราคาปกติ, 'promo:<label>' = ราคาโปร, 'free' = แถม
+  function lineKey(it) { return `${it.product_id}|${it.opt || ''}|${it.opt === 'free' ? (it.free_note || '') : ''}`; }
+  function qtyInBill(productId) { return items.filter(x => x.product_id === productId).reduce((a, x) => a + x.qty, 0); }
+  function findPromo(p, label) { return (Array.isArray(p?.promotions) ? p.promotions : []).find(x => x.label === label) || null; }
+  function promoPrice(pr) { return Math.round((Number(pr.price) / Number(pr.qty)) * 10000) / 10000; }
+  function optPrice(p, opt) {
+    if (opt === 'free') return 0;
+    if (String(opt || '').startsWith('promo:')) {
+      const pr = findPromo(p, opt.slice(6));
+      if (pr) return promoPrice(pr);
+    }
+    return Number(p?.sale_price || 0);
+  }
+  function optNote(it) {
+    if (it.opt === 'free') return it.free_note ? `แถม ${it.free_note}` : 'แถม';
+    if (String(it.opt || '').startsWith('promo:')) return it.opt.slice(6);
+    return '';
+  }
+  function fmtPrice(n) {
+    const v = Number(n || 0);
+    return Number.isInteger(v) ? money(v) : v.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  }
+
+  function addProduct(p, qty, weight) {
     const stock = Number(p.stock_qty || 0);
-    let it = items.find(x => x.product_id === p.id);
-    const current = it ? it.qty : 0;
-    if (current + qty > stock) {
+    if (qtyInBill(p.id) + qty > stock) {
       sound('beepError');
       vibrate([80, 60, 80]);
       feedback(stock <= 0 ? `${p.product_name} • สินค้าหมด` : `${p.product_name} • เหลือแค่ ${stock}`, 'warn');
       return false;
     }
+    // Weighed products (e.g. hose rolls): ask the weight of this unit first
+    if (p.track_weight && weight === undefined) {
+      openWeightPad(p, null);
+      return false;
+    }
+    let it = items.find(x => x.product_id === p.id && !x.opt);
     if (it) {
       it.qty += qty;
       items = [it, ...items.filter(x => x !== it)];
@@ -203,16 +231,109 @@
         unit: p.unit || p.unit_name || 'ชิ้น',
         price: Number(p.sale_price || 0),
         stock,
-        qty
+        qty,
+        opt: ''
       };
       items.unshift(it);
     }
+    if (weight !== undefined && weight !== null) it.weights = [...(it.weights || []), weight];
     saveItems();
-    renderList(p.id);
+    renderList(lineKey(it));
     sound('beepBatchAdd');
     vibrate(40);
-    feedback(`${p.product_name}  ×${it.qty}`, 'ok');
+    feedback(`${p.product_name}  ×${it.qty}${weight ? ` • ${weight} กก.` : ''}`, 'ok');
     return true;
+  }
+
+  // ---------- Weight pad (one entry per unit) ----------
+  let weightCtx = null;   // { productId, key }
+  function openWeightPad(p, key) {
+    weightCtx = { productId: p.id, key };
+    const sheet = $('psWeight');
+    if (!sheet) return;
+    const unit = p.unit || p.unit_name || 'ชิ้น';
+    $('psWeightTitle').textContent = `น้ำหนัก ${p.product_name}`;
+    $('psWeightSub').textContent = `ชั่ง 1 ${unit} แล้วใส่น้ำหนัก (กก.)`;
+    const inp = $('psWeightInput');
+    inp.value = '';
+    showSheet('psWeight');
+    setTimeout(() => inp.focus(), 60);
+  }
+  function closeWeightPad() {
+    weightCtx = null;
+    hideSheet('psWeight');
+    resumeIfIdle();
+  }
+  function saveWeightPad() {
+    if (!weightCtx) return;
+    const w = Math.round(Number(String($('psWeightInput').value).replace(',', '.')) * 1000) / 1000;
+    if (!(w > 0) || w > 100000) { notice('ใส่น้ำหนักเป็นตัวเลขมากกว่า 0', 'warn'); return; }
+    const p = products().find(x => x.id === weightCtx.productId);
+    const key = weightCtx.key;
+    closeWeightPad();
+    if (!p) return;
+    if (key) {
+      const it = items.find(x => lineKey(x) === key);
+      if (!it) return;
+      if (qtyInBill(p.id) + 1 > Number(p.stock_qty || 0)) { notice(`${p.product_name} เหลือแค่ ${Number(p.stock_qty || 0)}`, 'warn'); return; }
+      it.qty += 1;
+      it.weights = [...(it.weights || []), w];
+      saveItems();
+      renderList(key);
+      sound('beepBatchAdd');
+    } else {
+      addProduct(p, 1, w);
+    }
+  }
+
+  // ---------- Price option sheet (ปกติ / โปร / แถม) ----------
+  let priceKey = null;
+  function openPriceSheet(key) {
+    const it = items.find(x => lineKey(x) === key);
+    if (!it) return;
+    const p = products().find(x => x.id === it.product_id);
+    priceKey = key;
+    const promos = Array.isArray(p?.promotions) ? p.promotions : [];
+    const unit = it.unit || 'ชิ้น';
+    $('psPriceTitle').textContent = it.product_name;
+    $('psPriceBody').innerHTML = `
+      <div class="ps-price-sub">${it.qty} ${escapeHtml(unit)} ในบรรทัดนี้ • เลือกราคาที่ใช้</div>
+      <button type="button" class="ps-opt ${!it.opt ? 'is-active' : ''}" onclick="setPhoneLinePrice('')">
+        <span>ราคาปกติ</span><strong>฿${fmtPrice(p?.sale_price)}/${escapeHtml(unit)}</strong>
+      </button>
+      ${promos.map(pr => `
+        <button type="button" class="ps-opt is-promo ${it.opt === 'promo:' + pr.label ? 'is-active' : ''}" onclick="setPhoneLinePrice('promo:' + ${JSON.stringify(pr.label).replace(/"/g, '&quot;')})">
+          <span>โปร ${escapeHtml(pr.label)}</span><strong>฿${fmtPrice(promoPrice(pr))}/${escapeHtml(unit)}</strong>
+        </button>`).join('')}
+      <div class="ps-opt-free ${it.opt === 'free' ? 'is-active' : ''}">
+        <button type="button" class="ps-opt is-free ${it.opt === 'free' ? 'is-active' : ''}" onclick="setPhoneLinePrice('free')">
+          <span>🎁 แถมฟรี</span><strong>฿0</strong>
+        </button>
+        <input id="psFreeNote" type="text" maxlength="40" placeholder="เหตุผล เช่น ลูกค้ามียอดสูง" value="${escapeHtml(it.free_note || '')}">
+      </div>
+      ${promos.length ? '' : '<div class="ps-price-hint">ยังไม่มีราคาโปรของสินค้านี้ • ตั้งได้ในแอปเต็ม → แก้ไขสินค้า</div>'}
+    `;
+    showSheet('psPrice');
+  }
+  function closePriceSheet() { priceKey = null; hideSheet('psPrice'); resumeIfIdle(); }
+  function setPhoneLinePrice(opt) {
+    const it = items.find(x => lineKey(x) === priceKey);
+    if (!it) { closePriceSheet(); return; }
+    const p = products().find(x => x.id === it.product_id);
+    const freeNote = String($('psFreeNote')?.value || '').trim();
+    it.opt = opt;
+    it.free_note = opt === 'free' ? freeNote : '';
+    it.price = optPrice(p, opt);
+    // Merge with an existing line that already uses this price
+    const same = items.find(x => x !== it && lineKey(x) === lineKey(it));
+    if (same) {
+      same.qty += it.qty;
+      same.weights = [...(same.weights || []), ...(it.weights || [])];
+      items = items.filter(x => x !== it);
+    }
+    saveItems();
+    closePriceSheet();
+    renderList(lineKey(same || it));
   }
 
   function feedback(text, type) {
@@ -285,17 +406,21 @@
   // ---------------------------------------------------------
   // List
   // ---------------------------------------------------------
-  function changePhoneScanQty(id, delta) {
-    const it = items.find(x => x.product_id === id);
+  function changePhoneScanQty(key, delta) {
+    const it = items.find(x => lineKey(x) === key);
     if (!it) return;
+    const p = products().find(x => x.id === it.product_id);
     const next = it.qty + delta;
     if (next <= 0) {
       items = items.filter(x => x !== it);
-    } else {
-      const p = products().find(x => x.id === id);
+    } else if (delta > 0) {
       const stock = p ? Number(p.stock_qty || 0) : it.stock;
-      if (next > stock) { notice(`${it.product_name} เหลือแค่ ${stock}`, 'warn'); vibrate([80, 60, 80]); return; }
+      if (qtyInBill(it.product_id) + delta > stock) { notice(`${it.product_name} เหลือแค่ ${stock}`, 'warn'); vibrate([80, 60, 80]); return; }
+      if (p?.track_weight) { openWeightPad(p, key); return; }
       it.qty = next;
+    } else {
+      it.qty = next;
+      if (Array.isArray(it.weights) && it.weights.length) it.weights = it.weights.slice(0, -1);
     }
     vibrate(20);
     saveItems();
@@ -315,7 +440,7 @@
     for (const it of items) {
       const p = products().find(x => x.id === it.product_id);
       if (p) {
-        it.price = Number(p.sale_price || 0);
+        it.price = optPrice(p, it.opt || '');
         it.product_name = p.product_name;
         it.stock = Number(p.stock_qty || 0);
       }
@@ -342,18 +467,23 @@
           <small>สแกนชิ้นเดิมซ้ำ = เพิ่มจำนวน</small>
         </div>`;
     } else {
-      list.innerHTML = items.map(it => `
-        <div class="ps-row ${it.product_id === highlightId ? 'is-new' : ''}">
-          <div class="ps-row-info">
-            <div class="ps-row-name">${escapeHtml(it.product_name)}</div>
-            <div class="ps-row-price">฿${money(it.price)} × ${it.qty} = <strong>฿${money(it.price * it.qty)}</strong></div>
-          </div>
+      list.innerHTML = items.map(it => {
+        const key = lineKey(it);
+        const note = optNote(it);
+        return `
+        <div class="ps-row ${key === highlightId ? 'is-new' : ''}">
+          <button type="button" class="ps-row-info" onclick="openPhonePriceSheet('${escapeHtml(key)}')" aria-label="เลือกราคา / โปร / แถม">
+            <div class="ps-row-name">${escapeHtml(it.product_name)}${note ? ` <span class="ps-row-tag ${it.opt === 'free' ? 'is-free' : ''}">** ${escapeHtml(note)} **</span>` : ''}</div>
+            <div class="ps-row-price">฿${fmtPrice(it.price)} × ${it.qty} = <strong>฿${money(it.price * it.qty)}</strong> <span class="ps-row-edit">ราคา/โปร ›</span></div>
+            ${Array.isArray(it.weights) && it.weights.length ? `<div class="ps-row-weights">⚖️ ${it.weights.map(w => escapeHtml(String(w))).join(', ')} กก.</div>` : ''}
+          </button>
           <div class="ps-qty">
-            <button type="button" class="ps-qty-btn" aria-label="ลด" onclick="changePhoneScanQty('${escapeHtml(it.product_id)}',-1)">${it.qty === 1 ? '🗑' : '−'}</button>
+            <button type="button" class="ps-qty-btn" aria-label="ลด" onclick="changePhoneScanQty('${escapeHtml(key)}',-1)">${it.qty === 1 ? '🗑' : '−'}</button>
             <span class="ps-qty-val">${it.qty}</span>
-            <button type="button" class="ps-qty-btn" aria-label="เพิ่ม" onclick="changePhoneScanQty('${escapeHtml(it.product_id)}',1)">+</button>
+            <button type="button" class="ps-qty-btn" aria-label="เพิ่ม" onclick="changePhoneScanQty('${escapeHtml(key)}',1)">+</button>
           </div>
-        </div>`).join('');
+        </div>`;
+      }).join('');
     }
     const t = totals();
     const count = $('psCount');
@@ -617,17 +747,25 @@
     for (const it of items) {
       const p = products().find(x => x.id === it.product_id);
       if (!p) { notice(`ไม่พบสินค้า ${it.product_name} ในระบบ • กดรีเฟรชข้อมูลในแอปเต็ม`, 'error'); return; }
+      if (p.track_weight && (!Array.isArray(it.weights) || it.weights.length !== it.qty)) {
+        notice(`${p.product_name}: ลงน้ำหนักไม่ครบ (${(it.weights || []).length}/${it.qty}) • กด − แล้ว + เพื่อชั่งใหม่`, 'warn');
+        return;
+      }
+      const unitPrice = optPrice(p, it.opt || '');
+      const note = optNote(it);
       cart.push({
         product_id: p.id,
-        name: p.product_name,
+        name: note ? `${p.product_name} (${note})` : p.product_name,
         barcode: p.barcode || '',
         unit: p.unit || p.unit_name || 'ชิ้น',
         qty: it.qty,
-        unit_price: Number(p.sale_price || 0),
+        unit_price: unitPrice,
         original_price: Number(p.sale_price || 0),
         stock: Number(p.stock_qty || 0),
-        discount_note: '',
-        is_discounted: false
+        discount_note: note,
+        price_note: note,
+        is_discounted: unitPrice < Number(p.sale_price || 0),
+        ...(Array.isArray(it.weights) && it.weights.length ? { weights: it.weights.slice() } : {})
       });
     }
 
@@ -760,7 +898,8 @@
     dlg.addEventListener('cancel', (e) => {
       if (anySheetOpen()) {
         e.preventDefault();
-        hideSheet('psPay'); hideSheet('psSummary'); hideSheet('psDone');
+        hideSheet('psPay'); hideSheet('psSummary'); hideSheet('psDone'); hideSheet('psWeight'); hideSheet('psPrice');
+        weightCtx = null; priceKey = null;
         resumeIfIdle();
       }
     });
@@ -814,6 +953,11 @@
     changePhoneScanQty,
     clearPhoneScan,
     openPhonePay,
+    openPhonePriceSheet: openPriceSheet,
+    closePhonePriceSheet: closePriceSheet,
+    setPhoneLinePrice,
+    closePhoneWeightPad: closeWeightPad,
+    savePhoneWeightPad: saveWeightPad,
     closePhonePay,
     setPhonePayMethod,
     setPhonePayReceived,

@@ -48,23 +48,63 @@
     return (st()?.sales || []).filter(s => s.sale_date === today && !s.is_cancelled);
   }
 
+  function todayItems() {
+    const ids = new Set(todaySales().map(x => x.id));
+    return (st()?.saleItems || []).filter(it => ids.has(it.sale_id));
+  }
+
+  // Quantity sold per product (all prices together) — used by the restock forecast
   function soldByProduct() {
-    const s = st();
-    const sales = todaySales();
-    const ids = new Set(sales.map(x => x.id));
     const byId = new Map();
-    for (const it of (s?.saleItems || [])) {
-      if (!ids.has(it.sale_id)) continue;
+    for (const it of todayItems()) {
       const key = it.product_id || it.product_name;
-      if (!byId.has(key)) byId.set(key, { product_id: it.product_id, name: it.product_name || 'สินค้า', qty: 0, amount: 0, prices: new Map() });
+      if (!byId.has(key)) byId.set(key, { product_id: it.product_id, name: it.product_name || 'สินค้า', qty: 0, amount: 0 });
       const r = byId.get(key);
-      const qty = Number(it.qty || 0);
-      const price = Number(it.unit_price || 0);
-      r.qty += qty;
-      r.amount += qty * price;
-      r.prices.set(price, (r.prices.get(price) || 0) + qty);
+      r.qty += Number(it.qty || 0);
+      r.amount += Number(it.qty || 0) * Number(it.unit_price || 0);
     }
     return byId;
+  }
+
+  // Report lines: one line per (product + selling price + price label), whole day
+  function soldLines() {
+    const products = st()?.products || [];
+    const map = new Map();
+    for (const it of todayItems()) {
+      const price = Math.round(Number(it.unit_price || 0) * 10000) / 10000;
+      const note = String(it.price_note || '').trim();
+      const key = `${it.product_id || it.product_name}|${price}|${note}`;
+      if (!map.has(key)) {
+        const p = products.find(x => x.id === it.product_id);
+        map.set(key, {
+          product_id: it.product_id,
+          name: it.product_name || p?.product_name || 'สินค้า',
+          unit: p?.unit || p?.unit_name || it.unit || 'ชิ้น',
+          price, note, qty: 0, amount: 0, weights: []
+        });
+      }
+      const r = map.get(key);
+      const qty = Number(it.qty || 0);
+      r.qty += qty;
+      r.amount += qty * price;
+      let w = it.weights;
+      if (typeof w === 'string') { try { w = JSON.parse(w); } catch (e) { w = null; } }
+      if (Array.isArray(w)) r.weights.push(...w.map(Number).filter(x => x > 0));
+    }
+    const rank = (r) => (r.price === 0 ? 2 : r.note ? 1 : 0);
+    return [...map.values()].sort((a, b) =>
+      a.name.localeCompare(b.name, 'th') || rank(a) - rank(b) || b.price - a.price);
+  }
+
+  function fmtPrice(n) {
+    const v = Number(n || 0);
+    if (Number.isInteger(v)) return v.toLocaleString('th-TH');
+    return v.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+  }
+  function fmtQty(n) { const v = Number(n || 0); return Number.isInteger(v) ? String(v) : v.toLocaleString('th-TH', { maximumFractionDigits: 3 }); }
+  function shortDateBE() {
+    const d = new Date();
+    return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${String((d.getFullYear() + 543) % 100).padStart(2, '0')}`;
   }
 
   // =========================================================
@@ -213,6 +253,15 @@
         .warn { color: #b45309; font-weight: 700; } .bad { color: #b91c1c; font-weight: 700; } .ok { color: #047857; font-weight: 700; }
         .sign { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 36px; text-align: center; }
         .sign div { border-top: 1px solid #111; padding-top: 6px; }
+        .daily-title { font-size: 34px; font-weight: 800; color: #e11d48; margin: 6px 0 2px; }
+        .daily-shop { color: #555; padding-bottom: 8px; border-bottom: 3px solid #f97316; margin-bottom: 8px; display: inline-block; }
+        table.daily { border: 0; } table.daily th, table.daily td { border: 0; border-bottom: 1px solid #e5e5e5; padding: 6px 6px; }
+        table.daily th { background: none; border-bottom: 2px solid #999; font-size: 14px; }
+        table.daily .c { text-align: center; } table.daily tr.has-w td { border-bottom: 0; }
+        table.daily tr.w td { font-size: 12px; color: #333; padding-top: 0; }
+        .promo { color: #e11d48; font-weight: 700; } .muted { color: #777; }
+        .grand { display: flex; justify-content: flex-end; align-items: baseline; gap: 24px; margin-top: 10px; padding-top: 8px; border-top: 2px solid #999; }
+        .grand span { font-weight: 700; } .grand strong { font-size: 24px; }
         .qrs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
         .qrc { border: 2px dashed #555; padding: 16px; text-align: center; page-break-inside: avoid; }
         .qrc svg { width: 220px; height: 220px; } .qrc h3 { font-size: 26px; margin: 6px 0; }
@@ -250,7 +299,7 @@
   // =========================================================
   function reportData() {
     const sales = todaySales();
-    const sold = [...soldByProduct().values()].sort((a, b) => b.amount - a.amount);
+    const sold = soldLines();
     const products = st()?.products || [];
     const devices = (window.hubDeviceStats?.() || []).filter(d => d.bills || d.received);
     const sum = (arr, f) => arr.reduce((a, x) => a + Number(f(x) || 0), 0);
@@ -270,18 +319,35 @@
     };
   }
 
-  function priceLabel(r) {
-    const ps = [...r.prices.keys()].sort((a, b) => b - a);
-    return ps.length === 1 ? money(ps[0]) : ps.map(p => `${money(p)}×${r.prices.get(p)}`).join(', ');
-  }
-
   function printDailyReport() {
     const d = reportData();
     const stockOf = (id) => { const p = d.products.find(x => x.id === id); return p ? Number(p.stock_qty || 0) : '-'; };
     const outstanding = d.cashTotal - d.received;
     const restock = restockList();
-    printHtml('รายงานปิดวัน', `
-      <h1>รายงานสรุปยอดขายประจำวัน – ${escapeHtml(shopName())}</h1>
+    const salesTable = `
+      <div class="daily-title">ยอดขายรายวัน</div>
+      <div class="daily-shop">${escapeHtml(shopName())} • ${escapeHtml(dateTh())} • พิมพ์ ${escapeHtml(timeTh())} น.${d.pending ? ` • <span class="warn">มี ${d.pending} บิลยังไม่ซิงค์</span>` : ''}</div>
+      <table class="daily">
+        <thead><tr><th class="c">วันที่</th><th>สินค้า</th><th class="r">ราคา</th><th class="c">จำนวน</th><th class="c">หน่วย</th><th class="r">ผลรวม</th></tr></thead>
+        <tbody>
+          ${d.sold.map((r, i) => `
+            <tr class="${r.weights.length ? 'has-w' : ''}">
+              <td class="c b">${i === 0 ? shortDateBE() : ''}</td>
+              <td>${escapeHtml(r.name)}${r.note ? ` <span class="promo">** ${escapeHtml(r.note)} **</span>` : ''}</td>
+              <td class="r">${r.price === 0 ? '' : fmtPrice(r.price)}</td>
+              <td class="c">${fmtQty(r.qty)}</td>
+              <td class="c">${escapeHtml(r.unit)}</td>
+              <td class="r b">${money(r.amount)}</td>
+            </tr>
+            ${r.weights.length ? `<tr class="w"><td></td><td colspan="5">${r.weights.map(w => fmtQty(w)).join(', ')} <span class="muted">(รวม ${fmtQty(Math.round(r.weights.reduce((a, x) => a + x, 0) * 1000) / 1000)} กก.)</span></td></tr>` : ''}`).join('')}
+        </tbody>
+      </table>
+      <div class="grand"><span>รวมทั้งหมด</span><strong>${money(d.sold.reduce((a, r) => a + r.amount, 0))}</strong></div>
+      ${d.discount > 0 ? `<div class="sub">ส่วนลดท้ายบิล −${money(d.discount)} • ยอดขายสุทธิ ${money(d.total)}</div>` : ''}`;
+
+    printHtml('ยอดขายรายวัน', salesTable + `
+      <div style="page-break-before: always"></div>
+      <h1>สรุปเงินสดประจำวัน – ${escapeHtml(shopName())}</h1>
       <div class="sub">${escapeHtml(dateTh())} • พิมพ์เวลา ${escapeHtml(timeTh())} น.${d.pending ? ` • <span class="warn">มี ${d.pending} บิลยังไม่ซิงค์</span>` : ''}</div>
       <div class="kpis">
         <div class="kpi"><span>ยอดขายรวม</span><b>฿${money(d.total)}</b></div>
@@ -304,14 +370,6 @@
         </tbody>
       </table>
 
-      <h2>สินค้าที่ขายวันนี้</h2>
-      <table>
-        <thead><tr><th>#</th><th>สินค้า</th><th class="r">ราคาขาย</th><th class="r">จำนวน</th><th class="r">ยอดเงิน</th><th class="r">คงเหลือ</th></tr></thead>
-        <tbody>${d.sold.map((r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.name)}</td><td class="r">${priceLabel(r)}</td><td class="r">${r.qty}</td><td class="r">${money(r.amount)}</td><td class="r">${stockOf(r.product_id)}</td></tr>`).join('')}
-          <tr class="tot"><td colspan="3">รวม ${d.sold.length} รายการ</td><td class="r">${d.units}</td><td class="r">${money(d.sold.reduce((a, r) => a + r.amount, 0))}</td><td></td></tr>
-        </tbody>
-      </table>
-      ${d.discount > 0 ? '<div class="sub">* ยอดเงินรายสินค้าเป็นยอดก่อนหักส่วนลดท้ายบิล</div>' : ''}
 
       ${restock.length ? `<h2>สินค้าที่ต้องเบิก</h2>
       <table><thead><tr><th>สินค้า</th><th class="r">คงเหลือ</th><th class="r">เบิก</th></tr></thead>
@@ -340,7 +398,10 @@
       t += `${x.code}: ${x.bills} บิล ฿${money(x.total)} (สด ${money(x.cash)} / QR ${money(x.qr)}) รับเงินแล้ว ${money(x.received)}${Math.abs(diff) < 0.01 ? ' ✓ครบ' : diff < 0 ? ` ❗ค้าง ${money(-diff)}` : ` เกิน ${money(diff)}`}\n`;
     });
     t += `\n— สินค้าที่ขาย —\n`;
-    d.sold.forEach((r, i) => { t += `${i + 1}. ${r.name} ${r.qty} × ${priceLabel(r)} = ฿${money(r.amount)}\n`; });
+    d.sold.forEach((r, i) => {
+      t += `${i + 1}. ${r.name}${r.note ? ` **${r.note}**` : ''}  ${r.price === 0 ? 'แถม' : fmtPrice(r.price)} × ${fmtQty(r.qty)} ${r.unit} = ${money(r.amount)}\n`;
+      if (r.weights.length) t += `   ⚖️ ${r.weights.map(w => fmtQty(w)).join(', ')}\n`;
+    });
     t += `\nเงินสดนำส่ง ฿${money(d.cashTotal)}${Math.abs(outstanding) < 0.01 ? ' (รับครบแล้ว)' : outstanding > 0 ? ` (ยังค้างรับจากเครื่อง ฿${money(outstanding)})` : ` (รับเกิน ฿${money(-outstanding)})`}`;
     if (d.pending) t += `\n⚠️ มี ${d.pending} บิลยังไม่ซิงค์`;
     return t;

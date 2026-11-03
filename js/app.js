@@ -1666,6 +1666,8 @@ async function mergePendingOfflineSalesIntoState(){
           original_price: origPrice,
           discount_amount: Math.max(0, origPrice - unitPrice),
           discount_note: it.discount_note || "",
+          price_note: it.price_note || "",
+          weights: Array.isArray(it.weights) && it.weights.length ? it.weights : null,
           is_discounted: origPrice > unitPrice,
           line_total: qty * unitPrice,
           created_at: created
@@ -7008,8 +7010,7 @@ function handleCartLiveScannedBarcode(code){
   saveCartLocal();
   beepSuccess();
 
-  const cartItem = state.cart.find(x => x.product_id === p.id);
-  const currentCount = cartItem ? cartItem.qty : 1;
+  const currentCount = state.cart.filter(x => x.product_id === p.id).reduce((a,x)=>a+Number(x.qty||0),0) || 1;
 
   // Trigger rich visual pop-up animation and haptic pulse
   triggerScanSuccessFeedback(p, currentCount);
@@ -7241,6 +7242,7 @@ function renderCartRows(){
                   🏷️ ลดราคาสินค้า: -฿${money(discountAmount)}/${escapeHtml(unit)} ${c.discount_note ? `(${escapeHtml(c.discount_note)})` : ''}
                 </div>
               ` : ''}
+              ${Array.isArray(c.weights) && c.weights.length ? `<div class="cart-discount-badge" style="color:#93c5fd;">⚖️ น้ำหนัก: ${c.weights.map(w => escapeHtml(String(w))).join(", ")} กก.</div>` : ''}
               <div>
                 <button type="button" class="cart-discount-btn" onclick="openCartDiscountModal(${i})">
                   🏷️ ${isDiscounted ? "แก้ไขส่วนลดสินค้า" : "ลดราคาสินค้านี้"}
@@ -7288,6 +7290,18 @@ function openCartDiscountModal(index){
           <span style="color:#cbd5e1;">จำนวนในบิล: <strong>${qty} ${escapeHtml(unit)}</strong></span>
         </div>
       </div>
+
+      ${(() => {
+        const promos = Array.isArray(catalogProd?.promotions) ? catalogProd.promotions : [];
+        return `
+        <div>
+          <label style="display:block; font-size:12px; font-weight:700; color:#cbd5e1; margin-bottom:6px;">ราคาโปร / ของแถม:</label>
+          <div class="discount-quick-chips">
+            ${promos.map(pr => `<button type="button" class="discount-chip-btn" style="color:#fca5a5; border-color:rgba(248,113,113,.5);" onclick="applyPromoInDiscountModal(${promoUnitPrice(pr)}, '${escapeHtml(String(pr.label).replace(/'/g, ''))}', ${regularPrice}, ${qty})">โปร ${escapeHtml(pr.label)} (฿${promoUnitPrice(pr)}/${escapeHtml(unit)})</button>`).join("")}
+            <button type="button" class="discount-chip-btn" style="color:#86efac;" onclick="applyPromoInDiscountModal(0, 'แถม', ${regularPrice}, ${qty})">🎁 แถมฟรี (฿0)</button>
+          </div>
+        </div>`;
+      })()}
 
       <div class="form-grid">
         <div class="field">
@@ -7457,6 +7471,12 @@ function resetToRegularPrice(regularPrice, qty){
   bahtInput.value = 0;
   if(pctInput) pctInput.value = 0;
   updateItemDiscountPreview(regularPrice, qty, regularPrice);
+}
+
+function applyPromoInDiscountModal(price, label, regularPrice, qty){
+  const pi = el("discountCustomPrice"), ni = el("discountNoteInput");
+  if(pi){ pi.value = price; onDiscountPriceChange(regularPrice, qty); }
+  if(ni){ ni.value = label === "แถม" ? "แถม" : label; ni.focus(); }
 }
 
 function saveCartDiscount(index, regularPrice){
@@ -7715,14 +7735,28 @@ function clearBillDiscount(){
   renderSale();
 }
 
+// Products sold per piece but weighed (e.g. hose rolls): ask the weight of this unit.
+function askUnitWeight(p){
+  const v = prompt(`น้ำหนัก ${p.product_name} ชิ้น/ม้วนนี้ (กก.)`, "");
+  if(v === null) return null;
+  const w = Number(String(v).replace(",", "."));
+  if(!(w > 0)){ toast("กรุณาใส่น้ำหนักเป็นตัวเลข"); return null; }
+  return Math.round(w*1000)/1000;
+}
+
 function addProductToCart(p){
   if(!p){toast("ไม่พบสินค้า");return false}
   if(Number(p.stock_qty)<=0){toast("สินค้าหมด");return false}
-  const row=state.cart.find(x=>x.product_id===p.id);
+  const row=state.cart.find(x=>x.product_id===p.id && !x.price_note && !x.is_discounted);
+  let weight=null;
+  if(p.track_weight){ weight=askUnitWeight(p); if(weight===null) return false; }
+  const inCart=state.cart.filter(x=>x.product_id===p.id).reduce((a,x)=>a+Number(x.qty||0),0);
   if(row){
-    if(row.qty+1>Number(p.stock_qty)){toast("จำนวนในตะกร้าเกิน Stock");return false}
+    if(inCart+1>Number(p.stock_qty)){toast("จำนวนในตะกร้าเกิน Stock");return false}
     row.qty++;
+    if(weight!==null) row.weights=[...(row.weights||[]),weight];
   } else {
+    if(inCart+1>Number(p.stock_qty)){toast("จำนวนในตะกร้าเกิน Stock");return false}
     state.cart.push({
       product_id: p.id,
       name: p.product_name,
@@ -7733,7 +7767,8 @@ function addProductToCart(p){
       original_price: Number(p.sale_price),
       stock: Number(p.stock_qty),
       discount_note: "",
-      is_discounted: false
+      is_discounted: false,
+      ...(weight!==null ? { weights: [weight] } : {})
     });
   }
   saveCartLocal();
@@ -7770,9 +7805,16 @@ function changeCartQty(i,d){
   const r=state.cart[i];
   if(!r) return;
   const n=r.qty+d;
+  const prod=productById(r.product_id);
   if(n<=0) state.cart.splice(i,1);
   else if(n>r.stock){toast("จำนวนเกิน Stock");return}
-  else r.qty=n;
+  else {
+    if(prod?.track_weight){
+      if(d>0){ const w=askUnitWeight(prod); if(w===null) return; r.weights=[...(r.weights||[]),w]; }
+      else if(Array.isArray(r.weights)) r.weights=r.weights.slice(0,Math.max(0,r.weights.length+d));
+    }
+    r.qty=n;
+  }
   saveCartLocal();
   updateBottomNav();
   renderSale();
@@ -8663,6 +8705,16 @@ function closeReceiptModal(){
   else render();
 }
 
+// Price label stored with each sale line (report groups by product + price + label)
+// e.g. "3 กิโล 100", "แถม...", or the discount reason when the price was lowered.
+function cartLinePriceNote(c){
+  if(c.price_note) return String(c.price_note).slice(0,100);
+  const orig=Number(c.original_price ?? c.unit_price), cur=Number(c.unit_price);
+  if(cur===0){ const n=String(c.discount_note||"").trim(); return (!n ? "แถม" : n.startsWith("แถม") ? n : `แถม ${n}`).slice(0,100); }
+  if(cur<orig && c.discount_note) return String(c.discount_note).slice(0,100);
+  return "";
+}
+
 // Legacy path for databases without migration V7/V8 (not idempotent).
 async function legacyRecordCartSale(items, saleNote, totalAmt, billDiscAmt){
   try {
@@ -8704,7 +8756,13 @@ async function checkoutCart(){
   checkoutInProgress = true;
   try {
   if(!state.cart.length){toast("ตะกร้าว่าง");return}
-  const items=state.cart.map(c=>({product_id:c.product_id,qty:Number(c.qty),unit_price:Number(c.unit_price)}));
+  const items=state.cart.map(c=>{
+    const row={product_id:c.product_id,qty:Number(c.qty),unit_price:Number(c.unit_price)};
+    const note=cartLinePriceNote(c);
+    if(note) row.price_note=note;
+    if(Array.isArray(c.weights)&&c.weights.length) row.weights=c.weights.map(Number);
+    return row;
+  });
   
   const subtotalOrig = cartSubtotalOriginal();
   const itemsTot = cartItemsTotal();
@@ -8777,7 +8835,9 @@ async function checkoutCart(){
     qty: Number(c.qty),
     unit_price: Number(c.unit_price),
     original_price: Number(c.original_price ?? c.unit_price),
-    discount_note: c.discount_note || ""
+    discount_note: c.discount_note || "",
+    price_note: cartLinePriceNote(c),
+    weights: Array.isArray(c.weights) ? c.weights.map(Number) : undefined
   }));
   const saleRecord = {
     id: saleId,
@@ -8915,6 +8975,8 @@ async function checkoutCart(){
         original_price: origPrice,
         discount_amount: Math.max(0, origPrice - currPrice),
         discount_note: item.discount_note || "",
+        price_note: cartLinePriceNote(item),
+        weights: Array.isArray(item.weights) && item.weights.length ? item.weights.map(Number) : null,
         is_discounted: isDisc,
         line_total: Number(item.qty) * currPrice,
         created_at: now.toISOString()
@@ -12620,6 +12682,24 @@ function openProductModal(id=null){
         <input id="pMin" type="number" min="0" step="any" value="${p?.min_stock??state.settings.lowStockDefault}">
       </div>
 
+      ${promoFeatureReady() ? `
+        <div class="field" style="grid-column: 1 / -1;">
+          <label>ราคาโปรโมชั่น (บรรทัดละ 1 โปร: จำนวน แล้วตามด้วยราคา)</label>
+          <textarea id="pPromos" rows="2" placeholder="เช่น 3 กิโล 100&#10;7 ใบ 100" oninput="updatePromoPreview()" style="width:100%; min-height:60px; border-radius:10px; padding:8px 10px; font-size:15px;">${escapeHtml((Array.isArray(p?.promotions) ? p.promotions : []).map(x => x.label).join("\n"))}</textarea>
+          <small id="pPromoPreview" style="color:#94a3b8; font-size:12px;"></small>
+        </div>
+        <div class="field" style="grid-column: 1 / -1;">
+          <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+            <input id="pTrackWeight" type="checkbox" ${p?.track_weight ? "checked" : ""} style="width:22px; height:22px;">
+            <span>ลงน้ำหนักทุกชิ้นที่ขาย (เช่น สายยางขายเป็นม้วน ต้องชั่งน้ำหนักแต่ละม้วน)</span>
+          </label>
+        </div>
+      ` : `
+        <div class="field" style="grid-column: 1 / -1; font-size:12px; color:#fcd34d;">
+          ℹ️ ต้องการตั้งราคาโปร (เช่น 3 กิโล 100) หรือลงน้ำหนักรายม้วน → รัน migration_v11_promo_weights.sql ใน Supabase
+        </div>
+      `}
+
       ${refill ? `
         <div class="field" style="grid-column: 1 / -1; background:rgba(2, 132, 199, 0.12); border:1px solid rgba(56, 189, 248, 0.3); border-radius:10px; padding:12px; margin-top:4px;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
@@ -12652,6 +12732,30 @@ function openProductModal(id=null){
   `;
   el("modal").showModal();
   updateProductModalBarcodePreview();
+  updatePromoPreview();
+}
+
+// ---- Promotions (V11) ----
+function promoFeatureReady(){
+  return (state.products||[]).some(x => Object.prototype.hasOwnProperty.call(x, "promotions"));
+}
+// "3 กิโล 100" → {label:"3 กิโล 100", qty:3, price:100}
+function parsePromotions(text){
+  return String(text||"").split(/\n+/).map(l => l.trim()).filter(Boolean).slice(0,10).map(line => {
+    const nums = (line.replace(/,/g,"").match(/\d+(?:\.\d+)?/g) || []).map(Number);
+    if(nums.length < 2) return null;
+    const qty = nums[0], price = nums[nums.length-1];
+    if(!(qty > 0) || !(price >= 0)) return null;
+    return { label: line.slice(0,60), qty, price };
+  }).filter(Boolean);
+}
+function promoUnitPrice(promo){ return Math.round((Number(promo.price)/Number(promo.qty))*10000)/10000; }
+function updatePromoPreview(){
+  const box = el("pPromoPreview");
+  if(!box) return;
+  const list = parsePromotions(el("pPromos")?.value);
+  const unit = (el("pUnit")?.value || "หน่วย").trim();
+  box.textContent = list.length ? list.map(x => `${x.label} = ฿${promoUnitPrice(x)}/${unit}`).join(" • ") : "ไม่มีโปร";
 }
 
 function updateProductModalBarcodePreview(){
@@ -12747,6 +12851,10 @@ async function saveProduct(id){
     min_stock:Number(el("pMin").value),
     is_active:true
   };
+  if(el("pPromos")){
+    payload.promotions = parsePromotions(el("pPromos").value);
+    payload.track_weight = Boolean(el("pTrackWeight")?.checked);
+  }
   if(!payload.product_code||!payload.product_name){toast("กรุณากรอกรหัสและชื่อสินค้า");return}
 
   let remoteSuccess = false;

@@ -706,6 +706,35 @@
         </div>
       </div>
 
+      <!-- Weight pad: one entry per unit (e.g. hose roll) -->
+      <div id="psWeight" class="ps-sheet" hidden>
+        <div class="ps-sheet-panel">
+          <div class="ps-sheet-head">
+            <h3 id="psWeightTitle">น้ำหนัก</h3>
+            <button type="button" class="ps-icon-btn" onclick="closePhoneWeightPad()" aria-label="ยกเลิก">✕</button>
+          </div>
+          <form class="ps-sheet-body" onsubmit="event.preventDefault(); savePhoneWeightPad();">
+            <div id="psWeightSub" class="ps-price-sub"></div>
+            <label class="ps-pay-input">
+              <span>กก.</span>
+              <input id="psWeightInput" type="number" inputmode="decimal" min="0" step="any" placeholder="เช่น 3.6" autocomplete="off">
+            </label>
+            <button type="submit" class="ps-pay-confirm">✓ บันทึกน้ำหนัก + เพิ่ม 1 ชิ้น</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Price option sheet: normal / promo / free -->
+      <div id="psPrice" class="ps-sheet" hidden>
+        <div class="ps-sheet-panel">
+          <div class="ps-sheet-head">
+            <h3 id="psPriceTitle">เลือกราคา</h3>
+            <button type="button" class="ps-icon-btn" onclick="closePhonePriceSheet()" aria-label="ปิด">✕</button>
+          </div>
+          <div id="psPriceBody" class="ps-sheet-body"></div>
+        </div>
+      </div>
+
       <!-- Device summary sheet -->
       <div id="psSummary" class="ps-sheet" hidden>
         <div class="ps-sheet-panel ps-sheet-tall">

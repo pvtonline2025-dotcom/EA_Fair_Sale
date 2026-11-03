@@ -2024,12 +2024,18 @@
   width: 100%;
   height: 105px;
   border-radius: 16px;
-  background: radial-gradient(circle at center, rgba(56, 189, 248, 0.35) 0%, rgba(15, 23, 42, 0.75) 100%);
-  border: 1.5px solid rgba(56, 189, 248, 0.5);
+  /* Follows the selected theme (palette + light/dark mode) */
+  /* No frame: a soft glow in the theme colour that fades into the card */
+  background: transparent;
+  background: radial-gradient(closest-side at center,
+    color-mix(in srgb, var(--primary-light, #64748b) 30%, transparent) 0%,
+    color-mix(in srgb, var(--primary-light, #64748b) 10%, transparent) 60%,
+    transparent 100%);
+  border: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 28px rgba(56, 189, 248, 0.4);
+  box-shadow: none;
   transition: all 0.3s ease;
 }
 
@@ -2038,12 +2044,14 @@
   line-height: 1;
   display: inline-block;
   animation: pulseIconGlow 2s infinite ease-in-out;
-  filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.7));
+  --status-shadow: rgba(0, 0, 0, 0.7);
+  filter: drop-shadow(0 4px 14px var(--status-shadow));
 }
+[data-color-mode="light"] .tdd-status-animated-icon { --status-shadow: rgba(15, 23, 42, 0.18); }
 
 @keyframes pulseIconGlow {
-  0%, 100% { transform: scale(1); filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.7)); }
-  50% { transform: scale(1.18); filter: drop-shadow(0 0 22px rgba(56, 189, 248, 0.95)); }
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 4px 14px var(--status-shadow, rgba(0, 0, 0, 0.7))); }
+  50% { transform: scale(1.18); filter: drop-shadow(0 0 22px color-mix(in srgb, var(--primary-light, #38bdf8) 85%, transparent)); }
 }
 
 .tdd-col3-status-bar-box {

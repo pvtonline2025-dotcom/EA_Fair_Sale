@@ -1,0 +1,306 @@
+/* =========================================================
+   POS ขายสินค้า — theme-aware look (light & dark, every palette)
+   Loaded last so it wins over older hard-coded dark styles.
+   Uses theme tokens set by applyTheme(): --bg, --surface*, --card-border,
+   --primary, --primary-light, --text-main/sub/muted.
+   ========================================================= */
+#content {
+  --pos-surface: var(--surface-card, #1e293b);
+  --pos-soft: var(--surface-elevated, #283548);
+  --pos-hover: var(--surface-hover, #334155);
+  --pos-border: var(--card-border, #334155);
+  --pos-text: var(--text-main, #f8fafc);
+  --pos-sub: var(--text-sub, #cbd5e1);
+  --pos-muted: var(--text-muted, #94a3b8);
+  --pos-accent: var(--primary, #2563eb);
+  --pos-accent-text: var(--primary-light, #60a5fa);
+  --pos-ok: #10b981;
+  --pos-warn: #f59e0b;
+  --pos-bad: #ef4444;
+}
+[data-color-mode="light"] #content { --pos-ok: #059669; --pos-warn: #b45309; --pos-bad: #dc2626; }
+
+/* ---- connection banner ---- */
+#content .pos-net-banner.online { color: var(--pos-ok) !important; }
+[data-color-mode="light"] #content .pos-net-banner.online { background: #ecfdf5 !important; border-color: #a7f3d0 !important; }
+
+/* ---- mode tabs: แตะเลือกสินค้า / สแกนเนอร์ ---- */
+#content .pos-mode-tabs {
+  background: var(--pos-soft) !important;
+  border: 1px solid var(--pos-border) !important;
+  border-radius: 14px !important;
+  padding: 4px !important;
+  box-shadow: none !important;
+}
+#content .pos-tab-btn {
+  background: transparent !important;
+  color: var(--pos-sub) !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  min-height: 44px;
+  font-weight: 800 !important;
+  font-size: 14px !important;
+  box-shadow: none !important;
+}
+#content .pos-tab-btn.active { background: var(--pos-accent) !important; color: #fff !important; }
+
+/* ---- search ---- */
+#content .pos-search-wrapper {
+  background: var(--pos-surface) !important;
+  border: 1px solid var(--pos-border) !important;
+  border-radius: 12px !important;
+}
+#content .pos-search-input { background: transparent !important; color: var(--pos-text) !important; font-size: 15px !important; }
+#content .pos-search-input::placeholder { color: var(--pos-muted) !important; }
+#content .pos-search-icon { color: var(--pos-muted) !important; }
+#content .pos-search-camera-btn { background: var(--pos-accent) !important; color: #fff !important; border: 0 !important; border-radius: 10px !important; }
+
+/* ---- filter chips ---- */
+#content .pos-filter-chips { gap: 8px !important; flex-wrap: wrap; }
+#content .pos-chip {
+  background: var(--pos-soft) !important;
+  color: var(--pos-sub) !important;
+  border: 1px solid var(--pos-border) !important;
+  border-radius: 999px !important;
+  min-height: 40px;
+  padding: 0 16px !important;
+  font-size: 13.5px !important;
+  font-weight: 800 !important;
+  box-shadow: none !important;
+}
+#content .pos-chip.active { background: var(--pos-accent) !important; color: #fff !important; border-color: var(--pos-accent) !important; }
+#content .pos-chip:not(.active):hover { background: var(--pos-hover) !important; color: var(--pos-text) !important; }
+
+/* ---- product grid ---- */
+#content .pos-product-grid {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)) !important;
+  gap: 12px !important;
+}
+#content .pos-product-card {
+  position: relative;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px;
+  min-height: 132px;
+  padding: 12px !important;
+  background: var(--pos-surface) !important;
+  border: 1px solid var(--pos-border) !important;
+  border-radius: 14px !important;
+  box-shadow: none !important;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s, transform .15s, box-shadow .15s;
+}
+#content .pos-product-card:not(.out-of-stock):hover {
+  border-color: var(--pos-accent) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--pos-accent) 18%, transparent) !important;
+}
+#content .pos-card-code {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: .5px;
+  color: var(--pos-muted) !important;
+}
+#content .pos-card-name {
+  color: var(--pos-text) !important;
+  font-size: 14.5px !important;
+  font-weight: 800 !important;
+  line-height: 1.35 !important;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.7em;
+}
+#content .pos-card-foot {
+  margin-top: auto !important;
+  display: flex !important;
+  align-items: flex-end !important;
+  justify-content: space-between !important;
+  gap: 6px !important;
+  flex-wrap: wrap;
+}
+#content .pos-card-price {
+  color: var(--pos-accent-text) !important;
+  font-size: 17px !important;
+  font-weight: 900 !important;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+#content .pos-card-price * { color: var(--pos-muted) !important; font-weight: 600 !important; font-size: 11.5px !important; }
+#content .pos-card-stock {
+  position: static !important;
+  display: inline-flex !important;
+  align-items: center;
+  white-space: nowrap !important;
+  padding: 3px 9px !important;
+  border-radius: 999px !important;
+  font-size: 11.5px !important;
+  font-weight: 800 !important;
+  line-height: 1.2 !important;
+  width: auto !important;
+  height: auto !important;
+  border: 0 !important;
+}
+#content .pos-card-stock.ok { background: color-mix(in srgb, var(--pos-ok) 14%, transparent) !important; color: var(--pos-ok) !important; }
+#content .pos-card-stock.low { background: color-mix(in srgb, var(--pos-warn) 16%, transparent) !important; color: var(--pos-warn) !important; }
+#content .pos-card-stock.out { background: color-mix(in srgb, var(--pos-bad) 14%, transparent) !important; color: var(--pos-bad) !important; }
+#content .pos-product-card.out-of-stock { opacity: 1 !important; cursor: not-allowed; background: var(--pos-soft) !important; }
+#content .pos-product-card.out-of-stock .pos-card-name,
+#content .pos-product-card.out-of-stock .pos-card-price { opacity: .55; }
+
+/* ---- low-stock list ---- */
+#content .list .list-item {
+  background: var(--pos-soft) !important;
+  border: 1px solid var(--pos-border) !important;
+  border-radius: 12px !important;
+  color: var(--pos-text) !important;
+  box-shadow: none !important;
+}
+#content .list .list-item * { color: inherit; }
+#content .list .list-item b, #content .list .list-item strong { color: var(--pos-text) !important; }
+#content .list .list-item small, #content .list .list-item span:not(.status) { color: var(--pos-muted) !important; }
+#content .status.low { background: color-mix(in srgb, var(--pos-warn) 16%, transparent) !important; color: var(--pos-warn) !important; border: 0 !important; }
+#content .status.out { background: color-mix(in srgb, var(--pos-bad) 14%, transparent) !important; color: var(--pos-bad) !important; border: 0 !important; }
+#content .status.ok { background: color-mix(in srgb, var(--pos-ok) 14%, transparent) !important; color: var(--pos-ok) !important; border: 0 !important; }
+
+/* ---- cart ---- */
+#content .cart-scanner-toggle-btn { background: var(--pos-accent) !important; color: #fff !important; border: 0 !important; }
+#content .cart-row {
+  background: var(--pos-soft) !important;
+  border: 1px solid var(--pos-border) !important;
+  border-radius: 14px !important;
+  box-shadow: none !important;
+  color: var(--pos-text) !important;
+}
+#content .cart-name { color: var(--pos-text) !important; font-weight: 800 !important; }
+#content .cart-meta, #content .cart-meta * { color: var(--pos-muted) !important; }
+#content .cart-meta .barcode-value {
+  background: var(--pos-surface) !important;
+  color: var(--pos-accent-text) !important;
+  border: 1px solid var(--pos-border) !important;
+}
+#content .cart-side strong, #content .cart-side .cart-line-total { color: var(--pos-accent-text) !important; }
+#content .qty-control {
+  background: var(--pos-surface) !important;
+  border: 1px solid var(--pos-border) !important;
+  border-radius: 12px !important;
+}
+#content .qty-control button {
+  background: var(--pos-soft) !important;
+  color: var(--pos-text) !important;
+  border: 1px solid var(--pos-border) !important;
+  border-radius: 10px !important;
+}
+#content .qty-control span, #content .qty-control input { color: var(--pos-text) !important; background: transparent !important; }
+#content .cart-remove-btn { color: var(--pos-bad) !important; }
+#content .cart-discount-btn {
+  background: transparent !important;
+  color: var(--pos-warn) !important;
+  border: 1px dashed color-mix(in srgb, var(--pos-warn) 60%, transparent) !important;
+  border-radius: 10px !important;
+  font-size: 12.5px !important;
+  padding: 6px 10px !important;
+  min-height: 0 !important;
+  width: auto !important;
+}
+
+/* ---- bill discount ---- */
+#content .cart-bill-discount-wrap {
+  background: var(--pos-soft) !important;
+  border: 1px solid var(--pos-border) !important;
+  border-radius: 14px !important;
+  box-shadow: none !important;
+}
+#content .cart-bill-discount-label, #content .cart-bill-discount-head { color: var(--pos-warn) !important; }
+#content .cart-quick-disc-btn {
+  background: var(--pos-surface) !important;
+  color: var(--pos-sub) !important;
+  border: 1px solid var(--pos-border) !important;
+  border-radius: 10px !important;
+}
+#content .cart-quick-disc-btn.custom { color: var(--pos-accent-text) !important; border-color: color-mix(in srgb, var(--pos-accent) 50%, transparent) !important; }
+
+/* ---- totals & payment ---- */
+#content .cart-total-box {
+  background: var(--pos-surface) !important;
+  border: 1px solid var(--pos-border) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, .08) !important;
+  color: var(--pos-text) !important;
+}
+#content .cart-total-box .line { color: var(--pos-sub) !important; }
+#content .cart-total-box .line strong { color: var(--pos-text) !important; }
+#content .pos-total-banner {
+  background: color-mix(in srgb, var(--pos-accent) 10%, var(--pos-surface)) !important;
+  border: 1.5px solid color-mix(in srgb, var(--pos-accent) 45%, transparent) !important;
+  border-radius: 14px !important;
+  box-shadow: none !important;
+}
+#content .pos-total-banner-label, #content .pos-total-banner-label * { color: var(--pos-sub) !important; }
+#content .pos-total-banner-amount { color: var(--pos-accent-text) !important; text-shadow: none !important; }
+#content .payment-section-title, #content .quick-pay-title, #content .quick-add-label, #content .cash-label { color: var(--pos-muted) !important; }
+#content .payment-method-toggle {
+  background: var(--pos-soft) !important;
+  border: 1px solid var(--pos-border) !important;
+  border-radius: 12px !important;
+  padding: 4px !important;
+}
+#content .pay-method-btn { background: transparent !important; color: var(--pos-sub) !important; border: 0 !important; box-shadow: none !important; }
+#content .pay-method-btn.active { background: var(--pos-accent) !important; color: #fff !important; }
+#content .quick-pay-container {
+  background: var(--pos-soft) !important;
+  border: 1px solid var(--pos-border) !important;
+  border-radius: 14px !important;
+}
+#content .quick-pay-btn {
+  background: var(--pos-surface) !important;
+  color: var(--pos-text) !important;
+  border: 1px solid var(--pos-border) !important;
+  box-shadow: none !important;
+}
+#content .quick-pay-btn .quick-pay-val { color: var(--pos-text) !important; }
+#content .quick-pay-btn .quick-pay-change-sub { color: var(--pos-muted) !important; }
+#content .quick-pay-btn.exact, #content .quick-pay-btn.active-selected { border-color: var(--pos-accent) !important; background: color-mix(in srgb, var(--pos-accent) 12%, var(--pos-surface)) !important; }
+#content .quick-add-chip {
+  background: var(--pos-surface) !important;
+  color: var(--pos-accent-text) !important;
+  border: 1px solid var(--pos-border) !important;
+}
+#content .cash-input-wrap {
+  background: var(--pos-surface) !important;
+  border: 1px solid var(--pos-border) !important;
+}
+#content .cash-input-wrap input { color: var(--pos-text) !important; background: transparent !important; }
+#content .cash-currency-symbol { color: var(--pos-accent-text) !important; }
+#content .checkout-btn:disabled { opacity: .5 !important; }
+#content .cart-clear-btn {
+  background: transparent !important;
+  color: var(--pos-muted) !important;
+  border: 1px solid var(--pos-border) !important;
+}
+
+/* ---- section cards ---- */
+#content .pos-layout .card {
+  background: var(--pos-surface) !important;
+  border: 1px solid var(--pos-border) !important;
+  box-shadow: none !important;
+}
+#content .pos-layout .card-head h2 { color: var(--pos-text) !important; }
+#content .pos-terminal {
+  background: color-mix(in srgb, var(--pos-accent) 12%, transparent) !important;
+  color: var(--pos-accent-text) !important;
+  border: 0 !important;
+}
+
+/* checkout button: keep the label inside the button */
+#content .checkout-btn {
+  white-space: normal !important;
+  line-height: 1.25 !important;
+  font-size: clamp(14px, 1.35vw, 17px) !important;
+  padding: 12px 14px !important;
+  min-height: 56px;
+  letter-spacing: 0 !important;
+}

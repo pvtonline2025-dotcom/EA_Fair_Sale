@@ -28,6 +28,7 @@
   <link rel="stylesheet" href="css/app.css">
   <link rel="stylesheet" href="css/light-mode.css">
   <link rel="stylesheet" href="css/tablet-enhancements.css">
+  <link rel="stylesheet" href="css/remote-cart.css">
 </head>
 <body>
   <div class="app-shell">
@@ -358,6 +359,13 @@
         <div id="scannerBatchQueueList" class="scanner-batch-queue-list">
           <!-- Queued items rendered here -->
         </div>
+        <div class="remote-send-bar">
+          <div id="remoteSendControls" class="remote-send-controls"></div>
+          <button type="button" class="btn-remote-send" onclick="sendBatchQueueToCashier()" title="ส่งรายการในคิวไปเครื่องคิดเงิน (แท็บเล็ต) เป็น 1 บิล">
+            📤 ส่งไปเครื่องคิดเงิน (1 บิล)
+          </button>
+        </div>
+        <div id="remoteSentTicket" class="remote-sent-ticket" hidden></div>
         <div class="batch-queue-actions">
           <button type="button" id="batchImportBtn" class="btn-batch-import" onclick="commitBatchScanToPOS()">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -645,13 +653,14 @@
 
   <div id="toast" class="toast"></div>
   <script src="js/fetch-wrapper.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://unpkg.com/@zxing/browser@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
+  <script src="https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-browser.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
   <script src="js/supabase-config.js"></script>
   <script src="js/offline-sync.js"></script>
   <script src="js/app.js"></script>
+  <script src="js/remote-cart.js"></script>
   <script src="js/install-app.js"></script>
 </body>
 </html>

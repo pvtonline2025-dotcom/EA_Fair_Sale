@@ -1,5 +1,5 @@
 // EA Fair Sale - Service Worker with Background Sync & Offline Support
-const CACHE_NAME = 'ea-fair-sale-v8-no-public';
+const CACHE_NAME = 'ea-fair-sale-v10';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -10,6 +10,8 @@ const STATIC_ASSETS = [
   '/manifest.json',
   '/js/offline-sync.js',
   '/js/install-app.js',
+  '/js/remote-cart.js',
+  '/css/remote-cart.css',
   '/css/variables.css',
   '/css/base.css',
   '/css/layout.css',
@@ -42,7 +44,12 @@ const STATIC_ASSETS = [
   '/images/btn-export.png',
   '/images/btn-setting.png',
   '/assets/icons/logo-192.png',
-  '/assets/icons/logo-512.png'
+  '/assets/icons/logo-512.png',
+  // CDN libraries (pinned versions) so the POS still opens offline
+  'https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js',
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js',
+  'https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-browser.min.js',
+  'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js'
 ];
 
 // Never replay sales from a service worker using an anonymous credential.
@@ -102,6 +109,26 @@ self.addEventListener('fetch', (event) => {
   const isCdnAsset = (url.hostname === 'cdn.jsdelivr.net' || url.hostname === 'unpkg.com') &&
                      (url.pathname.endsWith('.js') || url.pathname.endsWith('.css'));
   if (url.origin !== self.location.origin && !isCdnAsset) return;
+
+  // Network-first for page navigations so a new deploy is picked up on the next
+  // open; fall back to the cached app shell when offline.
+  if (req.mode === 'navigate') {
+    event.respondWith(
+      fetch(req).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const copy = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', copy));
+        }
+        return networkResponse;
+      }).catch(async () => {
+        return (await caches.match(req)) || (await caches.match('/index.html')) || (await caches.match('/')) ||
+          new Response('ออฟไลน์ และยังไม่มีแอปในแคช กรุณาเชื่อมต่ออินเทอร์เน็ตแล้วเปิดใหม่', {
+            status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+          });
+      })
+    );
+    return;
+  }
 
   // Stale-While-Revalidate for app assets
   event.respondWith(

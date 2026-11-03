@@ -45,7 +45,7 @@ begin
     ) i on i.product_id = p.id
     where p.is_active = true
     order by p.id::text
-    for update
+    for update of p   -- แก้: "for update" เฉยๆ ใช้กับ subquery DISTINCT ไม่ได้ (PostgreSQL error)
   loop
     null;
   end loop;

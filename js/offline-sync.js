@@ -33,6 +33,122 @@
     });
   }
 
+  // Client-side sale id. Format must match the server regex: ^off-sale-[0-9]+-[0-9]+$
+  function newClientSaleId() {
+    let rand;
+    try {
+      const buf = new Uint32Array(1);
+      crypto.getRandomValues(buf);
+      rand = buf[0];
+    } catch (e) {
+      rand = Math.floor(Math.random() * 4294967295);
+    }
+    return 'off-sale-' + Date.now() + '-' + rand;
+  }
+
+  // ---- Remote recording (shared by online checkout and offline replay) ----
+
+  function isMissingFunctionError(error) {
+    const msg = `${error?.code || ''} ${error?.message || ''} ${error?.details || ''}`;
+    return /PGRST202|42883|could not find the function|function .* does not exist|schema cache/i.test(msg);
+  }
+
+  // Network trouble: the request may or may not have reached the server.
+  // Safe to retry ONLY with an idempotent RPC (same client_sale_id).
+  function isTransientError(error, status) {
+    if (!error) return false;
+    if (status === 0 || status === 408 || status === 429 || status >= 500) return true;
+    const msg = `${error.message || ''} ${error.details || ''} ${error.error || ''}`;
+    return /Failed to fetch|NetworkError|Network connection failed|Network request failed|timeout|Service Unavailable|Load failed|ECONN|offline/i.test(msg);
+  }
+
+  function withTimeout(promise, ms) {
+    let timer;
+    const timeout = new Promise((resolve) => {
+      timer = setTimeout(() => resolve({ data: null, error: { message: 'timeout' }, status: 0 }), ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  }
+
+  function receivedForServer(sale) {
+    const total = Number(sale.total_amount || 0);
+    const rec = Number(sale.received_amount || 0);
+    if (sale.payment_method !== 'cash') return null;
+    return rec >= total && rec > 0 ? rec : null; // null = exact amount
+  }
+
+  /**
+   * Record a sale in Supabase using the newest idempotent RPC available.
+   * Returns { ok, data, error, transient, missingFunction, rpc }.
+   *  - V8 ea_record_pos_sale: atomic (discount, payment, received/change, idempotent)
+   *  - V7 ea_record_offline_cart_sale: idempotent; discount patched afterwards (best effort)
+   */
+  async function recordSaleRemote(sale) {
+    const client = window.getEaSupabaseClient?.();
+    if (!client) return { ok: false, transient: true, error: { message: 'Supabase client not ready' } };
+
+    const items = (sale.items || []).map(it => ({
+      product_id: it.product_id,
+      qty: Number(it.qty),
+      unit_price: Number(it.unit_price)
+    }));
+    const paymentMethod = sale.payment_method === 'promptpay' ? 'promptpay' : 'cash';
+    const billDiscount = Math.max(0, Number(sale.bill_discount || 0));
+    const note = sale.note || 'ขายออฟไลน์ (Auto-Synced)';
+
+    try {
+      // --- V8 ---
+      let res = await withTimeout(client.rpc('ea_record_pos_sale', {
+        p_terminal_code: sale.terminal || 'POS-01',
+        p_items: items,
+        p_note: note,
+        p_client_sale_id: sale.id,
+        p_payment_method: paymentMethod,
+        p_bill_discount: billDiscount,
+        p_received_amount: receivedForServer(sale)
+      }), 15000);
+
+      if (!res.error) return { ok: true, data: res.data, rpc: 'v8' };
+      if (!isMissingFunctionError(res.error)) {
+        return { ok: false, error: res.error, transient: isTransientError(res.error, res.status), rpc: 'v8' };
+      }
+
+      // --- V7 fallback ---
+      res = await withTimeout(client.rpc('ea_record_offline_cart_sale', {
+        p_terminal_code: sale.terminal || 'POS-01',
+        p_items: items,
+        p_note: note,
+        p_client_sale_id: sale.id,
+        p_payment_method: paymentMethod
+      }), 15000);
+
+      if (res.error) {
+        return {
+          ok: false,
+          error: res.error,
+          transient: isTransientError(res.error, res.status),
+          missingFunction: isMissingFunctionError(res.error),
+          rpc: 'v7'
+        };
+      }
+
+      const data = res.data || {};
+      // V7 stores the gross total. Patch the net total when a bill discount exists.
+      if (billDiscount > 0 && data.sale_id && !data.already_synced) {
+        const net = Math.max(0, Number(data.total_amount || 0) - billDiscount);
+        try {
+          await client.from('ea_sales').update({ total_amount: net }).eq('id', data.sale_id);
+          await client.from('ea_sales').update({ discount_amount: billDiscount }).eq('id', data.sale_id);
+        } catch (e) { /* column may not exist before V8 */ }
+        data.total_amount = net;
+      }
+      console.warn('[EA] Using V7 RPC. Run migration_v8_pos_sale_with_discount.sql to store bill discounts atomically.');
+      return { ok: true, data, rpc: 'v7' };
+    } catch (err) {
+      return { ok: false, error: { message: err?.message || String(err) }, transient: true };
+    }
+  }
+
   // Add pending transaction to IndexedDB
   async function addPendingSale(sale) {
     try {
@@ -41,7 +157,7 @@
       const store = tx.objectStore(STORE_NAME);
 
       const record = {
-        id: sale.id || ('off-sale-' + Date.now() + '-' + Math.floor(Math.random() * 1000)),
+        id: sale.id || newClientSaleId(),
         saleNo: sale.saleNo || ('S' + Date.now().toString().slice(-6)),
         terminal: sale.terminal || 'POS-01',
         items: sale.items || [],
@@ -49,10 +165,15 @@
         received_amount: Number(sale.received_amount || 0),
         change_amount: Number(sale.change_amount || 0),
         total_amount: Number(sale.total_amount || 0),
+        bill_discount: Number(sale.bill_discount || 0),
+        sale_date: sale.sale_date || '',
+        sale_time: sale.sale_time || '',
+        item_details: Array.isArray(sale.item_details) ? sale.item_details : [],
         note: sale.note || `ขายออฟไลน์`,
         created_at: sale.created_at || new Date().toISOString(),
         status: 'pending',
-        retry_count: 0
+        retry_count: 0,
+        last_error: ''
       };
 
       await new Promise((resolve, reject) => {
@@ -99,6 +220,28 @@
   async function getPendingCount() {
     const list = await getPendingSales();
     return list.length;
+  }
+
+  // Update fields of a queued record (status, retry_count, last_error ...)
+  async function updatePendingSale(id, patch) {
+    try {
+      const db = await openDB();
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      await new Promise((resolve, reject) => {
+        const req = store.get(id);
+        req.onsuccess = () => {
+          if (req.result) store.put({ ...req.result, ...patch });
+        };
+        tx.oncomplete = () => resolve(true);
+        tx.onabort = () => reject(tx.error || new Error('IndexedDB update aborted'));
+        tx.onerror = () => reject(tx.error || new Error('IndexedDB update failed'));
+      });
+      return true;
+    } catch (err) {
+      console.error('Failed to update pending sale:', err);
+      return false;
+    }
   }
 
   // Remove or mark a transaction as synced
@@ -157,126 +300,116 @@
     }
   }
 
-  // Main Sync Execution: Transfers pending sales from IndexedDB to Supabase
+  // Main Sync Execution: Transfers pending sales from IndexedDB to Supabase.
+  // Auto runs retry only 'pending' records; records rejected by the server
+  // (e.g. insufficient stock) become 'failed' and are retried only manually.
   async function syncPendingTransactions(manualTrigger = false) {
     if (isSyncing) {
       console.log('⏳ Sync is already in progress, skipping duplicate call.');
       return;
     }
     isSyncing = true; // Acquire lock before the first async operation.
-    let pending = [];
-    try {
-      pending = await getPendingSales();
-    } catch (err) {
-      console.error('Failed to read offline queue:', err);
-      isSyncing = false;
-      return;
-    }
-    if (pending.length === 0) {
-      if (manualTrigger && typeof window.toast === 'function') {
-        window.toast('ไม่มีรายการค้างซิงค์ ข้อมูลเป็นปัจจุบันแล้ว ☁️');
-      }
-      isSyncing = false;
-      updateSyncUI();
-      return;
-    }
-
-    // Verify online connectivity
-    const online = await checkSupabaseConnection();
-    if (!online) {
-      console.log('📡 System still offline or Supabase unreachable. Sync deferred.');
-      if (manualTrigger && typeof window.toast === 'function') {
-        window.toast('⚠️ ยังไม่สามารถเชื่อมต่อ Supabase ได้ กรุณาตรวจสอบอินเทอร์เน็ต');
-      }
-      isSyncing = false;
-      updateSyncUI();
-      return;
-    }
-
-    updateSyncUI();
-
-    if (typeof window.toast === 'function') {
-      window.toast(`🔄 กำลังซิงค์รายการขายค้าง ${pending.length} รายการไปยัง Supabase...`, 3000);
-    }
-
     let successCount = 0;
     let failCount = 0;
+    let rejected = [];
+    let queue = [];
+    try {
+      const all = await getPendingSales();
+      queue = all
+        .filter(x => manualTrigger || x.status !== 'failed')
+        .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
 
-    for (const sale of pending) {
-      try {
-        let syncedSuccessfully = false;
-        let remoteSaleNo = '';
-
-        const client = window.getEaSupabaseClient?.();
-        if (client) {
-          // Use replay-safe, idempotent RPC (migration V7 required).
-          const { data, error } = await client.rpc('ea_record_offline_cart_sale', {
-            p_terminal_code: sale.terminal || 'POS-01',
-            p_items: sale.items || [],
-            p_note: sale.note || `ขายออฟไลน์ (Auto-Synced)`,
-            p_client_sale_id: sale.id,
-            p_payment_method: sale.payment_method || 'cash'
-          });
-
-          if (!error) {
-            syncedSuccessfully = true;
-            remoteSaleNo = data?.sale_no || sale.saleNo;
-
-            // V7 saves payment_method atomically with the sale and the client_sale_id.
-          } else {
-            console.warn(`Supabase RPC error on sale ${sale.id}:`, error.message);
-            if (/function.*does not exist|schema cache|PGRST202/i.test(error.message || '')) {
-              console.error('Offline sync requires Sql/migration_v7_idempotent_offline_sales.sql');
-            }
-          }
+      if (queue.length === 0) {
+        if (manualTrigger && typeof window.toast === 'function') {
+          window.toast('ไม่มีรายการค้างซิงค์ ข้อมูลเป็นปัจจุบันแล้ว ☁️');
         }
+        return;
+      }
 
-        if (syncedSuccessfully) {
+      const online = await checkSupabaseConnection();
+      if (!online) {
+        console.log('📡 System still offline or Supabase unreachable. Sync deferred.');
+        if (manualTrigger && typeof window.toast === 'function') {
+          window.toast('⚠️ ยังไม่สามารถเชื่อมต่อ Supabase ได้ กรุณาตรวจสอบอินเทอร์เน็ต');
+        }
+        return;
+      }
+
+      updateSyncUI();
+      if (typeof window.toast === 'function') {
+        window.toast(`🔄 กำลังซิงค์รายการขายค้าง ${queue.length} รายการไปยัง Supabase...`, 3000);
+      }
+
+      for (const sale of queue) {
+        const result = await recordSaleRemote(sale);
+
+        if (result.ok) {
           const removed = await removePendingSale(sale.id);
           if (removed) {
             successCount++;
-            console.log(`✅ Synced offline sale ${sale.id} -> ${remoteSaleNo}`);
+            console.log(`✅ Synced offline sale ${sale.id} -> ${result.data?.sale_no || sale.saleNo}`);
           } else {
-            // The server might already have the sale. V7 idempotency makes a retry safe.
+            // Server already has it; the idempotent RPC makes the next retry harmless.
             failCount++;
-            console.error(`Sale ${sale.id} synced remotely but is still queued locally.`);
           }
-        } else {
-          failCount++;
+          continue;
         }
-      } catch (err) {
-        console.error(`Error processing pending sale ${sale.id}:`, err);
+
         failCount++;
+        const message = result.error?.message || 'Unknown error';
+        console.warn(`Sync failed for ${sale.id}:`, message);
+
+        if (result.missingFunction) {
+          console.error('Offline sync requires database/migrations/migration_v7 (or v8).');
+          await updatePendingSale(sale.id, { last_error: 'ฐานข้อมูลยังไม่ได้ติดตั้ง migration V7/V8' });
+          break;
+        }
+        if (result.transient) {
+          await updatePendingSale(sale.id, { retry_count: (sale.retry_count || 0) + 1, last_error: message });
+          break; // Connection is unstable: stop and retry later, keeping order.
+        }
+        // Permanent rejection (stock, inactive product, invalid data ...)
+        await updatePendingSale(sale.id, {
+          status: 'failed',
+          retry_count: (sale.retry_count || 0) + 1,
+          last_error: message
+        });
+        rejected.push({ saleNo: sale.saleNo, message });
       }
+    } catch (err) {
+      console.error('Offline sync error:', err);
+    } finally {
+      isSyncing = false;
+      updateSyncUI();
     }
 
-    isSyncing = false;
-    updateSyncUI();
-
     if (successCount > 0) {
-      if (typeof window.beepSuccess === 'function') {
-        window.beepSuccess();
-      }
+      if (typeof window.beepSuccess === 'function') window.beepSuccess();
       if (typeof window.toast === 'function') {
         window.toast(`✅ ซิงค์ยอดขายออฟไลน์สำเร็จ ${successCount} รายการเรียบร้อย ☁️`, 5000);
       }
-      // Refresh app data so stock levels and sales tables match Supabase
-      if (typeof window.loadAll === 'function') {
-        window.loadAll();
-      }
-    } else if (failCount > 0 && manualTrigger) {
-      if (typeof window.toast === 'function') {
-        window.toast(`⚠️ ไม่สามารถซิงค์ได้ ${failCount} รายการ กรุณาลองใหม่อีกครั้ง`);
-      }
+      if (typeof window.loadAll === 'function') window.loadAll();
+    }
+    if (rejected.length > 0 && typeof window.toast === 'function') {
+      const first = rejected[0];
+      const reason = /Insufficient stock/i.test(first.message) ? 'สต็อกบนเซิร์ฟเวอร์ไม่พอ'
+        : /Product not found/i.test(first.message) ? 'สินค้าถูกปิดหรือลบไปแล้ว'
+        : first.message;
+      window.toast(`⚠️ บิล ${first.saleNo} ซิงค์ไม่ผ่าน (${reason}) • เติมสต็อกแล้วกดป้าย "รอซิงค์" ด้านบนเพื่อลองใหม่`, 7000);
+    } else if (failCount > 0 && successCount === 0 && manualTrigger && typeof window.toast === 'function') {
+      window.toast(`⚠️ ไม่สามารถซิงค์ได้ ${failCount} รายการ กรุณาลองใหม่อีกครั้ง`);
     }
 
-    // Trigger registered listeners
-    syncListeners.forEach(fn => fn({ successCount, failCount, remaining: pending.length - successCount }));
+    syncListeners.forEach(fn => {
+      try { fn({ successCount, failCount, remaining: queue.length - successCount }); } catch (e) {}
+    });
   }
 
   // Update UI Elements (Header Badge, POS Banner, etc.)
   async function updateSyncUI() {
-    const count = await getPendingCount();
+    const list = await getPendingSales();
+    const count = list.length;
+    const failedCount = list.filter(x => x.status === 'failed').length;
     const appState = window.getEaAppState?.();
     const isOnline = navigator.onLine && !(appState?.isOffline);
 
@@ -291,7 +424,9 @@
           headerText.textContent = 'กำลังซิงค์...';
         } else {
           headerPill.className = 'sync-header-pill pending';
-          headerText.textContent = `รอซิงค์ ${count} บิล`;
+          headerText.textContent = failedCount > 0
+            ? `รอซิงค์ ${count} บิล (มีปัญหา ${failedCount})`
+            : `รอซิงค์ ${count} บิล`;
         }
       } else {
         headerPill.classList.add('hidden');
@@ -331,7 +466,7 @@
         posBanner.innerHTML = `
           <div class="pos-net-info">
             <span class="pos-net-dot amber"></span>
-            <span><strong>เชื่อมต่อเน็ตแล้ว:</strong> มีรายการขายออฟไลน์ค้างซิงค์ <strong>${count} รายการ</strong></span>
+            <span><strong>เชื่อมต่อเน็ตแล้ว:</strong> มีรายการขายออฟไลน์ค้างซิงค์ <strong>${count} รายการ</strong>${failedCount > 0 ? ` • <strong>${failedCount} บิลถูกปฏิเสธ</strong> (เช่น สต็อกไม่พอ) ต้องตรวจสอบ` : ''}</span>
           </div>
           <button type="button" class="pos-net-btn" onclick="EaOfflineSync.syncPendingTransactions(true)">⚡ ซิงค์ทันที</button>
         `;
@@ -404,8 +539,8 @@
     // 3. Page visibility change: when cashier returns to tab, check if online & sync
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible' && navigator.onLine) {
-        getPendingCount().then((count) => {
-          if (count > 0 && !isSyncing) {
+        getPendingSales().then((list) => {
+          if (list.some(x => x.status !== 'failed') && !isSyncing) {
             syncPendingTransactions();
           }
         });
@@ -415,8 +550,8 @@
     // 4. Periodic background check every 25 seconds
     setInterval(async () => {
       if (navigator.onLine && !isSyncing) {
-        const count = await getPendingCount();
-        if (count > 0) {
+        const list = await getPendingSales();
+        if (list.some(x => x.status !== 'failed')) {
           syncPendingTransactions();
         }
       }
@@ -438,6 +573,11 @@
     getPendingSales,
     getPendingCount,
     removePendingSale,
+    updatePendingSale,
+    recordSaleRemote,
+    newClientSaleId,
+    isTransientError,
+    isMissingFunctionError,
     syncPendingTransactions,
     updateSyncUI,
     onSyncComplete: (fn) => syncListeners.push(fn),

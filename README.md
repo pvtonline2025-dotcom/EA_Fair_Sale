@@ -15,6 +15,7 @@ EA-Fair-Sale/
 │   ├── offline-sync.js      # จัดการรายการขายออฟไลน์
 │   ├── fetch-wrapper.js
 │   ├── install-app.js       # ปุ่มติดตั้งแอปบนแท็บเล็ต
+│   ├── remote-cart.js       # มือถือสแกน → ส่งบิลไปแท็บเล็ต
 │   └── supabase-config.js   # Supabase URL + anon / publishable key
 ├── css/
 │   ├── app.css
@@ -62,6 +63,8 @@ EA-Fair-Sale/
 - ห้ามใส่ `service_role`, secret key หรือรหัสผ่านในไฟล์ของหน้าเว็บ
 - ตรวจสิทธิ์ RLS และทดสอบระบบขายจริงบน DEV ก่อนขึ้น Production
 - ตัวอย่างไฟล์ตั้งค่าอยู่ที่ `docs/supabase-config.example.js`
-- การย้ายโฟลเดอร์ครั้งนี้ไม่เปลี่ยนตาราง/ข้อมูลฐานข้อมูลหรือการทำงานหลัก POS
+- **ต้องรัน `database/migrations/migration_v8_pos_sale_with_discount.sql` ใน Supabase SQL Editor** (หลัง V6, V7) เพื่อให้ส่วนลดท้ายบิล เงินรับ/ทอน ถูกบันทึกในบิล และกันบิลซ้ำทั้งตอนขายออนไลน์และซิงค์ออฟไลน์ — ถ้ายังไม่รัน แอปจะถอยไปใช้ V7/V6 ให้อัตโนมัติ
+- รัน `migration_v9_remote_scan_carts.sql` เพื่อใช้ฟีเจอร์ **มือถือสแกนส่งเครื่องคิดเงิน** (วิธีใช้ใน `CHANGELOG.md`)
+- รายละเอียดการแก้ไขแต่ละรอบอยู่ใน `CHANGELOG.md`
 
 คู่มือหน้าระบบอยู่ใน `docs/PAGE_GUIDE.md` และขั้นตอน deploy อยู่ใน `docs/DEPLOY_GUIDE_TH.md`

@@ -1,0 +1,161 @@
+/* =========================================================
+   Remote scan carts: phone sends batch queue → cashier tablet inbox
+   ========================================================= */
+
+/* ---- Phone: send bar inside the scanner batch panel ---- */
+.remote-send-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0 2px;
+}
+.remote-send-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted, #94a3b8);
+}
+.remote-target-select {
+  height: 40px;
+  border-radius: 10px;
+  padding: 0 10px;
+  font-size: 14px;
+  background: var(--surface-elevated, #283548);
+  color: var(--text-main, #f8fafc);
+  border: 1px solid var(--card-border, #334155);
+}
+.btn-remote-send {
+  flex: 1 1 220px;
+  min-height: 52px;
+  border: 0;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+  background: var(--accent-emerald, #10b981);
+  cursor: pointer;
+}
+.btn-remote-send:active { transform: translateY(1px); }
+.btn-remote-send:disabled,
+.btn-remote-send.is-busy { opacity: .6; cursor: wait; }
+
+.remote-sent-ticket {
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  text-align: center;
+  background: rgba(16, 185, 129, .12);
+  border: 1px solid rgba(16, 185, 129, .4);
+  color: var(--text-main, #f8fafc);
+}
+.remote-sent-ticket[hidden] { display: none; }
+.remote-ticket-label { font-size: 12px; color: var(--accent-emerald-light, #34d399); font-weight: 700; }
+.remote-ticket-no { font-size: 40px; font-weight: 900; letter-spacing: 2px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.remote-ticket-meta { font-size: 12px; color: var(--text-sub, #cbd5e1); margin-top: 2px; }
+.remote-ticket-cancel {
+  margin-top: 8px;
+  background: none;
+  border: 1px solid rgba(248, 113, 113, .5);
+  color: #f87171;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* ---- Tablet: inbox ---- */
+.remote-inbox {
+  position: fixed;
+  right: 16px;
+  bottom: calc(140px + env(safe-area-inset-bottom, 0px));
+  z-index: 900;
+  width: min(380px, calc(100vw - 32px));
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 10px;
+  border-radius: 16px;
+  background: var(--surface-card, #1e293b);
+  border: 2px solid var(--accent-emerald, #10b981);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .35);
+  color: var(--text-main, #f8fafc);
+}
+.remote-inbox[hidden] { display: none; }
+.remote-inbox-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  font-size: 14px;
+  margin: 2px 4px 8px;
+}
+.remote-inbox-count {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  background: var(--accent-emerald, #10b981);
+  color: #fff;
+}
+.remote-inbox-card {
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--surface-elevated, #283548);
+  border: 1px solid var(--card-border, #334155);
+}
+.remote-inbox-card + .remote-inbox-card { margin-top: 8px; }
+.remote-inbox-top { display: flex; align-items: baseline; gap: 8px; }
+.remote-inbox-ticket { font-size: 22px; font-weight: 900; letter-spacing: 1px; }
+.remote-inbox-meta { font-size: 11.5px; color: var(--text-muted, #94a3b8); }
+.remote-inbox-items {
+  font-size: 13px;
+  color: var(--text-sub, #cbd5e1);
+  margin: 4px 0 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.remote-inbox-bottom { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.remote-inbox-total { font-size: 12.5px; font-weight: 700; color: var(--accent-emerald-light, #34d399); }
+.remote-inbox-actions { display: flex; gap: 6px; }
+.remote-inbox-hide {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--card-border, #334155);
+  background: transparent;
+  color: var(--text-muted, #94a3b8);
+  cursor: pointer;
+}
+.remote-inbox-claim {
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 0;
+  font-weight: 800;
+  font-size: 14px;
+  color: #fff;
+  background: var(--accent-emerald, #10b981);
+  cursor: pointer;
+}
+.remote-inbox-more { text-align: center; font-size: 12px; color: var(--text-muted, #94a3b8); margin-top: 8px; }
+
+[data-color-mode="light"] .remote-inbox { background: #ffffff; color: #0f172a; }
+[data-color-mode="light"] .remote-inbox-card { background: #f8fafc; border-color: #e2e8f0; }
+[data-color-mode="light"] .remote-inbox-items { color: #334155; }
+[data-color-mode="light"] .remote-inbox-total { color: #047857; }
+[data-color-mode="light"] .remote-sent-ticket { color: #0f172a; }
+[data-color-mode="light"] .remote-ticket-meta { color: #334155; }
+[data-color-mode="light"] .remote-ticket-label { color: #047857; }
+[data-color-mode="light"] .remote-target-select { background: #fff; color: #0f172a; border-color: #cbd5e1; }
+
+@media (max-width: 600px) {
+  .remote-inbox { right: 8px; left: 8px; width: auto; }
+}

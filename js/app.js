@@ -698,7 +698,9 @@ function saveBillDiscountLocal(){
   } catch(e){}
 }
 function escapeHtml(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
-function toast(t){const x=el("toast");x.textContent=t;x.classList.add("show");setTimeout(()=>x.classList.remove("show"),2100)}
+let toastTimer=null;
+function toast(t,duration=2100){const x=el("toast");if(!x)return;x.textContent=t;x.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>x.classList.remove("show"),Math.max(1200,Number(duration)||2100))}
+function isQrPayment(pm){const v=String(pm||"").toLowerCase();return v==="promptpay"||v==="qr"||v==="transfer"}
 function card(title,body,action=""){return `<section class="card"><div class="card-head"><h2>${title}</h2>${action}</div><div class="card-body">${body}</div></section>`}
 function setHeader(t,s){el("pageTitle").textContent=t;el("pageSubtitle").textContent=s}
 
@@ -1613,6 +1615,66 @@ function loadFromLocalStorageFallback(){
   }
 }
 
+// After an online refresh, bills still waiting in the offline queue are not in
+// Supabase yet. Overlay them so stock levels and today's totals stay correct
+// and the cashier cannot oversell items that were already sold offline.
+async function mergePendingOfflineSalesIntoState(){
+  try {
+    if (!window.EaOfflineSync?.getPendingSales) return;
+    const pending = await window.EaOfflineSync.getPendingSales();
+    if (!pending.length) return;
+    const knownIds = new Set((state.sales || []).map(s => s.id));
+    for (const rec of pending) {
+      if (knownIds.has(rec.id)) continue;
+      const created = rec.created_at || new Date().toISOString();
+      const d = new Date(created);
+      const saleDate = rec.sale_date || `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+      const saleTime = rec.sale_time || d.toTimeString().slice(0,8);
+      state.sales.unshift({
+        id: rec.id,
+        sale_no: rec.saleNo || rec.id,
+        terminal_code: rec.terminal || state.terminal,
+        sale_date: saleDate,
+        sale_time: saleTime,
+        total_amount: Number(rec.total_amount || 0),
+        discount_amount: Number(rec.bill_discount || 0),
+        payment_method: rec.payment_method || "cash",
+        received_amount: Number(rec.received_amount || 0),
+        change_amount: Number(rec.change_amount || 0),
+        note: rec.note || "",
+        created_at: created,
+        is_pending_sync: true
+      });
+      const details = (rec.item_details && rec.item_details.length) ? rec.item_details : (rec.items || []);
+      details.forEach((it, idx) => {
+        const prod = productById(it.product_id);
+        const qty = Number(it.qty) || 0;
+        const unitPrice = Number(it.unit_price) || 0;
+        const origPrice = Number(it.original_price ?? unitPrice);
+        if (prod) prod.stock_qty = Number(prod.stock_qty || 0) - qty;
+        state.saleItems.unshift({
+          id: `${rec.id}-item-${idx}`,
+          sale_id: rec.id,
+          product_id: it.product_id,
+          product_name: it.product_name || prod?.product_name || "สินค้า",
+          barcode: prod?.barcode || "",
+          qty,
+          unit_price: unitPrice,
+          original_price: origPrice,
+          discount_amount: Math.max(0, origPrice - unitPrice),
+          discount_note: it.discount_note || "",
+          is_discounted: origPrice > unitPrice,
+          line_total: qty * unitPrice,
+          created_at: created
+        });
+      });
+    }
+    saveLocalState();
+  } catch (e) {
+    console.warn("Could not merge pending offline sales:", e);
+  }
+}
+
 async function loadAll(){
   if(!sb){
     state.isOffline = true;
@@ -1659,6 +1721,7 @@ async function loadAll(){
     saveLocalState();
     state.cart=state.cart.map(c=>{const pr=productById(c.product_id);return pr?{...c,name:pr.product_name,barcode:pr.barcode,stock:Number(pr.stock_qty)}:null}).filter(Boolean);saveCartLocal();
     state.loading=false;
+    await mergePendingOfflineSalesIntoState();
     render();
     checkAndNotifyLowStock();
   } catch (ex) {
@@ -4285,6 +4348,16 @@ function renderMenu(){
               <div class="menu-tile-subtitle">Expenses · คำนวณกำไรแท้จริง</div>
             </div>
             <span class="menu-tile-badge">${state.expenses ? state.expenses.length : 0} รายการ</span>
+          </div>
+        </button>
+        <button class="image-menu-btn" onclick="startRemoteScan()" aria-label="มือถือสแกนแล้วส่งไปเครื่องคิดเงิน">
+          <div class="menu-custom-tile scanner-tile remote-scan-tile">
+            <div class="menu-tile-bg"></div>
+            <div class="menu-tile-content">
+              <span class="menu-tile-icon">📱</span>
+              <div class="menu-tile-title">สแกนส่งเครื่องคิดเงิน</div>
+              <div class="menu-tile-subtitle">มือถือสแกนหลายชิ้น → ส่งแท็บเล็ตเป็น 1 บิล</div>
+            </div>
           </div>
         </button>
         <button class="image-menu-btn" onclick="startScanner()" aria-label="สแกนบาร์โค้ดด้วยกล้อง">
@@ -8577,6 +8650,41 @@ function closeReceiptModal(){
   else render();
 }
 
+// Legacy path for databases without migration V7/V8 (not idempotent).
+async function legacyRecordCartSale(items, saleNote, totalAmt, billDiscAmt){
+  try {
+    const {data, error} = await sb.rpc("ea_record_cart_sale", {
+      p_terminal_code: state.terminal,
+      p_items: items,
+      p_note: saleNote
+    });
+    if (error) {
+      if (/Insufficient stock/i.test(error.message || "")) {
+        toast("Stock เปลี่ยนระหว่างขาย กรุณาตรวจตะกร้าอีกครั้ง");
+        await loadAll();
+        go("sale");
+        return null;
+      }
+      console.error("Remote checkout rejected:", error.message);
+      toast("ไม่สามารถบันทึกบิลได้: " + (error.message || "โปรดลองอีกครั้ง"));
+      return null;
+    }
+    const saleNo = data?.sale_no || ("S-" + Date.now().toString().slice(-6));
+    // Best-effort patches: payment method and net total after bill discount.
+    if (data?.sale_id) {
+      try { await sb.from("ea_sales").update({ payment_method: state.paymentMethod }).eq("id", data.sale_id); } catch (e) {}
+      if (billDiscAmt > 0) {
+        try { await sb.from("ea_sales").update({ total_amount: totalAmt }).eq("id", data.sale_id); } catch (e) {}
+      }
+    }
+    return { saleNo };
+  } catch (ex) {
+    console.error("Remote checkout status uncertain:", ex);
+    toast("ไม่ทราบผลการบันทึก กรุณาตรวจประวัติขายใน Supabase ก่อนกดซ้ำ");
+    return null;
+  }
+}
+
 let checkoutInProgress = false;
 async function checkoutCart(){
   if (checkoutInProgress) return;
@@ -8593,16 +8701,24 @@ async function checkoutCart(){
   const totalAmt = cartTotal();
   const billDiscountDetail = { ...(state.billDiscount || { type: "none", value: 0, note: "" }) };
 
+  const requested = new Map();
+  for (const it of items) {
+    if (!it.product_id || !Number.isFinite(it.qty) || it.qty <= 0 || !Number.isFinite(it.unit_price) || it.unit_price < 0) {
+      toast('จำนวนหรือราคาสินค้าไม่ถูกต้อง');
+      return;
+    }
+    requested.set(it.product_id, (requested.get(it.product_id) || 0) + it.qty);
+  }
+
+  // Cash: block checkout when the cashier entered less money than the total.
+  const receivedInput = Number(state.receivedCash || 0);
+  if (state.paymentMethod === "cash" && receivedInput > 0 && receivedInput + 0.001 < totalAmt) {
+    toast(`รับเงินมายังไม่พอ ขาดอีก ฿${money(totalAmt - receivedInput)}`);
+    return;
+  }
+
   // Offline inventory is a local snapshot; do not knowingly sell more than it holds.
   if (state.isOffline || !sb || !navigator.onLine) {
-    const requested = new Map();
-    for (const it of items) {
-      if (!Number.isFinite(it.qty) || it.qty <= 0 || !Number.isFinite(it.unit_price) || it.unit_price < 0) {
-        toast('จำนวนหรือราคาสินค้าไม่ถูกต้อง');
-        return;
-      }
-      requested.set(it.product_id, (requested.get(it.product_id) || 0) + it.qty);
-    }
     for (const [id, qty] of requested) {
       const product = productById(id);
       if (!product || Number(product.stock_qty) < qty) {
@@ -8629,53 +8745,81 @@ async function checkoutCart(){
     };
   });
 
+  const recVal = Number(state.receivedCash || 0);
+  const changeVal = recVal >= totalAmt ? (recVal - totalAmt) : 0;
+  const saleNote = `ขายจาก ${state.terminal}${billDiscAmt > 0 ? ` (ส่วนลดท้ายบิล ฿${money(billDiscAmt)})` : ''}`;
+
+  // One stable id per bill. Used by the idempotent RPC online AND by the offline
+  // queue, so an ambiguous network failure can be queued without double charging.
+  const saleId = window.EaOfflineSync?.newClientSaleId
+    ? window.EaOfflineSync.newClientSaleId()
+    : "off-sale-" + Date.now() + "-" + Math.floor(Math.random()*1e9);
+  const now = new Date();
+  const saleDateISO = todayISO();
+  const saleTimeStr = now.toTimeString().slice(0,8);
+  const itemDetails = state.cart.map(c => ({
+    product_id: c.product_id,
+    product_name: c.name,
+    unit: c.unit || "ชิ้น",
+    qty: Number(c.qty),
+    unit_price: Number(c.unit_price),
+    original_price: Number(c.original_price ?? c.unit_price),
+    discount_note: c.discount_note || ""
+  }));
+  const saleRecord = {
+    id: saleId,
+    terminal: state.terminal,
+    items,
+    item_details: itemDetails,
+    payment_method: state.paymentMethod,
+    received_amount: state.paymentMethod === "cash" ? (recVal > 0 ? recVal : totalAmt) : totalAmt,
+    change_amount: changeVal,
+    total_amount: totalAmt,
+    bill_discount: billDiscAmt,
+    note: saleNote,
+    sale_date: saleDateISO,
+    sale_time: saleTimeStr,
+    created_at: now.toISOString()
+  };
+
   let successRemote = false;
   let remoteTotal = 0;
   let remoteSaleNo = "";
+  let queuedAfterNetworkError = false;
 
   if (sb && !state.isOffline && navigator.onLine) {
-    try {
-      const {data, error} = await sb.rpc("ea_record_cart_sale", {
-        p_terminal_code: state.terminal,
-        p_items: items,
-        p_note: `ขายจาก ${state.terminal}${billDiscAmt > 0 ? ` (ส่วนลดท้ายบิล ฿${money(billDiscAmt)})` : ''}`
-      });
-      if (!error) {
-        successRemote = true;
-        remoteTotal = Number(data?.total_amount || totalAmt);
-        remoteSaleNo = data?.sale_no || ("S-" + Date.now().toString().slice(-6));
+    const result = window.EaOfflineSync?.recordSaleRemote
+      ? await window.EaOfflineSync.recordSaleRemote(saleRecord)
+      : { ok: false, missingFunction: true };
 
-        // Ensure payment_method is updated on ea_sales table in Supabase
-        try {
-          if (data?.sale_id) {
-            await sb.from("ea_sales").update({ payment_method: state.paymentMethod }).eq("id", data.sale_id);
-          } else if (data?.sale_no) {
-            await sb.from("ea_sales").update({ payment_method: state.paymentMethod }).eq("sale_no", data.sale_no);
-          } else if (remoteSaleNo) {
-            await sb.from("ea_sales").update({ payment_method: state.paymentMethod }).eq("sale_no", remoteSaleNo);
-          }
-        } catch (e) {}
-      } else {
-        if (error.message && error.message.includes("Insufficient stock")) {
-          toast("Stock เปลี่ยนระหว่างขาย กรุณาตรวจตะกร้าอีกครั้ง");
-          await loadAll();
-          go("sale");
-          return;
-        }
-        console.error("Remote checkout rejected:", error.message);
-        toast("ไม่สามารถบันทึกบิลได้: " + (error.message || "โปรดลองอีกครั้ง"));
+    if (result.ok) {
+      successRemote = true;
+      remoteTotal = Number(result.data?.total_amount ?? totalAmt);
+      remoteSaleNo = result.data?.sale_no || ("S-" + Date.now().toString().slice(-6));
+    } else if (result.missingFunction) {
+      // Database has neither V8 nor V7: legacy non-idempotent RPC.
+      const legacy = await legacyRecordCartSale(items, saleNote, totalAmt, billDiscAmt);
+      if (!legacy) return;
+      successRemote = true;
+      remoteTotal = totalAmt;
+      remoteSaleNo = legacy.saleNo;
+    } else if (result.transient) {
+      // The idempotent RPC makes it safe to queue this exact bill for replay.
+      queuedAfterNetworkError = true;
+      state.isOffline = true;
+    } else {
+      const msg = result.error?.message || "";
+      if (/Insufficient stock/i.test(msg)) {
+        toast("Stock เปลี่ยนระหว่างขาย กรุณาตรวจตะกร้าอีกครั้ง");
+        await loadAll();
+        go("sale");
         return;
       }
-    } catch (ex) {
-      console.error("Remote checkout status uncertain:", ex);
-      toast("ไม่ทราบผลการบันทึก กรุณาตรวจประวัติขายใน Supabase ก่อนกดซ้ำ");
+      console.error("Remote checkout rejected:", msg);
+      toast("ไม่สามารถบันทึกบิลได้: " + (msg || "โปรดลองอีกครั้ง"));
       return;
     }
   }
-
-  const recVal = Number(state.receivedCash || 0);
-  const changeVal = recVal >= totalAmt ? (recVal - totalAmt) : 0;
-
   if (successRemote) {
     const bill = {
       saleNo: remoteSaleNo,
@@ -8704,21 +8848,22 @@ async function checkoutCart(){
   }
 
   // Local Offline Checkout Transaction
-  const saleId = "off-sale-" + Date.now() + "-" + Math.floor(Math.random()*1000);
-  const now = new Date();
   const saleNo = "S" + String(now.getFullYear()).slice(-2) + String(now.getMonth()+1).padStart(2,"0") + String(now.getDate()).padStart(2,"0") + "-" + String(Math.floor(Math.random()*9000)+1000);
-  
+
   const newSale = {
     id: saleId,
     sale_no: saleNo,
     terminal_code: state.terminal,
-    sale_date: todayISO(),
-    sale_time: now.toTimeString().slice(0,8),
+    sale_date: saleDateISO,
+    sale_time: saleTimeStr,
     total_amount: totalAmt,
+    discount_amount: billDiscAmt,
     payment_method: state.paymentMethod,
-    received_amount: state.paymentMethod === "cash" ? recVal : totalAmt,
+    received_amount: saleRecord.received_amount,
     change_amount: changeVal,
-    created_at: now.toISOString()
+    note: saleNote,
+    created_at: now.toISOString(),
+    is_pending_sync: true
   };
 
   // Persist the sale *before* changing local stock or clearing the cart.
@@ -8727,21 +8872,14 @@ async function checkoutCart(){
     toast('ระบบคิวขายออฟไลน์ไม่พร้อม กรุณาลองโหลดหน้าใหม่');
     return;
   }
-  const queuedSale = await window.EaOfflineSync.addPendingSale({
-    id: saleId,
-    saleNo,
-    terminal: state.terminal,
-    items,
-    payment_method: state.paymentMethod,
-    received_amount: newSale.received_amount,
-    change_amount: newSale.change_amount,
-    total_amount: totalAmt,
-    note: `ขายจาก ${state.terminal}${billDiscAmt > 0 ? ` (ส่วนลดท้ายบิล ฿${money(billDiscAmt)})` : ''}`,
-    created_at: now.toISOString()
-  });
+  const queuedSale = await window.EaOfflineSync.addPendingSale({ ...saleRecord, saleNo });
   if (!queuedSale) {
     toast('บันทึกบิลออฟไลน์ไม่สำเร็จ: โปรดตรวจพื้นที่เก็บข้อมูลก่อนทำรายการ');
     return;
+  }
+  if (queuedAfterNetworkError) {
+    toast('📡 เน็ตขัดข้องระหว่างบันทึก — เก็บบิลไว้ในเครื่องแล้ว จะซิงค์อัตโนมัติ (ไม่บันทึกซ้ำ)', 5000);
+    window.EaOfflineSync.updateSyncUI?.();
   }
 
   for (const item of state.cart) {
@@ -16711,7 +16849,7 @@ function renderSalesHistory(){
                       <td>
                         <div class="sh-items-summary">
                           <span class="sh-items-text" title="${escapeHtml(itemsSummaryText)}">
-                            ${itemsSummaryText || 'รายการขาย'}
+                            ${escapeHtml(itemsSummaryText || 'รายการขาย')}
                           </span>
                           <span class="sh-items-count">${sItems.length} รายการ (${itemsCount} ชิ้น)</span>
                         </div>
@@ -16757,7 +16895,7 @@ function renderSalesHistory(){
                   </div>
 
                   <div style="font-size:12px; color:#cbd5e1; background:rgba(255,255,255,0.03); padding:6px 10px; border-radius:8px;">
-                    ${itemsSummaryText || 'รายการสินค้า'} <span style="color:#94a3b8;">(${itemsCount} ชิ้น)</span>
+                    ${escapeHtml(itemsSummaryText || 'รายการสินค้า')} <span style="color:#94a3b8;">(${itemsCount} ชิ้น)</span>
                   </div>
                 </div>
               `;
@@ -17924,9 +18062,9 @@ function exportMasterReportExcel(){
           <td class="td-c">${i + 1}</td>
           <td class="td-c">${r.date}</td>
           <td class="td-c">${r.time}</td>
-          <td class="td-c td-bold">${r.terminal}</td>
-          <td class="td-c td-bold">${r.saleNo}</td>
-          <td class="td-c">${r.barcode || '-'}</td>
+          <td class="td-c td-bold">${escapeHtml(r.terminal)}</td>
+          <td class="td-c td-bold">${escapeHtml(r.saleNo)}</td>
+          <td class="td-c">${escapeHtml(r.barcode || '-')}</td>
           <td class="td-l">${escapeHtml(r.productName)}</td>
           <td class="td-r td-bold">${r.qty}</td>
           <td class="td-cur">${Number(r.unitPrice.toFixed(2))}</td>
@@ -18016,9 +18154,9 @@ function exportRawItemsExcel(isCurrentSearchResult = false){
           <td class="td-c">${i + 1}</td>
           <td class="td-c">${r.date}</td>
           <td class="td-c">${r.time}</td>
-          <td class="td-c td-bold">${r.terminal}</td>
-          <td class="td-c td-bold">${r.saleNo}</td>
-          <td class="td-c">${r.barcode || '-'}</td>
+          <td class="td-c td-bold">${escapeHtml(r.terminal)}</td>
+          <td class="td-c td-bold">${escapeHtml(r.saleNo)}</td>
+          <td class="td-c">${escapeHtml(r.barcode || '-')}</td>
           <td class="td-l">${escapeHtml(r.productName)}</td>
           <td class="td-r td-bold">${r.qty}</td>
           <td class="td-cur">${Number(r.unitPrice.toFixed(2))}</td>
@@ -18093,10 +18231,10 @@ function exportSalesExcel(){
           <td class="td-c">${i + 1}</td>
           <td class="td-c">${s.sale_date || '-'}</td>
           <td class="td-c">${String(s.sale_time || '').slice(0, 5) || '-'}</td>
-          <td class="td-c td-bold">${s.terminal_code || 'POS-01'}</td>
-          <td class="td-c td-bold">${s.sale_no || '-'}</td>
+          <td class="td-c td-bold">${escapeHtml(s.terminal_code || 'POS-01')}</td>
+          <td class="td-c td-bold">${escapeHtml(s.sale_no || '-')}</td>
           <td class="td-cur">${Number((Number(s.total_amount) || 0).toFixed(2))}</td>
-          <td class="td-c ${s.payment_method === 'qr' ? 'badge-qr' : 'badge-cash'}">${s.payment_method === 'qr' ? 'QR PromptPay' : 'เงินสด'}</td>
+          <td class="td-c ${isQrPayment(s.payment_method) ? 'badge-qr' : 'badge-cash'}">${isQrPayment(s.payment_method) ? 'QR PromptPay' : 'เงินสด'}</td>
           <td class="td-r">${s.received_amount !== undefined && s.received_amount !== null ? Number(Number(s.received_amount).toFixed(2)) : '-'}</td>
           <td class="td-r">${s.change_amount !== undefined && s.change_amount !== null ? Number(Number(s.change_amount).toFixed(2)) : '-'}</td>
         </tr>
@@ -18315,9 +18453,9 @@ function exportDailySummaryExcel(){
           <td class="td-c td-bold">${i + 1}</td>
           <td class="td-c">${r.date}</td>
           <td class="td-c">${r.time}</td>
-          <td class="td-c td-bold">${r.terminal}</td>
-          <td class="td-c td-bold">${r.saleNo}</td>
-          <td class="td-c">${r.barcode || '-'}</td>
+          <td class="td-c td-bold">${escapeHtml(r.terminal)}</td>
+          <td class="td-c td-bold">${escapeHtml(r.saleNo)}</td>
+          <td class="td-c">${escapeHtml(r.barcode || '-')}</td>
           <td class="td-l">${escapeHtml(r.productName)}</td>
           <td class="td-cur" style="color:#64748b; text-decoration:line-through;">${Number(r.originalPrice.toFixed(2))}</td>
           <td class="td-cur">${Number(r.unitPrice.toFixed(2))}</td>
@@ -18421,9 +18559,9 @@ function exportDiscountedItemsExcel(isCurrentSearchResult = false){
           <td class="td-c td-bold">${i + 1}</td>
           <td class="td-c">${r.date}</td>
           <td class="td-c">${r.time}</td>
-          <td class="td-c td-bold">${r.terminal}</td>
-          <td class="td-c td-bold">${r.saleNo}</td>
-          <td class="td-c">${r.barcode || '-'}</td>
+          <td class="td-c td-bold">${escapeHtml(r.terminal)}</td>
+          <td class="td-c td-bold">${escapeHtml(r.saleNo)}</td>
+          <td class="td-c">${escapeHtml(r.barcode || '-')}</td>
           <td class="td-l">${escapeHtml(r.productName)}</td>
           <td class="td-cur" style="color:#64748b; text-decoration:line-through;">${Number(r.originalPrice.toFixed(2))}</td>
           <td class="td-cur">${Number(r.unitPrice.toFixed(2))}</td>
@@ -18630,7 +18768,7 @@ function exportSalesCSV(){
       s.terminal_code || "POS-01",
       s.sale_no || "-",
       Number((Number(s.total_amount) || 0).toFixed(2)),
-      s.payment_method === "qr" ? "QR PromptPay" : "เงินสด (Cash)",
+      isQrPayment(s.payment_method) ? "QR PromptPay" : "เงินสด (Cash)",
       s.received_amount !== undefined && s.received_amount !== null ? Number(Number(s.received_amount).toFixed(2)) : "-",
       s.change_amount !== undefined && s.change_amount !== null ? Number(Number(s.change_amount).toFixed(2)) : "-"
     ]),
@@ -18932,7 +19070,7 @@ function exportAccountingJournalCSV(){
       Number(exclVat.toFixed(2)),
       Number(vat.toFixed(2)),
       Number(grand.toFixed(2)),
-      s.payment_method === "promptpay" || s.payment_method === "qr" ? "QR PromptPay" : "เงินสด (Cash)",
+      isQrPayment(s.payment_method) ? "QR PromptPay" : "เงินสด (Cash)",
       Number((s.received_amount || 0).toFixed(2)),
       Number((s.change_amount || 0).toFixed(2)),
       s.is_cancelled ? "CANCELLED (ยกเลิก)" : "COMPLETED (สมบูรณ์)"
@@ -19014,7 +19152,7 @@ function exportAccountingJournalExcel(){
         <td class="money">฿${money(exclVat)}</td>
         <td class="money" style="color:#2563eb;">฿${money(vat)}</td>
         <td class="money" style="font-weight:bold; color:#059669;">฿${money(grand)}</td>
-        <td>${s.payment_method === "promptpay" || s.payment_method === "qr" ? "QR PromptPay" : "เงินสด"}</td>
+        <td>${isQrPayment(s.payment_method) ? "QR PromptPay" : "เงินสด"}</td>
         <td class="money">฿${money(s.received_amount || 0)}</td>
         <td class="money">฿${money(s.change_amount || 0)}</td>
         <td>${s.is_cancelled ? '<span style="color:#dc2626; font-weight:bold;">ยกเลิก</span>' : '<span style="color:#059669; font-weight:bold;">ปกติ</span>'}</td>
@@ -20785,6 +20923,12 @@ function renderSettings(){
     ${card("🎨 สีธีม & โหมดสว่าง/มืด (Theme & Dark/Light Mode)", renderThemeSelectorHTML())}
 
     ${card("จุดขายของเครื่องนี้",`<p style="margin-top:0;color:var(--muted);font-size:12px">ตั้งคนละ POS ในแต่ละแท็บเล็ต เช่น เครื่องแรก POS-01 เครื่องสอง POS-02</p><div class="terminal-options">${["POS-01","POS-02","POS-03","POS-04"].map(c=>`<button class="terminal-btn ${state.terminal===c?"active":""}" onclick="setTerminal('${c}')">${c}</button>`).join("")}</div>`)}
+
+    ${card("📱 รับบิลจากมือถือ (สแกนส่งเครื่องคิดเงิน)",`<p style="margin-top:0;color:var(--muted);font-size:12px">เปิดที่แท็บเล็ต/เครื่องคิดเงิน เพื่อรับบิลที่พนักงานสแกนจากมือถือ • มือถือที่ใช้สแกนอย่างเดียวให้ปิดไว้<br>มือถือ: เมนู <b>สแกนส่งเครื่องคิดเงิน</b> → สแกนสินค้า → กด <b>📤 ส่งไปเครื่องคิดเงิน</b></p>
+      <label class="toggle-switch-row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <span>รับบิลจากมือถือที่เครื่องนี้ (${escapeHtml(state.terminal)})</span>
+        <label class="toggle-switch"><input type="checkbox" ${window.isRemoteInboxEnabled?.() ? "checked" : ""} onchange="toggleRemoteInbox(this.checked)"><span class="toggle-slider"></span></label>
+      </label>`)}
     
     ${card("🎨 ปรับแต่งใบเสร็จรับเงิน & สลิป (Receipt Customization)", `
       <p style="margin-top:0;color:var(--muted);font-size:12px">
@@ -20938,7 +21082,7 @@ function clearSupabaseSettings(){
   toast("ล้างการตั้งค่าคัสตอมแล้ว");
   loadAll();
 }
-function setTerminal(code){state.terminal=code;localStorage.setItem(TERMINAL_KEY,code);toast(`เครื่องนี้เป็น ${code}`);renderSettings()}
+function setTerminal(code){state.terminal=code;localStorage.setItem(TERMINAL_KEY,code);toast(`เครื่องนี้เป็น ${code}`);renderSettings();window.refreshRemoteInbox?.()}
 async function upsertSetting(k,v){return sb.from("ea_settings").upsert({setting_key:k,setting_value:String(v)},{onConflict:"setting_key"})}
 async function saveSettings(){
   const shopName = el("shopName")?.value.trim() || "EA Fair Sale";

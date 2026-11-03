@@ -13480,6 +13480,7 @@ function getAuditAnalyticsData(){
 }
 
 function renderPhysicalAuditPage(){
+  document.body.classList.toggle("audit-fs", !!state.auditFullscreen);
   setHeader("ตรวจนับสต็อกจริง & ประวัติ","Physical Inventory Audit & Batch Reconciliation History");
   initPhysicalAuditState(false);
 
@@ -13496,7 +13497,10 @@ function renderPhysicalAuditPage(){
         </button>
       </div>
 
-      <div style="display:flex; align-items:center; gap:8px;">
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <button type="button" class="btn ${state.auditFullscreen ? 'btn-primary' : 'btn-light'} audit-fs-btn" style="padding:6px 12px; font-size:12px; font-weight:800;" onclick="toggleAuditFullscreen()" title="${state.auditFullscreen ? 'ออกจากโหมดเต็มหน้า' : 'เปิดหน้าตรวจนับแบบเต็มหน้าจอ'}">
+          ${state.auditFullscreen ? '✖️ ออกจากเต็มจอ' : '⛶ เต็มจอ'}
+        </button>
         ${currentSubTab === 'history' ? `
           <button type="button" class="btn btn-primary" style="padding:6px 12px; font-size:12px; background:linear-gradient(135deg, #ef4444 0%, #dc2626 100%); border-color:#fca5a5; font-weight:700;" onclick="exportAuditBatchHistoryPDF()" title="ส่งออก/พิมพ์รายงานประวัติการตรวจนับทั้งหมดเป็น PDF">
             📄 Export to PDF
@@ -14385,6 +14389,39 @@ async function applyStockAuditAdjustments(){
     toast(`✅ บันทึกกระทบยอดสต็อกสำเร็จ ${successCount} รายการ${online ? "" : " (ออฟไลน์: ปรับเฉพาะในเครื่องนี้)"} และลงบันทึก Batch History แล้ว`);
   }
 }
+
+/* ---------- Full-screen mode for the Stock Audit page ---------- */
+function isAuditFullscreen(){ return document.body.classList.contains("audit-fs"); }
+function enterAuditFullscreen(){
+  document.body.classList.add("audit-fs");
+  state.auditFullscreen = true;
+  const de = document.documentElement;
+  const req = de.requestFullscreen || de.webkitRequestFullscreen;
+  const inStandalone = window.matchMedia && window.matchMedia("(display-mode: standalone)").matches;
+  if(req && !inStandalone && !(document.fullscreenElement || document.webkitFullscreenElement)){
+    try { const p = req.call(de); if(p && p.catch) p.catch(() => {}); } catch(_) {}
+  }
+  if(state.page === "audit") renderPhysicalAuditPage();
+  window.scrollTo({ top: 0 });
+}
+function exitAuditFullscreen(rerender = true){
+  document.body.classList.remove("audit-fs");
+  state.auditFullscreen = false;
+  if(document.fullscreenElement || document.webkitFullscreenElement){
+    const ex = document.exitFullscreen || document.webkitExitFullscreen;
+    try { const p = ex && ex.call(document); if(p && p.catch) p.catch(() => {}); } catch(_) {}
+  }
+  if(rerender && state.page === "audit") renderPhysicalAuditPage();
+}
+function toggleAuditFullscreen(){
+  if(isAuditFullscreen()) exitAuditFullscreen(); else enterAuditFullscreen();
+}
+// ปิดโหมดเต็มจอของเบราว์เซอร์ (ปัดลง / กด Esc) = ออกจากโหมดเต็มหน้าด้วย
+["fullscreenchange", "webkitfullscreenchange"].forEach(evt => document.addEventListener(evt, () => {
+  if(!(document.fullscreenElement || document.webkitFullscreenElement) && isAuditFullscreen()){
+    exitAuditFullscreen();
+  }
+}));
 
 function setAuditSubTab(tab){
   state.auditSubTab = tab;
@@ -21474,7 +21511,7 @@ function toggleHomeTopCardsMode() {
   toast(`ปรับขนาดการ์ดบน: ${labelMap[state.homeTopCardsMode]}`);
 }
 
-function go(page){if(state.page==="sale"&&page!=="sale"){stopScanner();stopCartLiveScanner();}state.page=page;render();window.scrollTo({top:0,behavior:"smooth"})}
+function go(page){if(state.page==="sale"&&page!=="sale"){stopScanner();stopCartLiveScanner();}if(page!=="audit"&&state.auditFullscreen)exitAuditFullscreen(false);state.page=page;render();window.scrollTo({top:0,behavior:"smooth"})}
 el("searchInput").addEventListener("input",()=>{
   if(state.page!=="stock"){
     state.page="stock";
@@ -21528,7 +21565,7 @@ Object.assign(window,{
   setPosMode,onPosSearchInput,clearPosSearch,addProductToCartById,setPaymentMethod,
   setQuickCash,addQuickCash,clearQuickCash,generateQuickPayAmounts,calculateChangeBreakdown,onReceivedCashInput,setStockFilter,setStockViewMode,onStockSearch,clearStockSearch,
   setStockPage,setStockPageSize,setStockSort,toggleStockTableSort,
-  openStockAuditModal,toggleAuditBulkMode,setAuditBulkQty,stepAuditBulkQty,onAuditBulkQtyInput,setAuditFilter,setAuditScanStep,onAuditSearch,handleAuditBarcodeInput,handleAuditScannedBarcode,undoAuditRecentScan,startAuditCameraScan,updateAuditCount,stepAuditCount,resetAuditProductToSystem,setAllAuditToSystem,setAllAuditToZero,openDiscrepancyReportModal,printDiscrepancyReport,applyStockAuditAdjustments,exportStockAuditExcel,exportStockAuditCSV,renderPhysicalAuditPage,
+  openStockAuditModal,toggleAuditFullscreen,enterAuditFullscreen,exitAuditFullscreen,toggleAuditBulkMode,setAuditBulkQty,stepAuditBulkQty,onAuditBulkQtyInput,setAuditFilter,setAuditScanStep,onAuditSearch,handleAuditBarcodeInput,handleAuditScannedBarcode,undoAuditRecentScan,startAuditCameraScan,updateAuditCount,stepAuditCount,resetAuditProductToSystem,setAllAuditToSystem,setAllAuditToZero,openDiscrepancyReportModal,printDiscrepancyReport,applyStockAuditAdjustments,exportStockAuditExcel,exportStockAuditCSV,renderPhysicalAuditPage,
   setAuditSubTab,setAuditHistoryFilterStatus,onAuditHistorySearchInput,openAuditBatchDetailModal,switchAuditDetailModalTab,exportAuditBatchHistoryExcel,exportAuditBatchHistoryPDF,renderAuditBatchHistoryTab,
   initDashboardAllFilter,getDashboardAllDateRange,setDashboardAllPeriod,onDashboardAllDateInputChange,applyDashboardAllCustomDate,getDashboardAllFilteredSales,setAllDaysChartMetric,mountAllDaysSalesChart,renderAllDaysSalesChart,
   initSalesHistoryFilter,getFilteredSalesHistory,getSalesHistoryKPIs,setSalesHistoryPeriod,

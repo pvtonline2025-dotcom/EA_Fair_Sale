@@ -21204,7 +21204,33 @@ function clearSupabaseSettings(){
   loadAll();
 }
 function setTerminal(code){state.terminal=code;localStorage.setItem(TERMINAL_KEY,code);toast(`เครื่องนี้เป็น ${code}`);renderSettings();window.refreshRemoteInbox?.()}
-async function upsertSetting(k,v){return sb.from("ea_settings").upsert({setting_key:k,setting_value:String(v)},{onConflict:"setting_key"})}
+// Save settings to Supabase. Uses ea_save_settings (migration V12); falls back to a direct upsert.
+// Returns { ok, error } — callers must not report success when ok is false.
+async function saveSettingsRemote(map){
+  if(!sb) return { ok:false, error:"ยังไม่ได้เชื่อมต่อฐานข้อมูล" };
+  const payload = {};
+  for(const [k,v] of Object.entries(map)) payload[k] = String(v ?? "");
+  try {
+    const { error } = await sb.rpc("ea_save_settings", { p_settings: payload });
+    if(!error) return { ok:true };
+    const missing = /PGRST202|could not find the function|schema cache/i.test(`${error.code||""} ${error.message||""}`);
+    if(!missing) return { ok:false, error: error.message || "บันทึกไม่สำเร็จ" };
+  } catch(e){ return { ok:false, error: e?.message || String(e) }; }
+  // Fallback (before V12): direct upsert, checking every result
+  const results = await Promise.all(Object.entries(payload).map(([k,v]) =>
+    sb.from("ea_settings").upsert({setting_key:k,setting_value:v},{onConflict:"setting_key"})));
+  const failed = results.find(r => r.error);
+  if(failed){
+    const unauthorized = failed.status === 401 || failed.status === 403 || /permission|row-level security|42501/i.test(`${failed.error.code||""} ${failed.error.message||""}`);
+    return { ok:false, error: unauthorized ? "ฐานข้อมูลไม่อนุญาตให้บันทึก — รัน migration_v12_save_settings.sql ใน Supabase" : (failed.error.message || "บันทึกไม่สำเร็จ") };
+  }
+  return { ok:true };
+}
+async function upsertSetting(k,v){
+  const r = await saveSettingsRemote({ [k]: v });
+  if(!r.ok) throw new Error(r.error);
+  return r;
+}
 async function saveSettings(){
   const shopName = el("shopName")?.value.trim() || "EA Fair Sale";
   const shopBranch = el("shopBranch")?.value.trim() || "";
@@ -21238,30 +21264,36 @@ async function saveSettings(){
     theme
   };
 
-  if (sb && !state.isOffline) {
-    try {
-      await Promise.all([
-        upsertSetting("shop_name", shopName),
-        upsertSetting("shop_branch", shopBranch),
-        upsertSetting("shop_address", shopAddress),
-        upsertSetting("shop_phone", shopPhone),
-        upsertSetting("prompt_pay_id", promptPayId),
-        upsertSetting("shop_tax_id", shopTaxId),
-        upsertSetting("shop_line", shopLine),
-        upsertSetting("receipt_footer_note", receiptFooterNote),
-        upsertSetting("enable_vat", String(enableVat)),
-        upsertSetting("vat_rate", String(vatRate)),
-        upsertSetting("daily_target", target),
-        upsertSetting("low_stock_default", low),
-        upsertSetting("theme", theme)
-      ]);
-    } catch (ex) {
-      console.warn("Save settings exception, updating locally:", ex);
-    }
+  saveLocalState();
+
+  if (!sb || state.isOffline || !navigator.onLine) {
+    toast("⚠️ ออฟไลน์อยู่ • บันทึกไว้ในเครื่องนี้เท่านั้น ต่อเน็ตแล้วกดบันทึกอีกครั้ง", 5000);
+    renderSettings();
+    return;
   }
 
-  saveLocalState();
-  toast("บันทึกการตั้งค่าสลิปใบเสร็จและระบบเรียบร้อย 🧾");
+  const result = await saveSettingsRemote({
+    shop_name: shopName,
+    shop_branch: shopBranch,
+    shop_address: shopAddress,
+    shop_phone: shopPhone,
+    prompt_pay_id: promptPayId,
+    shop_tax_id: shopTaxId,
+    shop_line: shopLine,
+    receipt_footer_note: receiptFooterNote,
+    enable_vat: enableVat,
+    vat_rate: vatRate,
+    daily_target: target,
+    low_stock_default: low,
+    theme
+  });
+
+  if (result.ok) {
+    toast("บันทึกการตั้งค่าเรียบร้อย ทุกเครื่องจะใช้ค่านี้ ✅");
+  } else {
+    console.warn("Save settings failed:", result.error);
+    toast("❌ บันทึกขึ้นระบบไม่สำเร็จ: " + result.error, 8000);
+  }
   renderSettings();
 }
 

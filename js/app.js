@@ -1022,7 +1022,7 @@ async function triggerLowStockEmail(force = false) {
       stock: Number(p.stock_qty || 0),
       minStock: Number(p.min_stock || 0),
       unit: p.unit || p.unit_name || "ชิ้น",
-      price: Number(p.unit_price || 0)
+      price: Number(p.sale_price ?? p.unit_price ?? 0)
     }))
   };
 
@@ -13090,13 +13090,31 @@ async function saveMovement(){
    STOCK AUDIT & PHYSICAL COUNT SUITE (PHYSICAL AUDIT MODULE)
    ========================================================= */
 
+// Audit uses the real selling price field (products have sale_price, not unit_price)
+function auditUnitPrice(p){
+  return Number(p?.sale_price ?? p?.unit_price ?? 0) || 0;
+}
+
+let _auditRenderTimer = null;
+function rerenderAuditView(delay = 0){
+  clearTimeout(_auditRenderTimer);
+  const run = () => {
+    if(state.page === "audit") renderPhysicalAuditPage();
+    else if(el("modal")?.open) renderStockAuditModalContent();
+  };
+  if(delay > 0) _auditRenderTimer = setTimeout(run, delay); else run();
+}
+
 function initPhysicalAuditState(force = false){
   if(!state.auditCounts || force){
     state.auditCounts = {};
+    state.auditTouched = {};
     (state.products || []).forEach(p => {
       state.auditCounts[p.id] = Number(p.stock_qty || 0);
     });
   }
+  if(!state.auditTouched || typeof state.auditTouched !== "object") state.auditTouched = {};
+  if(!Array.isArray(state.auditSessionScanLogs)) state.auditSessionScanLogs = [];
   if(state.auditBulkMode === undefined) state.auditBulkMode = false;
   if(!state.auditBulkQty) state.auditBulkQty = 10;
   if(!state.auditScanStep) state.auditScanStep = state.auditBulkMode ? (state.auditBulkQty || 10) : 1;
@@ -13176,15 +13194,15 @@ function setAuditScanStep(step){
 function onAuditSearch(val){
   state.auditSearch = String(val || "").trim().toLowerCase();
   if(state.page === "audit"){
-    renderPhysicalAuditPage();
-    setTimeout(()=>{
-      const inp = el("auditSearchInput");
-      if(inp){
-        inp.focus();
-        const len = inp.value.length;
-        inp.setSelectionRange(len, len);
-      }
-    }, 10);
+    // หน่วงการวาดหน้าใหม่จนพิมพ์เสร็จ (ไม่ให้ตัวอักษรหาย/สระไทยหลุดระหว่างพิมพ์)
+    clearTimeout(_auditRenderTimer);
+    _auditRenderTimer = setTimeout(() => {
+      if(state.page !== "audit") return;
+      const cur = el("auditSearchInput");
+      if(cur && String(cur.value || "").trim().toLowerCase() !== state.auditSearch) return;
+      state.auditFocusTarget = document.activeElement === cur ? "auditSearchInput" : null;
+      renderPhysicalAuditPage();
+    }, 350);
   } else {
     renderStockAuditModalContent();
     setTimeout(()=>{
@@ -13220,9 +13238,11 @@ function handleAuditBarcodeInput(e){
       toast(`❌ ไม่พบบาร์โค้ดหรือรหัส "${val}" ในระบบ`);
       beepError();
       if(isScanVibrationEnabled) navigator.vibrate?.([60, 50, 60]);
+      inp?.select?.();
       return;
     }
 
+    state.auditFocusTarget = "auditBarcodeInput";
     handleAuditScannedBarcode(p);
     if(inp){
       inp.value = "";
@@ -13236,9 +13256,13 @@ function handleAuditScannedBarcode(p, customStep = null){
   initPhysicalAuditState(false);
   const step = customStep !== null ? customStep : (state.auditScanStep || 1);
   const sysQty = Number(p.stock_qty || 0);
-  const currentCount = Number(state.auditCounts[p.id] !== undefined ? state.auditCounts[p.id] : sysQty);
+  // นับจริงต้องเริ่มจาก 0 เมื่อสแกนสินค้านั้นครั้งแรก (เดิมบวกต่อจากยอดในระบบ ทำให้ยอดนับเกินจริง)
+  const firstScan = !state.auditTouched[p.id];
+  const storedBefore = state.auditCounts[p.id];
+  const currentCount = firstScan ? 0 : Number(storedBefore !== undefined ? storedBefore : sysQty);
   const newCount = currentCount + step;
   state.auditCounts[p.id] = newCount;
+  state.auditTouched[p.id] = true;
 
   const diff = newCount - sysQty;
   const now = new Date();
@@ -13261,12 +13285,32 @@ function handleAuditScannedBarcode(p, customStep = null){
     productCode: p.product_code || "-",
     barcode: p.barcode || "-",
     unit: p.unit || "ชิ้น",
-    unitPrice: Number(p.unit_price || 0),
+    unitPrice: auditUnitPrice(p),
     step,
+    previousCount: currentCount,
+    storedBefore,
+    firstScan,
     newCount,
     sysQty,
     diff,
     time: timeStr
+  });
+  state.auditSessionScanLogs.push({
+    scanOrder: state.auditSessionScanLogs.length + 1,
+    timestamp: `${todayISO()} ${timeStr}`,
+    timeStr,
+    productId: p.id,
+    productCode: p.product_code || "-",
+    barcode: p.barcode || "-",
+    productName: p.product_name,
+    unit: p.unit || "ชิ้น",
+    unitPrice: auditUnitPrice(p),
+    step,
+    previousCount: currentCount,
+    newCount,
+    sysQty,
+    diff,
+    scanMethod: "📷 สแกน"
   });
 
   if(state.auditRecentScans.length > 20){
@@ -13277,8 +13321,7 @@ function handleAuditScannedBarcode(p, customStep = null){
   if(isScanVibrationEnabled) navigator.vibrate?.(60);
   toast(`📦 ตรวจนับ [+${step}] "${p.product_name}": นับจริง ${newCount} ${p.unit||'ชิ้น'} (ระบบ ${sysQty}, ${diff >= 0 ? '+' + diff : diff})`);
 
-  if(state.page === "audit") renderPhysicalAuditPage();
-  else if(el("modal")?.open) renderStockAuditModalContent();
+  rerenderAuditView();
 }
 
 function undoAuditRecentScan(index = 0){
@@ -13287,14 +13330,35 @@ function undoAuditRecentScan(index = 0){
   const p = productById(item.productId);
   if(!p) return;
 
+  initPhysicalAuditState(false);
   const currentCount = Number(state.auditCounts[p.id] || 0);
-  const restored = Math.max(0, currentCount - item.step);
-  state.auditCounts[p.id] = restored;
+  let restored;
+  if(item.firstScan){
+    // สแกนแรกของสินค้านี้ → คืนสถานะ "ยังไม่ได้นับ"
+    restored = Number(item.storedBefore !== undefined ? item.storedBefore : (p.stock_qty || 0));
+    state.auditCounts[p.id] = restored;
+    delete state.auditTouched[p.id];
+  } else {
+    restored = Math.max(0, currentCount - item.step);
+    state.auditCounts[p.id] = restored;
+  }
   state.auditRecentScans.splice(index, 1);
+  const logs = state.auditSessionScanLogs || [];
+  for(let i = logs.length - 1; i >= 0; i--){
+    if(logs[i].productId === item.productId && logs[i].timeStr === item.time && logs[i].step === item.step){ logs.splice(i, 1); break; }
+  }
+  const nextRecent = state.auditRecentScans[0];
+  const nextProd = nextRecent ? productById(nextRecent.productId) : null;
+  state.auditLastScanned = nextProd ? {
+    product: nextProd, step: nextRecent.step, previousCount: nextRecent.previousCount,
+    newCount: Number(state.auditCounts[nextProd.id] ?? nextRecent.newCount),
+    sysQty: Number(nextProd.stock_qty || 0),
+    diff: Number(state.auditCounts[nextProd.id] ?? nextRecent.newCount) - Number(nextProd.stock_qty || 0),
+    time: nextRecent.time
+  } : null;
 
   toast(`↩️ ยกเลิกการสแกน "${p.product_name}" (-${item.step}) แล้ว คงเหลือยอดนับ ${restored}`);
-  if(state.page === "audit") renderPhysicalAuditPage();
-  else if(el("modal")?.open) renderStockAuditModalContent();
+  rerenderAuditView();
 }
 
 function startAuditCameraScan(){
@@ -13302,12 +13366,13 @@ function startAuditCameraScan(){
   startScanner();
 }
 
-function updateAuditCount(prodId, val){
+// rerender: false = แค่จำค่าระหว่างพิมพ์ (ไม่วาดหน้าใหม่ เพื่อไม่ให้ช่องหลุดโฟกัส)
+function updateAuditCount(prodId, val, rerender = true){
   initPhysicalAuditState(false);
   const num = val === "" ? 0 : Math.max(0, parseInt(val, 10) || 0);
   state.auditCounts[prodId] = num;
-  if(state.page === "audit") renderPhysicalAuditPage();
-  else renderStockAuditModalContent();
+  state.auditTouched[prodId] = true;
+  if(rerender) rerenderAuditView(180);
 }
 
 function stepAuditCount(prodId, delta){
@@ -13315,8 +13380,8 @@ function stepAuditCount(prodId, delta){
   const current = Number(state.auditCounts[prodId] !== undefined ? state.auditCounts[prodId] : (productById(prodId)?.stock_qty || 0));
   const nextVal = Math.max(0, current + Number(delta));
   state.auditCounts[prodId] = nextVal;
-  if(state.page === "audit") renderPhysicalAuditPage();
-  else renderStockAuditModalContent();
+  state.auditTouched[prodId] = true;
+  rerenderAuditView();
 }
 
 function resetAuditProductToSystem(prodId){
@@ -13324,6 +13389,7 @@ function resetAuditProductToSystem(prodId){
   if(p){
     initPhysicalAuditState(false);
     state.auditCounts[prodId] = Number(p.stock_qty || 0);
+    delete state.auditTouched[prodId];
     toast(`คืนค่ายอดนับ "${p.product_name}" ให้ตรงกับระบบ (${p.stock_qty || 0}) แล้ว`);
     if(state.page === "audit") renderPhysicalAuditPage();
     else renderStockAuditModalContent();
@@ -13333,6 +13399,8 @@ function resetAuditProductToSystem(prodId){
 function setAllAuditToSystem(){
   initPhysicalAuditState(true);
   state.auditRecentScans = [];
+  state.auditSessionScanLogs = [];
+  state.auditLastScanned = null;
   toast("🔄 รีเซ็ตยอดตรวจนับทั้งหมดให้ตรงกับระบบเรียบร้อยแล้ว");
   if(state.page === "audit") renderPhysicalAuditPage();
   else renderStockAuditModalContent();
@@ -13342,6 +13410,7 @@ function setAllAuditToZero(){
   initPhysicalAuditState(false);
   (state.products || []).forEach(p => {
     state.auditCounts[p.id] = 0;
+    state.auditTouched[p.id] = true;
   });
   toast("ตั้งค่ายอดนับสินค้าทั้งหมดเป็น 0 ชิ้นแล้ว");
   if(state.page === "audit") renderPhysicalAuditPage();
@@ -13366,7 +13435,7 @@ function getAuditAnalyticsData(){
     const sysQty = Number(p.stock_qty || 0);
     const countQty = Number(counts[p.id] !== undefined ? counts[p.id] : sysQty);
     const diff = countQty - sysQty;
-    const unitPrice = Number(p.unit_price || 0);
+    const unitPrice = auditUnitPrice(p);
     const diffVal = diff * unitPrice;
 
     if(diff === 0){
@@ -13463,12 +13532,14 @@ function renderPhysicalAuditPage(){
   const search = state.auditSearch || "";
   const step = state.auditScanStep || 1;
   const lastScan = state.auditLastScanned;
+  const untouchedCount = analytics.auditedList.filter(x => !state.auditTouched[x.product.id]).length;
 
   const filtered = analytics.auditedList.filter(item => {
     if(filter === "discrepancy" && item.diff === 0) return false;
     if(filter === "surplus" && item.diff <= 0) return false;
     if(filter === "shortage" && item.diff >= 0) return false;
     if(filter === "matched" && item.diff !== 0) return false;
+    if(filter === "untouched" && state.auditTouched[item.product.id]) return false;
 
     if(!search) return true;
     const p = item.product;
@@ -13520,7 +13591,7 @@ function renderPhysicalAuditPage(){
             <svg class="audit-barcode-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M6 8v8M10 8v8M14 8v8M18 8v8"></path>
             </svg>
-            <input id="auditBarcodeInput" type="search" autofocus placeholder="สแกนบาร์โค้ด หรือพิมพ์รหัสสินค้า แล้วกด Enter..." onkeydown="handleAuditBarcodeInput(event)">
+            <input id="auditBarcodeInput" type="search" enterkeyhint="done" autocomplete="off" placeholder="สแกนบาร์โค้ด หรือพิมพ์รหัสสินค้า แล้วกด Enter..." onkeydown="handleAuditBarcodeInput(event)">
           </div>
 
           <!-- Quantity Input Field with Stepper Buttons and Quick Chips -->
@@ -13621,6 +13692,7 @@ function renderPhysicalAuditPage(){
           <button type="button" class="audit-pill-btn ${filter==='shortage'?'active':''}" onclick="setAuditFilter('shortage')">🚨 ขาด (${analytics.shortageCount})</button>
           <button type="button" class="audit-pill-btn ${filter==='surplus'?'active':''}" onclick="setAuditFilter('surplus')">📈 เกิน (${analytics.surplusCount})</button>
           <button type="button" class="audit-pill-btn ${filter==='matched'?'active':''}" onclick="setAuditFilter('matched')">✓ ตรง (${analytics.matchCount})</button>
+          <button type="button" class="audit-pill-btn ${filter==='untouched'?'active':''}" onclick="setAuditFilter('untouched')" title="สินค้าที่ยังไม่ได้สแกน/นับ (ใช้ยอดระบบอยู่)">⏳ ยังไม่นับ (${untouchedCount})</button>
         </div>
 
         <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
@@ -13634,7 +13706,7 @@ function renderPhysicalAuditPage(){
 
       <!-- Discrepancy & Reconciliation Table -->
       <div class="audit-table-wrap" style="max-height: 52vh; margin-bottom:16px;">
-        <table class="audit-table">
+        <table class="audit-table audit-table--page">
           <thead>
             <tr>
               <th style="width:75px;">รหัส</th>
@@ -13657,7 +13729,7 @@ function renderPhysicalAuditPage(){
               const rowClass = item.diff > 0 ? "row-surplus" : (item.diff < 0 ? "row-shortage" : "");
 
               return `
-                <tr class="${rowClass}">
+                <tr class="${rowClass}${state.auditTouched[p.id] ? ' is-counted' : ' is-untouched'}">
                   <td><code style="color:#94a3b8; font-size:12px;">${escapeHtml(p.product_code || "-")}</code></td>
                   <td>
                     <div style="font-weight:700; color:#f1f5f9; font-size:13.5px;">${escapeHtml(p.product_name)}</div>
@@ -13665,17 +13737,18 @@ function renderPhysicalAuditPage(){
                       🏷️ ${escapeHtml(p.barcode || "-")} • ${escapeHtml(p.category || "ทั่วไป")}
                     </div>
                   </td>
-                  <td style="text-align:right; font-weight:700; color:#cbd5e1;">฿${money(p.unit_price)}</td>
+                  <td style="text-align:right; font-weight:700; color:#cbd5e1;">฿${money(auditUnitPrice(p))}</td>
                   <td style="text-align:center; font-weight:800; color:#94a3b8; font-size:14px;">
                     ${item.sysQty} <small style="font-size:11px; font-weight:normal;">${escapeHtml(p.unit||"ชิ้น")}</small>
                   </td>
                   <td style="text-align:center;">
                     <div class="audit-count-control">
                       <button type="button" class="audit-step-btn" onclick="stepAuditCount('${p.id}', -1)" title="ลด 1">−</button>
-                      <input type="number" min="0" class="audit-count-input" value="${item.countQty}" oninput="updateAuditCount('${p.id}', this.value)">
+                      <input type="number" min="0" class="audit-count-input" value="${item.countQty}" inputmode="numeric" onfocus="this.select()" oninput="updateAuditCount('${p.id}', this.value, false)" onchange="updateAuditCount('${p.id}', this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
                       <button type="button" class="audit-step-btn" onclick="stepAuditCount('${p.id}', 1)" title="เพิ่ม 1">+</button>
                       <button type="button" class="audit-step-btn" style="width:auto; padding:0 6px; font-size:11px;" onclick="stepAuditCount('${p.id}', 5)" title="เพิ่ม 5">+5</button>
                     </div>
+                    ${state.auditTouched[p.id] ? '' : '<div class="audit-untouched-hint">ยังไม่นับ • ใช้ยอดระบบ</div>'}
                   </td>
                   <td style="text-align:center;">
                     <span class="audit-diff-badge ${diffClass}" style="font-size:12px; padding:4px 9px;">${diffText} ${escapeHtml(p.unit||"ชิ้น")}</span>
@@ -13724,10 +13797,23 @@ function renderPhysicalAuditPage(){
     </section>
   `;
 
-  // Focus scan input automatically
+  // โฟกัส: คืนโฟกัสให้ช่องที่ผู้ใช้กำลังใช้ / บนแท็บเล็ต (จอสัมผัส) ไม่บังคับโฟกัสช่องสแกน เพื่อไม่ให้คีย์บอร์ดเด้งทุกครั้งที่กดปุ่ม
+  const focusTarget = state.auditFocusTarget;
+  state.auditFocusTarget = null;
+  if(focusTarget){
+    const t = el(focusTarget);
+    if(t){
+      t.focus();
+      if(focusTarget === "auditSearchInput"){ const len = t.value.length; try{ t.setSelectionRange(len, len); }catch(_){} }
+    }
+  }
   setTimeout(() => {
-    const input = el("auditBarcodeInput");
-    if(input) input.focus();
+    if(state.page !== "audit" || focusTarget) return;
+    const ae = document.activeElement;
+    if(ae && ae !== document.body && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return;
+    if(document.querySelector("dialog[open]")) return;
+    const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+    if(!coarse) el("auditBarcodeInput")?.focus();
   }, 50);
 }
 
@@ -13826,7 +13912,7 @@ function renderStockAuditModalContent(){
                   <td><code style="color:#94a3b8; font-size:11.5px;">${escapeHtml(p.product_code || "-")}</code></td>
                   <td>
                     <div style="font-weight:700; color:#f1f5f9;">${escapeHtml(p.product_name)}</div>
-                    <div style="font-size:11px; color:#64748b; font-family:monospace;">${escapeHtml(p.barcode || "-")} • ฿${money(p.unit_price)}/${escapeHtml(p.unit||"ชิ้น")}</div>
+                    <div style="font-size:11px; color:#64748b; font-family:monospace;">${escapeHtml(p.barcode || "-")} • ฿${money(auditUnitPrice(p))}/${escapeHtml(p.unit||"ชิ้น")}</div>
                   </td>
                   <td style="text-align:center; font-weight:800; color:#94a3b8; font-size:14px;">
                     ${item.sysQty} <small style="font-size:10px; font-weight:normal;">${escapeHtml(p.unit||"ชิ้น")}</small>
@@ -13834,7 +13920,7 @@ function renderStockAuditModalContent(){
                   <td style="text-align:center;">
                     <div class="audit-count-control">
                       <button type="button" class="audit-step-btn" onclick="stepAuditCount('${p.id}', -1)" title="ลด 1">−</button>
-                      <input type="number" min="0" class="audit-count-input" value="${item.countQty}" oninput="updateAuditCount('${p.id}', this.value)">
+                      <input type="number" min="0" class="audit-count-input" value="${item.countQty}" inputmode="numeric" onfocus="this.select()" oninput="updateAuditCount('${p.id}', this.value, false)" onchange="updateAuditCount('${p.id}', this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
                       <button type="button" class="audit-step-btn" onclick="stepAuditCount('${p.id}', 1)" title="เพิ่ม 1">+</button>
                       <button type="button" class="audit-step-btn" style="width:auto; padding:0 6px; font-size:11px;" onclick="stepAuditCount('${p.id}', 5)" title="เพิ่ม 5">+5</button>
                     </div>
@@ -14102,7 +14188,7 @@ function printDiscrepancyReport(){
               <td>${escapeHtml(d.product.product_code || '-')}</td>
               <td style="font-family:monospace;">${escapeHtml(d.product.barcode || '-')}</td>
               <td><b>${escapeHtml(d.product.product_name)}</b></td>
-              <td class="text-right">฿${money(d.product.unit_price)}</td>
+              <td class="text-right">฿${money(auditUnitPrice(d.product))}</td>
               <td class="text-center">${d.sysQty}</td>
               <td class="text-center"><b>${d.countQty}</b></td>
               <td class="text-center"><b>${d.diff > 0 ? '+' : ''}${d.diff}</b> ${escapeHtml(d.product.unit||'ชิ้น')}</td>
@@ -14141,18 +14227,14 @@ async function applyStockAuditAdjustments(){
   const counts = state.auditCounts || {};
   const noteInput = el("auditNoteInput");
   const note = (noteInput ? noteInput.value : state.auditNote) || "ปรับยอดจากการตรวจนับสต็อกจริง (Physical Audit)";
+  if(noteInput) state.auditNote = noteInput.value;
 
   const adjustments = [];
   (state.products || []).forEach(p => {
     const sysQty = Number(p.stock_qty || 0);
     const newQty = Number(counts[p.id] !== undefined ? counts[p.id] : sysQty);
     if(sysQty !== newQty){
-      adjustments.push({
-        product: p,
-        oldQty: sysQty,
-        newQty: newQty,
-        diff: newQty - sysQty
-      });
+      adjustments.push({ product: p, oldQty: sysQty, newQty, diff: newQty - sysQty });
     }
   });
 
@@ -14161,51 +14243,77 @@ async function applyStockAuditAdjustments(){
     return;
   }
 
+  const untouchedCount = (state.products || []).filter(p => !state.auditTouched[p.id]).length;
+  const confirmMsg = `ยืนยันปรับสต็อกตามยอดนับจริง ${adjustments.length} รายการ?` +
+    (untouchedCount > 0 ? `\n\n(สินค้าที่ยังไม่ได้นับ ${untouchedCount} รายการ จะคงยอดตามระบบ)` : "");
+  if(!window.confirm(confirmMsg)) return;
+
+  // สรุปผลต่าง "ก่อน" ปรับสต็อก (เดิมคำนวณหลังปรับ ทำให้ประวัติขึ้นว่าตรง 100% ทุกครั้ง)
+  const analytics = getAuditAnalyticsData();
   const now = new Date();
   const dateStr = todayISO();
   const timeStr = now.toTimeString().slice(0,8);
 
+  let scanHistoryLogs = (state.auditSessionScanLogs || []).slice();
+  if (scanHistoryLogs.length === 0) {
+    let seq = 1;
+    scanHistoryLogs = (state.products || []).filter(p => state.auditTouched[p.id]).map((p) => {
+      const sysQty = Number(p.stock_qty || 0);
+      const countQty = Number(counts[p.id] !== undefined ? counts[p.id] : sysQty);
+      return {
+        scanOrder: seq++, timestamp: `${dateStr} ${timeStr}`, timeStr,
+        productId: p.id, productCode: p.product_code || "-", barcode: p.barcode || "-",
+        productName: p.product_name, unit: p.unit || "ชิ้น", unitPrice: auditUnitPrice(p),
+        step: countQty, previousCount: 0, newCount: countQty, sysQty, diff: countQty - sysQty,
+        scanMethod: "📋 บันทึกตรวจนับรวม"
+      };
+    });
+  }
+
   let successCount = 0;
+  const failed = [];
+  const online = !!(sb && !state.isOffline);
 
   for(const adj of adjustments){
     const p = adj.product;
-    const moveType = "ADJUST";
     const qtyChange = adj.diff;
 
-    // Supabase Remote Sync if available
-    if(sb && !state.isOffline){
+    if(online){
       try {
-        await sb.rpc("ea_update_stock", {
-          p_product_id: p.id,
-          p_type: moveType,
-          p_qty: adj.newQty,
-          p_note: note
+        const { error } = await sb.rpc("ea_update_stock", {
+          p_product_id: p.id, p_type: "ADJUST", p_qty: adj.newQty, p_note: note
         });
+        if(error) throw error;
       } catch (ex) {
         console.warn("Audit remote stock update failed for", p.product_name, ex);
+        failed.push({ adj, message: ex?.message || String(ex) });
+        continue; // ไม่แก้ยอดในเครื่องถ้าเซิร์ฟเวอร์ไม่รับ เพื่อไม่ให้ยอดสองฝั่งไม่ตรงกัน
       }
     }
 
-    // Local state update
     p.stock_qty = adj.newQty;
-
     state.movements.unshift({
       id: "audit-move-" + Date.now() + "-" + Math.random().toString(36).substring(2,6),
       product_id: p.id,
       product_name: p.product_name,
-      movement_type: moveType,
+      movement_type: "ADJUST",
       qty_change: qtyChange,
       note: `${note} (${qtyChange > 0 ? '+' : ''}${qtyChange} ${p.unit || 'ชิ้น'})`,
       movement_date: dateStr,
       movement_time: timeStr,
       created_at: now.toISOString()
     });
-
+    delete state.auditTouched[p.id];
     successCount++;
   }
 
-  // Create Batch History Record
-  const analytics = getAuditAnalyticsData();
+  if(successCount === 0){
+    toast(`❌ ปรับสต็อกไม่สำเร็จ (${failed[0]?.message || "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้"}) ยอดนับยังอยู่ ลองกดบันทึกอีกครั้ง`, 6000);
+    rerenderAuditView();
+    return;
+  }
+
+  const failedIds = new Set(failed.map(f => f.adj.product.id));
   let status = "matched";
   let statusLabel = "✓ ตรงกับระบบ 100% (นับครบถ้วน)";
   if (analytics.shortageCount > 0 && analytics.surplusCount > 0) {
@@ -14217,34 +14325,6 @@ async function applyStockAuditAdjustments(){
   } else if (analytics.surplusCount > 0) {
     status = "surplus";
     statusLabel = `📈 มีผลต่าง - สต็อกเกิน +${analytics.totalSurplusUnits} ชิ้น (+฿${money(analytics.totalSurplusValue)})`;
-  }
-
-  // Prepare Scan History logs for batch persistence
-  let scanHistoryLogs = state.auditSessionScanLogs || [];
-  if (scanHistoryLogs.length === 0) {
-    let seq = 1;
-    scanHistoryLogs = (state.products || []).map((p) => {
-      const sysQty = Number(p.stock_qty || 0);
-      const countQty = Number(counts[p.id] !== undefined ? counts[p.id] : sysQty);
-      if (counts[p.id] === undefined && sysQty === 0) return null;
-      return {
-        scanOrder: seq++,
-        timestamp: `${dateStr} ${timeStr}`,
-        timeStr: timeStr,
-        productId: p.id,
-        productCode: p.product_code || "-",
-        barcode: p.barcode || "-",
-        productName: p.product_name,
-        unit: p.unit || "ชิ้น",
-        unitPrice: Number(p.sale_price || p.unit_price || 0),
-        step: countQty,
-        previousCount: 0,
-        newCount: countQty,
-        sysQty: sysQty,
-        diff: countQty - sysQty,
-        scanMethod: "📋 บันทึกตรวจนับรวม"
-      };
-    }).filter(Boolean);
   }
 
   const batchRecord = {
@@ -14263,15 +14343,15 @@ async function applyStockAuditAdjustments(){
     totalShortageValue: analytics.totalShortageValue,
     netDiscrepancyValue: analytics.netDiscrepancyValue,
     accuracyRate: analytics.accuracyRate,
-    status: status,
-    statusLabel: statusLabel,
-    note: note,
-    itemsDetail: analytics.auditedList.filter(x => x.diff !== 0).map(x => ({
+    status,
+    statusLabel: failed.length ? `${statusLabel} • ปรับไม่สำเร็จ ${failed.length} รายการ` : statusLabel,
+    note,
+    itemsDetail: analytics.auditedList.filter(x => x.diff !== 0 && !failedIds.has(x.product.id)).map(x => ({
       productCode: x.product.product_code || "-",
       barcode: x.product.barcode || "-",
       productName: x.product.product_name,
       unit: x.product.unit || "ชิ้น",
-      unitPrice: Number(x.product.sale_price || x.product.unit_price || 0),
+      unitPrice: auditUnitPrice(x.product),
       sysQty: x.sysQty,
       countQty: x.countQty,
       diff: x.diff,
@@ -14281,18 +14361,29 @@ async function applyStockAuditAdjustments(){
     scanHistory: scanHistoryLogs
   };
 
-  state.auditSessionScanLogs = [];
-
   if (!Array.isArray(state.auditBatchHistory)) state.auditBatchHistory = [];
   state.auditBatchHistory.unshift(batchRecord);
 
+  // เริ่มรอบนับใหม่ (คงยอดนับของรายการที่ปรับไม่สำเร็จไว้ให้กดบันทึกซ้ำ)
+  state.auditSessionScanLogs = [];
+  state.auditRecentScans = [];
+  state.auditLastScanned = null;
+  (state.products || []).forEach(p => {
+    if(!failedIds.has(p.id)){ state.auditCounts[p.id] = Number(p.stock_qty || 0); delete state.auditTouched[p.id]; }
+  });
+
   saveLocalState();
-  closeProductModal();
-  toast(`✅ บันทึกกระทบยอดสต็อกสำเร็จ ${successCount} รายการ และลงบันทึก Batch History เรียบร้อยแล้ว`);
+  if(el("modal")?.open && state.page !== "audit") closeProductModal();
   checkAndNotifyLowStock();
   render();
   if(state.page === "audit") renderPhysicalAuditPage();
   else if(state.page === "stock") renderStock();
+  // แจ้งผลหลังสุด เพื่อไม่ให้ถูกข้อความเตือนสต็อกต่ำทับ
+  if(failed.length){
+    toast(`⚠️ ปรับสต็อกสำเร็จ ${successCount} รายการ • ไม่สำเร็จ ${failed.length} รายการ (${failed[0].message}) ยอดนับที่เหลือยังอยู่ กดบันทึกซ้ำได้`, 7000);
+  } else {
+    toast(`✅ บันทึกกระทบยอดสต็อกสำเร็จ ${successCount} รายการ${online ? "" : " (ออฟไลน์: ปรับเฉพาะในเครื่องนี้)"} และลงบันทึก Batch History แล้ว`);
+  }
 }
 
 function setAuditSubTab(tab){
@@ -15145,7 +15236,7 @@ function exportStockAuditExcel(){
       p.barcode ? `'${p.barcode}` : "",
       p.product_name || "",
       p.category || "ทั่วไป",
-      Number(p.unit_price || 0),
+      auditUnitPrice(p),
       p.unit || "ชิ้น",
       item.sysQty,
       item.countQty,
@@ -15193,7 +15284,7 @@ function exportStockAuditCSV(){
       `"${(p.barcode || "").replace(/"/g, '""')}"`,
       `"${(p.product_name || "").replace(/"/g, '""')}"`,
       `"${(p.category || "ทั่วไป").replace(/"/g, '""')}"`,
-      Number(p.unit_price || 0),
+      auditUnitPrice(p),
       `"${(p.unit || "ชิ้น").replace(/"/g, '""')}"`,
       item.sysQty,
       item.countQty,
@@ -19959,16 +20050,31 @@ function generateCode128Svg(text, options = {}) {
     "114131", "311141", "411131", "211412", "211214", "211232", "2331112"
   ];
   
-  let codes = [104];
-  let checkSum = 104;
-  
-  for (let i = 0; i < cleanText.length; i++) {
-    const charCode = cleanText.charCodeAt(i);
-    const code = charCode >= 32 && charCode <= 126 ? charCode - 32 : 0;
-    codes.push(code);
-    checkSum += code * (i + 1);
+  // Code 128 แบบผสม B/C: ตัวเลขต่อกันใช้ชุด C (2 หลักต่อ 1 สัญลักษณ์) ทำให้แท่งกว้างขึ้น สแกนง่ายบนฉลากเล็ก
+  const codes = [];
+  let curSet = null;
+  const digitRun = (i) => { let n = 0; while (i + n < cleanText.length && /[0-9]/.test(cleanText[i + n])) n++; return n; };
+  const toB = () => { if (curSet !== "B") { codes.push(curSet === null ? 104 : 100); curSet = "B"; } };
+  let pos = 0;
+  while (pos < cleanText.length) {
+    let run = digitRun(pos);
+    if (run >= 4 || (run >= 2 && run % 2 === 0 && pos === 0 && run === cleanText.length)) {
+      if (run % 2 === 1) {
+        toB();
+        codes.push(cleanText.charCodeAt(pos) - 32);
+        pos++; run--;
+      }
+      if (curSet !== "C") { codes.push(curSet === null ? 105 : 99); curSet = "C"; }
+      for (let k = 0; k < run; k += 2) { codes.push(parseInt(cleanText.substr(pos, 2), 10)); pos += 2; }
+    } else {
+      toB();
+      const charCode = cleanText.charCodeAt(pos);
+      codes.push(charCode >= 32 && charCode <= 126 ? charCode - 32 : 0);
+      pos++;
+    }
   }
-  
+  let checkSum = codes[0];
+  for (let j = 1; j < codes.length; j++) checkSum += codes[j] * j;
   codes.push(checkSum % 103);
   codes.push(106);
   
@@ -19980,7 +20086,7 @@ function generateCode128Svg(text, options = {}) {
   let totalModules = 0;
   for (let ch of patternStr) totalModules += parseInt(ch, 10);
   
-  const quietZone = 8;
+  const quietZone = 10;
   const svgWidth = Math.round((totalModules + quietZone * 2) * width);
   const textH = showText ? 15 : 0;
   const svgHeight = height + textH;
@@ -19999,10 +20105,10 @@ function generateCode128Svg(text, options = {}) {
   
   let textSvg = "";
   if (showText) {
-    textSvg = `<text x="${(svgWidth / 2).toFixed(1)}" y="${height + 12}" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="11" font-weight="bold" fill="#000000" letter-spacing="1.5">${cleanText}</text>`;
+    textSvg = `<text x="${(svgWidth / 2).toFixed(1)}" y="${height + 12}" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="11" font-weight="bold" fill="#000000" letter-spacing="1.5">${escapeHtml(cleanText)}</text>`;
   }
   
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgWidth} ${svgHeight}" width="${svgWidth}" height="${svgHeight}" style="display:block; margin:0 auto; background:#ffffff; max-width:100%; height:auto;">${rects.join("")}${textSvg}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgWidth} ${svgHeight}" width="${svgWidth}" height="${svgHeight}" shape-rendering="crispEdges" style="display:block; margin:0 auto; background:#ffffff; max-width:100%; height:auto;">${rects.join("")}${textSvg}</svg>`;
 }
 
 // Global state for barcode modal
@@ -20010,7 +20116,7 @@ const barcodePrintState = {
   mode: "single", // "single" | "batch"
   productId: null,
   quantity: 1,
-  format: "thermal-50x30", // "thermal-50x30", "a4-grid-24", "shelf-tag"
+  format: (() => { try { return localStorage.getItem("ea_barcode_label_format") || "thermal-42x30"; } catch (_) { return "thermal-42x30"; } })(), // "thermal-42x30", "thermal-50x30", "a4-grid-24", "shelf-tag"
   batchType: "one-each", // "one-each" | "by-stock"
   batchOnlyInStock: false,
   searchQuery: "",
@@ -20075,6 +20181,7 @@ function setBarcodeMode(m) {
 
 function setBarcodeFormat(fmt) {
   barcodePrintState.format = fmt;
+  try { localStorage.setItem("ea_barcode_label_format", fmt); } catch (_) {}
   renderBarcodePrintModalContent();
 }
 
@@ -20208,7 +20315,7 @@ function getBarcodePrintStyles(format) {
   return `
     <style>
       @page {
-        size: ${format === 'a4-grid-24' ? 'A4 portrait' : (format === 'shelf-tag' ? '70mm 40mm' : '50mm 30mm')};
+        size: ${format === 'a4-grid-24' ? 'A4 portrait' : (format === 'shelf-tag' ? '70mm 40mm' : (format === 'thermal-42x30' ? '42mm 30mm' : '50mm 30mm'))};
         margin: ${format === 'a4-grid-24' ? '5mm 4mm' : '0'};
       }
       * {
@@ -20309,6 +20416,23 @@ function getBarcodePrintStyles(format) {
         font-weight: 900;
         color: #000000;
       }
+
+      /* Shop sticker 42 x 30 mm (4.2 x 3.0 cm) */
+      .barcode-label-thermal.lbl-42x30 {
+        width: 42mm;
+        height: 29.6mm;          /* ต่ำกว่า 30mm เล็กน้อย กันเบราว์เซอร์ดันขึ้นหน้าใหม่ (สติกเกอร์เปล่าแทรก) */
+        max-width: 42mm;
+        max-height: 29.6mm;
+        padding: 1.4mm 1.8mm 1.2mm;
+        justify-content: space-between;
+      }
+      .barcode-label-thermal.lbl-42x30 .lbl-shop { font-size: 5.5pt; letter-spacing: 0.2px; }
+      .barcode-label-thermal.lbl-42x30 .lbl-name { font-size: 7pt; line-height: 1.12; max-height: 2.24em; }
+      .barcode-label-thermal.lbl-42x30 .lbl-svg-wrap { margin: 0.3mm 0; }
+      .barcode-label-thermal.lbl-42x30 .lbl-svg-wrap svg { width: 100%; max-width: 38.4mm; max-height: 12.5mm; }
+      .barcode-label-thermal.lbl-42x30 .lbl-bottom-row { padding-top: 0.3mm; border-top-width: 0.3px; }
+      .barcode-label-thermal.lbl-42x30 .lbl-code { font-size: 6pt; }
+      .barcode-label-thermal.lbl-42x30 .lbl-price { font-size: 9.5pt; }
 
       /* A4 Sheet (24 labels: 3 columns x 8 rows) */
       .barcode-a4-sheet {
@@ -20481,6 +20605,10 @@ function getBarcodePrintStyles(format) {
           box-shadow: none !important;
           border: 1px solid #cbd5e1 !important;
         }
+        .barcode-label-thermal.lbl-42x30 {
+          border: none !important;   /* สติกเกอร์ไดคัทมีขอบอยู่แล้ว ไม่พิมพ์เส้นกรอบ */
+          margin: 0 !important;
+        }
       }
     </style>
   `;
@@ -20493,7 +20621,7 @@ function renderSingleBarcodeLabelHTML(product, format = "thermal-50x30", isPrevi
   const barcodeValue = String(p.barcode || p.product_code || "000000").trim();
   const unitStr = p.unit || p.unit_name || "ชิ้น";
   const barcodeSvg = generateCode128Svg(barcodeValue, {
-    height: format === "shelf-tag" ? 44 : 36,
+    height: format === "shelf-tag" ? 44 : (format === "thermal-42x30" ? 34 : 36),
     width: format === "shelf-tag" ? 2 : 1.7,
     showText: barcodePrintState.showBarcodeText
   });
@@ -20521,9 +20649,9 @@ function renderSingleBarcodeLabelHTML(product, format = "thermal-50x30", isPrevi
     `;
   }
 
-  // Thermal 50x30mm or default
+  // Thermal 42x30 / 50x30mm or default
   return `
-    <div class="barcode-label-thermal" ${isPreview ? 'style="box-shadow:0 8px 24px rgba(0,0,0,0.5);"' : ''}>
+    <div class="barcode-label-thermal${format === 'thermal-42x30' ? ' lbl-42x30' : ''}" ${isPreview ? 'style="box-shadow:0 8px 24px rgba(0,0,0,0.5);"' : ''}>
       ${barcodePrintState.showShop ? `<div class="lbl-shop">${escapeHtml(shopName)}</div>` : ''}
       ${barcodePrintState.showName ? `<div class="lbl-name">${escapeHtml(p.product_name)}</div>` : ''}
       <div class="lbl-svg-wrap">
@@ -20690,7 +20818,11 @@ function renderBarcodePrintModalContent() {
         <!-- Label Template / Format -->
         <div class="field">
           <label style="font-weight:700; font-size:13px; color:#e2e8f0;">รูปแบบฉลาก / ชนิดกระดาษ (Label Template)</label>
-          <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:8px;">
+          <div style="display:grid; grid-template-columns:repeat(2, 1fr); gap:8px;">
+            <button type="button" class="btn ${barcodePrintState.format === 'thermal-42x30' ? 'btn-primary' : 'btn-light'}" style="min-height:42px; font-size:12px; padding:6px 8px; flex-direction:column; gap:2px;" onclick="setBarcodeFormat('thermal-42x30')">
+              <strong>🏷️ สติกเกอร์ร้าน 4.2×3.0 ซม.</strong>
+              <small style="opacity:0.8;">ม้วนความร้อน 42×30mm</small>
+            </button>
             <button type="button" class="btn ${barcodePrintState.format === 'thermal-50x30' ? 'btn-primary' : 'btn-light'}" style="min-height:42px; font-size:12px; padding:6px 8px; flex-direction:column; gap:2px;" onclick="setBarcodeFormat('thermal-50x30')">
               <strong>🏷️ สติกเกอร์เดี่ยว</strong>
               <small style="opacity:0.8;">ความร้อน 50×30mm</small>
@@ -20726,7 +20858,7 @@ function renderBarcodePrintModalContent() {
         <!-- Label Elements Toggle -->
         <div class="field" style="background:#131b28; padding:10px 12px; border-radius:10px; border:1px solid #202d40;">
           <label style="font-weight:700; font-size:12px; color:#cbd5e1; margin-bottom:6px; display:block;">องค์ประกอบที่จะพิมพ์บนฉลาก (Label Fields):</label>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+          <div class="barcode-field-toggles" style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
             <label style="display:flex; align-items:center; gap:6px; font-size:11.5px; color:#e2e8f0; cursor:pointer;">
               <input type="checkbox" ${barcodePrintState.showShop ? 'checked' : ''} onchange="toggleBarcodeOption('showShop', this.checked)"> ชื่อร้าน (${escapeHtml(state.settings?.shopName || 'EA Fair')})
             </label>

@@ -243,3 +243,48 @@
 #content .menu-tile-title {
   white-space: normal !important; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
+
+/* ===== Stock Audit: counted marker + tablet layout ===== */
+.audit-untouched-hint{ margin-top:4px; font-size:10.5px; font-weight:700; color:#94a3b8; letter-spacing:.1px; }
+.audit-table--page tr.is-untouched td{ opacity:.82; }
+.audit-table--page tr.is-untouched td:nth-child(5){ opacity:1; }
+.audit-table--page .audit-count-input{ font-size:16px; } /* >=16px: iOS ไม่ซูมหน้าเมื่อแตะช่อง */
+@media (max-width: 1100px){
+  /* แท็บเล็ตแนวตั้ง/แนวนอนเล็ก: ซ่อนคอลัมน์ที่ซ้ำกัน (รหัส, สถานะ) ให้ตารางพอดีจอ */
+  .audit-table--page th:nth-child(1), .audit-table--page td:nth-child(1),
+  .audit-table--page th:nth-child(8), .audit-table--page td:nth-child(8){ display:none; }
+}
+@media (max-width: 860px){
+  .audit-table--page th:nth-child(7), .audit-table--page td:nth-child(7){ display:none; }
+  .audit-table--page th, .audit-table--page td{ padding-left:8px; padding-right:8px; }
+  .audit-table--page th:nth-child(5){ width:auto !important; }
+  .audit-table--page .audit-count-control{ gap:4px; }
+}
+.audit-table--page td:last-child .mini-btn{ white-space:nowrap; writing-mode:horizontal-tb; min-width:52px; padding:6px 8px; }
+.audit-table--page th:last-child, .audit-table--page td:last-child{ width:64px !important; }
+@media (max-width: 860px){
+  .audit-table--page .audit-count-control .audit-step-btn:nth-of-type(3){ display:none; } /* ซ่อน +5 ในตารางเมื่อจอแคบ */
+  .audit-table--page th{ font-size:10.5px; }
+  .audit-table--page td:nth-child(3){ white-space:nowrap; }
+}
+
+/* ===== Barcode sticker 4.2 x 3.0 cm (in-app preview; print styles are inside the print frame) ===== */
+.barcode-label-thermal.lbl-42x30{
+  width:42mm; height:30mm; min-height:30mm; max-height:30mm;
+  padding:1.4mm 1.8mm 1.2mm; overflow:hidden;
+}
+.barcode-label-thermal.lbl-42x30 .lbl-shop{ font-size:5.5pt; margin-bottom:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+.barcode-label-thermal.lbl-42x30 .lbl-name{ font-size:7pt; line-height:1.12; max-height:2.24em; margin-bottom:0;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+.barcode-label-thermal.lbl-42x30 .lbl-svg-wrap{ margin:.3mm 0; }
+.barcode-label-thermal.lbl-42x30 .lbl-svg-wrap svg{ width:100%; max-width:38.4mm; max-height:12.5mm; }
+.barcode-label-thermal.lbl-42x30 .lbl-bottom-row{ margin-top:0; padding-top:.3mm; }
+.barcode-label-thermal.lbl-42x30 .lbl-code{ font-size:6pt; }
+.barcode-label-thermal.lbl-42x30 .lbl-price{ font-size:9.5pt; }
+/* แสดงตัวอย่างขยาย 1.6 เท่าให้อ่านง่าย (ขนาดพิมพ์จริงยังเป็น 42×30mm) */
+.barcode-preview-card-wrap .barcode-label-thermal.lbl-42x30{ zoom:1.6; }
+.barcode-field-toggles label{ min-height:36px; padding:4px 6px; border-radius:8px; line-height:1.25; }
+.barcode-field-toggles input[type="checkbox"]{
+  width:20px !important; height:20px !important; min-width:20px; min-height:0 !important;
+  flex:0 0 20px; margin:0; padding:0; accent-color:#0284c7;
+}

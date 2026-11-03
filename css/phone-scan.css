@@ -514,3 +514,36 @@ html.ps-booting body::before {
 }
 .ps-head .ps-tally { margin-left: 0; }
 .ps-admin-exit { margin-top: 24px !important; opacity: .8; font-size: 13.5px !important; }
+
+/* ---- PromptPay QR: big in the pay sheet + full screen ---- */
+.ps-sheet-panel.is-qr { height: 96%; max-height: 96%; }
+.ps-qr-tap { display: block; margin: 0 auto; padding: 10px; border: 0; border-radius: 16px; background: #fff; cursor: zoom-in; }
+.ps-qr-tap svg, .ps-qr-tap img { display: block; width: min(68vw, 40dvh, 340px); height: auto; aspect-ratio: 1; }
+.ps-qr-full-btn {
+  margin-top: 10px; width: 100%; height: 50px; border-radius: 12px;
+  border: 1px solid var(--ps-border); background: var(--ps-surface-2); color: var(--ps-text);
+  font-size: 16px; font-weight: 800;
+}
+.ps-qrfull {
+  position: absolute; inset: 0; z-index: 6;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  background: #ffffff; color: #0f172a; text-align: center;
+}
+.ps-qrfull[hidden] { display: none; }
+.ps-qrfull-head { display: flex; align-items: center; gap: 10px; }
+.ps-qrfull-logo {
+  width: 46px; height: 46px; border-radius: 10px; background: #113566; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font: 800 10.5px/1.05 "Sarabun", sans-serif; text-align: center;
+}
+.ps-qrfull-title { font-size: 18px; font-weight: 900; text-align: left; }
+.ps-qrfull-shop { font-size: 13.5px; color: #475569; text-align: left; }
+.ps-qrfull-amount { font-size: 46px; font-weight: 900; color: #0f766e; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.ps-qrfull-code { width: min(90vw, 62dvh, 520px); }
+.ps-qrfull-code svg, .ps-qrfull-code img { display: block; width: 100%; height: auto; aspect-ratio: 1; }
+.ps-qrfull-id { font-size: 16px; font-weight: 700; color: #334155; }
+.ps-qrfull-close {
+  margin-top: 6px; height: 50px; padding: 0 28px; border-radius: 999px;
+  border: 0; background: #0f172a; color: #fff; font-size: 16px; font-weight: 800;
+}

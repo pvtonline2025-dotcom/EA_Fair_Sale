@@ -677,6 +677,73 @@
   }
 
   // ---------------------------------------------------------
+  // PromptPay QR (EMVCo payload, generated on the device — works offline)
+  // ---------------------------------------------------------
+  function crc16(str) {
+    let crc = 0xFFFF;
+    for (let i = 0; i < str.length; i++) {
+      crc ^= str.charCodeAt(i) << 8;
+      for (let j = 0; j < 8; j++) crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xFFFF : (crc << 1) & 0xFFFF;
+    }
+    return crc.toString(16).toUpperCase().padStart(4, '0');
+  }
+  function tlv(id, value) { return id + String(value.length).padStart(2, '0') + value; }
+  function promptPayPayload(target, amount) {
+    const id = String(target || '').replace(/[^0-9]/g, '');
+    let acct;
+    if (id.length >= 15) acct = tlv('03', id);                                  // e-wallet
+    else if (id.length >= 13) acct = tlv('02', id);                             // tax / citizen id
+    else acct = tlv('01', ('0000000000000' + id.replace(/^0/, '66')).slice(-13)); // phone → 0066xxxxxxxxx
+    let payload = tlv('00', '01') + tlv('01', amount ? '12' : '11') +
+      tlv('29', tlv('00', 'A000000677010111') + acct) +
+      tlv('58', 'TH') + tlv('53', '764') +
+      (amount ? tlv('54', Number(amount).toFixed(2)) : '');
+    payload += '6304';
+    return payload + crc16(payload);
+  }
+  function promptPayQrSvg(target, amount) {
+    if (typeof window.qrcode !== 'function') return '';
+    const q = window.qrcode(0, 'M');
+    q.addData(promptPayPayload(target, amount));
+    q.make();
+    return q.createSvgTag(8, 4);
+  }
+  function promptPayTarget() {
+    const raw = appState()?.settings?.promptPayId || appState()?.settings?.shopPhone || '';
+    return { raw, clean: String(raw).replace(/[^0-9]/g, '') };
+  }
+
+  // Full-screen QR for the customer to scan
+  function openQrFull() {
+    const box = $('psQrFull');
+    if (!box) return;
+    const total = totals().amount;
+    const pp = promptPayTarget();
+    const svg = pp.clean ? promptPayQrSvg(pp.clean, total) : '';
+    box.innerHTML = `
+      <div class="ps-qrfull-head">
+        <div class="ps-qrfull-logo">Prompt<br>Pay</div>
+        <div>
+          <div class="ps-qrfull-title">สแกนจ่ายด้วยพร้อมเพย์</div>
+          <div class="ps-qrfull-shop">${escapeHtml(appState()?.settings?.shopName || 'EA Fair Sale')}</div>
+        </div>
+      </div>
+      <div class="ps-qrfull-amount">฿${money(total)}</div>
+      <div class="ps-qrfull-code">${svg || (pp.clean ? `<img src="https://promptpay.io/${pp.clean}/${total.toFixed(2)}.png" alt="PromptPay QR">` : '<div class="ps-qr-fallback">ยังไม่ได้ตั้งเบอร์พร้อมเพย์</div>')}</div>
+      <div class="ps-qrfull-id">พร้อมเพย์ ${escapeHtml(pp.raw)}</div>
+      <button type="button" class="ps-qrfull-close" onclick="closePhoneQrFull()">แตะเพื่อกลับ</button>
+    `;
+    box.hidden = false;
+    box.onclick = (e) => { if (e.target === box || e.target.closest('.ps-qrfull-code')) closeQrFull(); };
+    try { document.documentElement.classList.add('ps-qr-bright'); } catch (e) {}
+  }
+  function closeQrFull() {
+    const box = $('psQrFull');
+    if (box) box.hidden = true;
+    document.documentElement.classList.remove('ps-qr-bright');
+  }
+
+  // ---------------------------------------------------------
   // Payment (คิดเงิน)
   // ---------------------------------------------------------
   function quickAmounts(total) {
@@ -694,6 +761,7 @@
     showSheet('psPay');
   }
   function closePhonePay() {
+    closeQrFull();
     hideSheet('psPay');
     resumeIfIdle();
   }
@@ -701,6 +769,7 @@
   function setPhonePayMethod(m) {
     pay.method = m === 'promptpay' ? 'promptpay' : 'cash';
     renderPay();
+    if (pay.method === 'promptpay' && promptPayTarget().clean) openQrFull();
   }
   function setPhonePayReceived(v) {
     pay.received = v === '' ? '' : Number(v);
@@ -737,6 +806,7 @@
     const promptPayRaw = appState()?.settings?.promptPayId || appState()?.settings?.shopPhone || '';
     const promptPayClean = String(promptPayRaw).replace(/[^0-9]/g, '');
 
+    body.closest('.ps-sheet-panel')?.classList.toggle('is-qr', pay.method === 'promptpay');
     body.innerHTML = `
       <div class="ps-pay-total">
         <span>ยอดที่ต้องรับ · ${t.lines} รายการ ${t.qty} ชิ้น</span>
@@ -758,9 +828,11 @@
       ` : `
         <div class="ps-qr">
           ${promptPayClean ? `
-            <img src="https://promptpay.io/${promptPayClean}/${total.toFixed(2)}.png" alt="PromptPay QR" width="200" height="200"
-                 onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ps-qr-fallback',textContent:'พร้อมเพย์ ${promptPayClean}'}))">
-            <div class="ps-qr-id">พร้อมเพย์ ${escapeHtml(promptPayRaw)}</div>
+            <button type="button" class="ps-qr-tap" onclick="openPhoneQrFull()" aria-label="แสดง QR เต็มจอ">
+              ${promptPayQrSvg(promptPayClean, total) || `<img src="https://promptpay.io/${promptPayClean}/${total.toFixed(2)}.png" alt="PromptPay QR">`}
+            </button>
+            <div class="ps-qr-id">พร้อมเพย์ ${escapeHtml(promptPayRaw)} • ฿${money(total)}</div>
+            <button type="button" class="ps-qr-full-btn" onclick="openPhoneQrFull()">⛶ แสดง QR เต็มจอให้ลูกค้าสแกน</button>
           ` : `<div class="ps-notice is-warn">ยังไม่ได้ตั้งเบอร์พร้อมเพย์ (ตั้งค่าในแอปเต็ม → ตั้งค่า)</div>`}
           <div class="ps-qr-hint">ตรวจว่าเงินเข้าแล้ว จึงกดยืนยัน</div>
         </div>
@@ -936,6 +1008,7 @@
     // Android back / Esc: close sheets first instead of leaving the cashier screen
     dlg.addEventListener('cancel', (e) => {
       e.preventDefault();   // staff cannot leave the cashier screen by accident
+      if ($('psQrFull') && !$('psQrFull').hidden) { closeQrFull(); return; }
       if (anySheetOpen()) {
         hideSheet('psPay'); hideSheet('psSummary'); hideSheet('psDone'); hideSheet('psWeight'); hideSheet('psPrice');
         weightCtx = null; priceKey = null;
@@ -1000,6 +1073,9 @@
     changePhoneScanQty,
     clearPhoneScan,
     openPhonePay,
+    openPhoneQrFull: openQrFull,
+    closePhoneQrFull: closeQrFull,
+    eaPromptPayPayload: promptPayPayload,
     setPhoneShowSend,
     exitToFullApp,
     togglePhoneManual,

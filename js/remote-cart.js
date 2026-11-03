@@ -63,30 +63,37 @@
   // PHONE: send the batch queue to the cashier
   // =========================================================
 
+  // Send a list of {product_id, qty} as one bill. Throws a friendly Error on failure.
+  async function sendRemoteCartItems(items) {
+    const st = appState();
+    const sb = client();
+    if (!sb || st?.isOffline || !navigator.onLine) {
+      throw new Error('ออฟไลน์อยู่ ส่งไปเครื่องคิดเงินไม่ได้ กรุณาต่ออินเทอร์เน็ต');
+    }
+    const clean = (items || []).filter(x => x.product_id && Number(x.qty) > 0)
+      .map(x => ({ product_id: x.product_id, qty: Number(x.qty) }));
+    if (!clean.length) throw new Error('ยังไม่มีสินค้าในบิล');
+    const { data, error } = await sb.rpc('ea_send_remote_cart', {
+      p_items: clean,
+      p_sender: `${terminal()} • มือถือ`,
+      p_sender_device: deviceId(),
+      p_target_terminal: getTarget()
+    });
+    if (error) throw new Error(friendlyError(error));
+    return data;
+  }
+
   async function sendBatchQueueToCashier() {
     if (sending) return;
     const st = appState();
     const queue = (st?.batchScanQueue || []).filter(x => Number(x.qty) > 0);
     if (!queue.length) { toast('ยังไม่มีสินค้าในคิว สแกนสินค้าก่อนส่ง'); return; }
 
-    const sb = client();
-    if (!sb || st.isOffline || !navigator.onLine) {
-      toast('📡 ออฟไลน์อยู่ ส่งไปเครื่องคิดเงินไม่ได้ • ใช้ "นำเข้า POS" เพื่อขายในเครื่องนี้แทน');
-      return;
-    }
-
     sending = true;
     setSendButtonsBusy(true);
     try {
       const target = getTarget();
-      const { data, error } = await sb.rpc('ea_send_remote_cart', {
-        p_items: queue.map(x => ({ product_id: x.product_id, qty: Number(x.qty) })),
-        p_sender: `${terminal()} • มือถือ`,
-        p_sender_device: deviceId(),
-        p_target_terminal: target
-      });
-      if (error) throw error;
-
+      const data = await sendRemoteCartItems(queue);
       st.batchScanQueue = [];
       updateBatchScanQueueUI();
       beepSuccess();
@@ -124,6 +131,14 @@
     showSentTicket._t = setTimeout(() => { box.hidden = true; }, 20000);
   }
 
+  async function cancelRemoteCartRaw(id) {
+    const sb = client();
+    if (!sb) throw new Error('ยังไม่ได้เชื่อมต่อฐานข้อมูล');
+    const { data, error } = await sb.rpc('ea_cancel_remote_cart', { p_id: id });
+    if (error) throw new Error(friendlyError(error));
+    return Boolean(data);
+  }
+
   async function cancelRemoteCart(id) {
     const sb = client();
     if (!sb) return;
@@ -157,6 +172,7 @@
 
   // Shortcut: open the camera in batch mode, ready to send to the cashier
   function startRemoteScan() {
+    if (typeof window.openPhoneScan === 'function') { window.openPhoneScan(); return; }
     lsSet('ea_batch_scan_enabled', 'true');
     const st = appState();
     if (st) st.batchScanEnabled = true;
@@ -359,7 +375,11 @@
     hideRemoteCart,
     toggleRemoteInbox,
     refreshRemoteInbox: refreshInbox,
-    isRemoteInboxEnabled: inboxEnabled
+    isRemoteInboxEnabled: inboxEnabled,
+    sendRemoteCartItems,
+    cancelRemoteCartRaw,
+    getRemoteTarget: getTarget,
+    remoteTerminalChoices: () => ['ALL', ...TERMINAL_CHOICES]
   });
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

@@ -29,6 +29,7 @@
   <link rel="stylesheet" href="css/light-mode.css">
   <link rel="stylesheet" href="css/tablet-enhancements.css">
   <link rel="stylesheet" href="css/remote-cart.css">
+  <link rel="stylesheet" href="css/phone-scan.css">
 </head>
 <body>
   <div class="app-shell">
@@ -651,6 +652,58 @@
     </div>
   </dialog>
 
+  <!-- Phone scan screen: phone scans items → sends one bill to the cashier tablet -->
+  <dialog id="phoneScanDialog" class="ps-dialog" aria-labelledby="psTitle">
+    <div class="ps-screen">
+      <header class="ps-head">
+        <button type="button" class="ps-icon-btn" onclick="closePhoneScan()" aria-label="ปิด">✕</button>
+        <h2 id="psTitle" class="ps-title">สแกนส่งเครื่องคิดเงิน</h2>
+        <select id="psTarget" class="ps-target" onchange="setRemoteTarget(this.value)" aria-label="เครื่องปลายทาง"></select>
+      </header>
+
+      <div id="psCamera" class="ps-camera">
+        <video id="psVideo" playsinline muted autoplay></video>
+        <div class="ps-reticle" aria-hidden="true"></div>
+        <div id="psFeedback" class="ps-feedback" aria-live="assertive"></div>
+        <button type="button" id="psTorchBtn" class="ps-torch" onclick="togglePhoneScanTorch()" aria-label="ไฟฉาย" hidden>🔦</button>
+        <div id="psCamMsg" class="ps-cam-msg">กำลังเปิดกล้อง...</div>
+      </div>
+
+      <form class="ps-manual" onsubmit="event.preventDefault(); phoneScanManual();">
+        <input id="psManualInput" type="search" enterkeyhint="search" autocomplete="off"
+               placeholder="สแกนไม่ติด? พิมพ์บาร์โค้ด / ชื่อสินค้า" oninput="phoneScanSearchInput(this.value)">
+        <button type="submit" class="ps-manual-btn">เพิ่ม</button>
+      </form>
+      <div id="psSuggest" class="ps-suggest" hidden></div>
+      <div id="psNotice" class="ps-notice" hidden></div>
+
+      <div id="psList" class="ps-list"></div>
+
+      <footer class="ps-foot">
+        <div class="ps-summary">
+          <span id="psCount">ยังไม่มีสินค้า</span>
+          <strong id="psTotal">฿0.00</strong>
+        </div>
+        <div class="ps-foot-actions">
+          <button type="button" id="psClearBtn" class="ps-clear" onclick="clearPhoneScan()" hidden>ล้าง</button>
+          <button type="button" id="psSendBtn" class="ps-send" onclick="sendPhoneScan()" disabled>📤 ส่งไปเครื่องคิดเงิน</button>
+        </div>
+      </footer>
+
+      <div id="psDone" class="ps-done" hidden>
+        <div class="ps-done-card">
+          <div class="ps-done-check">✓</div>
+          <div id="psDoneTarget" class="ps-done-target">ส่งไปเครื่องคิดเงินแล้ว</div>
+          <div class="ps-done-label">เลขบิล • บอกลูกค้า</div>
+          <div id="psDoneTicket" class="ps-done-ticket">M000</div>
+          <div id="psDoneMeta" class="ps-done-meta"></div>
+          <button type="button" class="ps-done-next" onclick="newPhoneScanBill()">สแกนบิลถัดไป</button>
+          <button type="button" class="ps-done-cancel" onclick="cancelLastPhoneScanBill()">ยกเลิกบิลนี้</button>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
   <div id="toast" class="toast"></div>
   <script src="js/fetch-wrapper.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
@@ -661,6 +714,7 @@
   <script src="js/offline-sync.js"></script>
   <script src="js/app.js"></script>
   <script src="js/remote-cart.js"></script>
+  <script src="js/phone-scan.js"></script>
   <script src="js/install-app.js"></script>
 </body>
 </html>

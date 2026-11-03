@@ -1,5 +1,5 @@
 // EA Fair Sale - Service Worker with Background Sync & Offline Support
-const CACHE_NAME = 'ea-fair-sale-v10';
+const CACHE_NAME = 'ea-fair-sale-v11';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -12,6 +12,8 @@ const STATIC_ASSETS = [
   '/js/install-app.js',
   '/js/remote-cart.js',
   '/css/remote-cart.css',
+  '/js/phone-scan.js',
+  '/css/phone-scan.css',
   '/css/variables.css',
   '/css/base.css',
   '/css/layout.css',

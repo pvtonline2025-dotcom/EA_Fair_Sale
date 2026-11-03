@@ -331,3 +331,4 @@ body.audit-fs .main, body.audit-fs .content, body.audit-fs .app-shell{ overflow-
 }
 body.audit-fs{ overflow-x:clip !important; overflow-y:visible !important; }
 .audit-table--page td:nth-child(1) code{ white-space:nowrap; }
+body.audit-fs .audit-search-wrap{ flex:1 1 280px; min-width:260px; }

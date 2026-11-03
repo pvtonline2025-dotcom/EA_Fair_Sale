@@ -9477,7 +9477,7 @@ function handleScannedBarcode(code){
   }
 
   // Physical Audit intercept
-  if(state.page === "audit" || (el("modal")?.open && state.auditCounts)){
+  if(state.page === "audit"){
     handleAuditScannedBarcode(p);
     return;
   }
@@ -13124,14 +13124,15 @@ function initPhysicalAuditState(force = false){
   if(!state.auditNote) state.auditNote = `ตรวจนับสต็อกจริง & กระทบยอดประจำวัน ${todayISO()}`;
 }
 
+// ปุ่ม "ตรวจนับสต็อก" จากหน้าสต็อก: เปิดหน้าตรวจนับเต็มจอ (แทนหน้าต่างป๊อปอัปเล็กเดิม)
 function openStockAuditModal(){
-  initPhysicalAuditState(true);
   const m = el("modal");
-  if(m){
-    el("modalTitle").textContent = "🔍 ตรวจนับสต็อกจริง & กระทบยอด (Stock Audit)";
-    renderStockAuditModalContent();
-    if(!m.open) m.showModal();
-  }
+  if(m?.open){ try{ m.close(); }catch(_){} }
+  const hasCounting = state.auditTouched && Object.keys(state.auditTouched).length > 0;
+  initPhysicalAuditState(!hasCounting); // ถ้ากำลังนับค้างอยู่ ไม่ล้างยอดนับ
+  state.auditSubTab = "count";
+  go("audit");
+  enterAuditFullscreen();
 }
 
 function toggleAuditBulkMode(forceMode){

@@ -30,6 +30,7 @@
   <link rel="stylesheet" href="css/tablet-enhancements.css">
   <link rel="stylesheet" href="css/remote-cart.css">
   <link rel="stylesheet" href="css/phone-scan.css">
+  <link rel="stylesheet" href="css/hub.css">
 </head>
 <body>
   <div class="app-shell">
@@ -652,13 +653,16 @@
     </div>
   </dialog>
 
-  <!-- Phone scan screen: phone scans items → sends one bill to the cashier tablet -->
-  <dialog id="phoneScanDialog" class="ps-dialog" aria-labelledby="psTitle">
+  <!-- Phone cashier: scan → charge (cash / QR) → bill + stock cut; device tally in the header -->
+  <dialog id="phoneScanDialog" class="ps-dialog" aria-labelledby="psDeviceName">
     <div class="ps-screen">
       <header class="ps-head">
-        <button type="button" class="ps-icon-btn" onclick="closePhoneScan()" aria-label="ปิด">✕</button>
-        <h2 id="psTitle" class="ps-title">สแกนส่งเครื่องคิดเงิน</h2>
-        <select id="psTarget" class="ps-target" onchange="setRemoteTarget(this.value)" aria-label="เครื่องปลายทาง"></select>
+        <button type="button" class="ps-icon-btn" onclick="closePhoneScan()" aria-label="ออกไปแอปเต็ม">✕</button>
+        <button type="button" class="ps-tally" onclick="openPhoneSummary()" aria-label="ดูสรุปยอดของเครื่องนี้">
+          <span id="psDeviceName" class="ps-tally-name">POS-01</span>
+          <span id="psTally" class="ps-tally-line">วันนี้ 0 บิล · ฿0.00</span>
+        </button>
+        <button type="button" class="ps-icon-btn ps-sum-btn" onclick="openPhoneSummary()" aria-label="สรุปยอด">📊</button>
       </header>
 
       <div id="psCamera" class="ps-camera">
@@ -686,20 +690,36 @@
         </div>
         <div class="ps-foot-actions">
           <button type="button" id="psClearBtn" class="ps-clear" onclick="clearPhoneScan()" hidden>ล้าง</button>
-          <button type="button" id="psSendBtn" class="ps-send" onclick="sendPhoneScan()" disabled>📤 ส่งไปเครื่องคิดเงิน</button>
+          <button type="button" id="psSendBtn" class="ps-send-alt" onclick="sendPhoneScan()" disabled title="ส่งให้แท็บเล็ตคิดเงินแทน">📤<small>ส่งแท็บเล็ต</small></button>
+          <button type="button" id="psPayBtn" class="ps-send" onclick="openPhonePay()" disabled>💰 คิดเงิน</button>
         </div>
       </footer>
 
-      <div id="psDone" class="ps-done" hidden>
-        <div class="ps-done-card">
-          <div class="ps-done-check">✓</div>
-          <div id="psDoneTarget" class="ps-done-target">ส่งไปเครื่องคิดเงินแล้ว</div>
-          <div class="ps-done-label">เลขบิล • บอกลูกค้า</div>
-          <div id="psDoneTicket" class="ps-done-ticket">M000</div>
-          <div id="psDoneMeta" class="ps-done-meta"></div>
-          <button type="button" class="ps-done-next" onclick="newPhoneScanBill()">สแกนบิลถัดไป</button>
-          <button type="button" class="ps-done-cancel" onclick="cancelLastPhoneScanBill()">ยกเลิกบิลนี้</button>
+      <!-- Payment sheet -->
+      <div id="psPay" class="ps-sheet" hidden>
+        <div class="ps-sheet-panel">
+          <div class="ps-sheet-head">
+            <h3>รับเงิน</h3>
+            <button type="button" class="ps-icon-btn" onclick="closePhonePay()" aria-label="กลับไปแก้รายการ">✕</button>
+          </div>
+          <div id="psPayBody" class="ps-sheet-body"></div>
         </div>
+      </div>
+
+      <!-- Device summary sheet -->
+      <div id="psSummary" class="ps-sheet" hidden>
+        <div class="ps-sheet-panel ps-sheet-tall">
+          <div class="ps-sheet-head">
+            <h3>สรุปยอดเครื่องนี้</h3>
+            <button type="button" class="ps-icon-btn" onclick="closePhoneSummary()" aria-label="ปิด">✕</button>
+          </div>
+          <div id="psSummaryBody" class="ps-sheet-body"></div>
+        </div>
+      </div>
+
+      <!-- Result -->
+      <div id="psDone" class="ps-done" hidden>
+        <div id="psDoneBody" class="ps-done-card"></div>
       </div>
     </div>
   </dialog>
@@ -715,6 +735,7 @@
   <script src="js/app.js"></script>
   <script src="js/remote-cart.js"></script>
   <script src="js/phone-scan.js"></script>
+  <script src="js/hub.js"></script>
   <script src="js/install-app.js"></script>
 </body>
 </html>

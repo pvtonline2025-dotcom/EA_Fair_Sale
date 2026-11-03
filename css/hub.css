@@ -1,0 +1,146 @@
+/* =========================================================
+   ศูนย์กลาง (Hub) — tablet overview of every selling device
+   ========================================================= */
+.hub {
+  --hub-surface: #1e293b;
+  --hub-surface-2: #283548;
+  --hub-border: #334155;
+  --hub-text: #f8fafc;
+  --hub-sub: #a8b5c8;
+  --hub-ok: #10b981;
+  --hub-ok-text: #6ee7b7;
+  --hub-warn: #f59e0b;
+  --hub-warn-text: #fcd34d;
+  --hub-bad: #ef4444;
+  --hub-bad-text: #fca5a5;
+  --hub-info-text: #7dd3fc;
+
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 24px;
+  color: var(--hub-text);
+}
+[data-color-mode="light"] .hub {
+  --hub-surface: #ffffff;
+  --hub-surface-2: #f1f5f9;
+  --hub-border: #e2e8f0;
+  --hub-text: #0f172a;
+  --hub-sub: #475569;
+  --hub-ok-text: #047857;
+  --hub-warn-text: #b45309;
+  --hub-bad-text: #b91c1c;
+  --hub-info-text: #0369a1;
+}
+
+.hub-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.hub-live { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 700; color: var(--hub-sub); }
+.hub-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--hub-ok); box-shadow: 0 0 0 4px rgba(16, 185, 129, .2); animation: hub-pulse 2s infinite; }
+.hub-live.is-off .hub-dot { background: var(--hub-bad); box-shadow: 0 0 0 4px rgba(239, 68, 68, .2); animation: none; }
+@keyframes hub-pulse { 50% { box-shadow: 0 0 0 7px rgba(16, 185, 129, .05); } }
+
+.hub-btn, .hub-btn-ghost {
+  min-height: 44px; padding: 0 16px; border-radius: 12px;
+  font-size: 14.5px; font-weight: 800; cursor: pointer;
+}
+.hub-btn { border: 0; background: var(--hub-ok); color: #fff; }
+.hub-btn:disabled { opacity: .6; cursor: wait; }
+.hub-btn-ghost { border: 1px solid var(--hub-border); background: var(--hub-surface); color: var(--hub-text); }
+
+.hub-kpis { display: grid; grid-template-columns: 2fr 1fr 1fr 1.4fr; gap: 10px; }
+.hub-kpi {
+  padding: 14px 16px; border-radius: 16px;
+  background: var(--hub-surface); border: 1px solid var(--hub-border);
+  display: flex; flex-direction: column; gap: 2px; min-width: 0;
+}
+.hub-kpi span { font-size: 13px; font-weight: 700; color: var(--hub-sub); }
+.hub-kpi strong { font-size: 26px; font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.hub-kpi small { font-size: 12.5px; color: var(--hub-sub); }
+.hub-kpi-main strong { font-size: 36px; color: var(--hub-ok-text); }
+.hub-kpi.is-warn { border-color: rgba(245, 158, 11, .6); }
+.hub-kpi.is-warn strong { color: var(--hub-warn-text); }
+.hub-kpi.is-ok strong { color: var(--hub-ok-text); }
+
+.hub-alert {
+  padding: 10px 14px; border-radius: 12px; font-size: 13.5px; font-weight: 700;
+  background: rgba(245, 158, 11, .14); border: 1px solid rgba(245, 158, 11, .45); color: var(--hub-warn-text);
+}
+
+.hub-h { margin: 6px 0 0; font-size: 17px; font-weight: 900; display: flex; align-items: center; gap: 8px; }
+.hub-devices { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.hub-device {
+  padding: 14px; border-radius: 16px;
+  background: var(--hub-surface); border: 1px solid var(--hub-border);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.hub-device-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.hub-device-name { font-size: 19px; font-weight: 900; }
+.hub-device-sub { font-size: 13px; color: var(--hub-sub); }
+.hub-pending { color: var(--hub-warn-text); }
+.hub-device-total { font-size: 26px; font-weight: 900; font-variant-numeric: tabular-nums; color: var(--hub-ok-text); white-space: nowrap; }
+.hub-device-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.hub-device-grid > div {
+  padding: 8px 10px; border-radius: 12px; background: var(--hub-surface-2);
+  display: flex; flex-direction: column; gap: 1px; min-width: 0;
+}
+.hub-device-grid span { font-size: 12px; font-weight: 700; color: var(--hub-sub); }
+.hub-device-grid strong { font-size: 16px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.hub-device-grid small { font-size: 11.5px; color: var(--hub-sub); }
+.hub-device-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hub-device-foot .hub-btn { margin-left: auto; }
+.hub-device-lasth { font-size: 12.5px; color: var(--hub-sub); }
+.hub-tag { padding: 4px 10px; border-radius: 999px; font-size: 13px; font-weight: 800; }
+.hub-tag.is-ok { background: rgba(16, 185, 129, .16); color: var(--hub-ok-text); }
+.hub-tag.is-warn { background: rgba(245, 158, 11, .16); color: var(--hub-warn-text); }
+.hub-tag.is-info { background: rgba(56, 189, 248, .16); color: var(--hub-info-text); }
+
+.hub-form {
+  padding: 12px; border-radius: 14px;
+  background: var(--hub-surface-2); border: 1px solid var(--hub-border);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.hub-form-expected { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.hub-form-expected span { font-size: 13px; color: var(--hub-sub); font-weight: 700; }
+.hub-form-expected strong { font-size: 24px; font-weight: 900; font-variant-numeric: tabular-nums; }
+.hub-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 700; color: var(--hub-sub); flex: 1; min-width: 0; }
+.hub-field input {
+  height: 46px; padding: 0 12px; border-radius: 10px;
+  border: 1px solid var(--hub-border); background: var(--hub-surface); color: var(--hub-text);
+  font-size: 16px; font-weight: 700;
+}
+#hubCounted { font-size: 22px; font-weight: 900; text-align: right; font-variant-numeric: tabular-nums; }
+.hub-form-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.hub-diff { padding: 8px 12px; border-radius: 10px; font-size: 16px; font-weight: 900; text-align: center; }
+.hub-diff.is-ok { background: rgba(16, 185, 129, .16); color: var(--hub-ok-text); }
+.hub-diff.is-warn { background: rgba(56, 189, 248, .16); color: var(--hub-info-text); }
+.hub-diff.is-bad { background: rgba(239, 68, 68, .16); color: var(--hub-bad-text); }
+.hub-form-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+.hub-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.hub-panel { padding: 14px; border-radius: 16px; background: var(--hub-surface); border: 1px solid var(--hub-border); min-width: 0; }
+.hub-panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.hub-panel-head .hub-h { margin: 0; }
+.hub-badge { min-width: 24px; padding: 2px 8px; border-radius: 999px; font-size: 12.5px; background: var(--hub-surface-2); text-align: center; }
+.hub-badge.is-bad { background: var(--hub-bad); color: #fff; }
+.hub-list-row { display: flex; align-items: center; gap: 10px; padding: 9px 2px; font-size: 14px; }
+.hub-list-row + .hub-list-row { border-top: 1px solid var(--hub-border); }
+.hub-list-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.hub-stock { font-size: 13px; font-weight: 800; padding: 2px 10px; border-radius: 999px; white-space: nowrap; }
+.hub-stock.is-low { background: rgba(245, 158, 11, .16); color: var(--hub-warn-text); }
+.hub-stock.is-out { background: rgba(239, 68, 68, .16); color: var(--hub-bad-text); }
+.hub-bill-time { width: 46px; color: var(--hub-sub); font-variant-numeric: tabular-nums; }
+.hub-bill-dev { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.hub-pm { font-size: 12px; font-weight: 800; padding: 2px 8px; border-radius: 999px; background: rgba(16, 185, 129, .16); color: var(--hub-ok-text); }
+.hub-pm.is-qr { background: rgba(56, 189, 248, .16); color: var(--hub-info-text); }
+.hub-bill strong { font-variant-numeric: tabular-nums; }
+.hub-more, .hub-empty { padding: 12px; text-align: center; font-size: 13.5px; color: var(--hub-sub); }
+
+@media (max-width: 900px) {
+  .hub-kpis { grid-template-columns: 1fr 1fr; }
+  .hub-kpi-main { grid-column: 1 / -1; }
+  .hub-cols { grid-template-columns: 1fr; }
+}
+@media (max-width: 480px) {
+  .hub-devices { grid-template-columns: 1fr; }
+  .hub-device-grid strong { font-size: 14.5px; }
+}

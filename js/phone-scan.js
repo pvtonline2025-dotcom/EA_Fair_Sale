@@ -1,16 +1,20 @@
 /**
- * EA Fair Sale - Phone Scan screen (หน้าสแกนสำหรับมือถือ)
+ * EA Fair Sale - Phone Cashier (มือถือเป็นเครื่องสแกนคิดเงิน)
  *
- * หน้าจอเต็มจอสำหรับมือถือ: กล้องด้านบน • รายการสินค้าปุ่มใหญ่ • ปุ่มส่งบิลติดด้านล่าง
- * ส่งไปเครื่องคิดเงินผ่าน sendRemoteCartItems() (js/remote-cart.js)
+ * หน้าจอเต็มจอสำหรับมือถือ:
+ *   สแกน → รายการปุ่มใหญ่ → 💰 คิดเงิน → รับเงินสด/QR → บันทึกบิล + ตัดสต็อก (checkoutCart → V8)
+ *   หัวจอแสดงยอดของเครื่องนี้วันนี้ เช่น "เครื่อง A · 3 บิล · ฿1,250"
+ *   หน้าสรุปยอด: เงินสด / โอน-QR / เงินสดที่ต้องส่ง / บิลที่ยังไม่ซิงค์ / รายการบิล
+ *   ทางเลือกรอง: 📤 ส่งรายการไปแท็บเล็ตให้แคชเชียร์คิดเงิน (js/remote-cart.js)
  *
- * Uses globals from app.js: state, money, escapeHtml, productByBarcode, beepBatchAdd,
- *   beepSuccess, beepError, stopScanner
+ * Uses globals from app.js: state, money, escapeHtml, todayISO, productByBarcode, checkoutCart,
+ *   beepBatchAdd, beepSuccess, beepError, stopScanner, TERMINAL_KEY
  */
 (function () {
   const STORE_KEY = 'ea_phone_scan_items';
-  const SAME_CODE_MS = 1500;   // ignore the same barcode seen again within this time
-  const ANY_CODE_MS = 600;     // minimum gap between two accepted scans
+  const MODE_KEY = 'ea_phone_cashier_mode';      // open this screen automatically on app start
+  const SAME_CODE_MS = 1500;
+  const ANY_CODE_MS = 600;
 
   let items = loadItems();     // [{product_id, product_name, barcode, unit, price, stock, qty}]
   let reader = null;
@@ -20,25 +24,28 @@
   let lastCode = '';
   let lastCodeAt = 0;
   let lastAcceptAt = 0;
-  let sending = false;
+  let busy = false;
   let lastSent = null;
   let wakeLock = null;
   let noticeTimer = null;
   let feedbackTimer = null;
+  let pay = { method: 'cash', received: '' };
 
   const $ = (id) => document.getElementById(id);
 
+  function lsGet(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
   function loadItems() {
     try { return JSON.parse(localStorage.getItem(STORE_KEY) || '[]').filter(x => x && x.product_id); }
     catch (e) { return []; }
   }
-  function saveItems() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(items)); } catch (e) {}
-  }
+  function saveItems() { lsSet(STORE_KEY, JSON.stringify(items)); }
   function appState() { return window.getEaAppState?.() || null; }
   function products() { return appState()?.products || []; }
+  function terminalName() { return String(appState()?.terminal || 'POS-01'); }
   function vibrate(p) { try { navigator.vibrate?.(p); } catch (e) {} }
   function sound(fn) { try { if (typeof window[fn] === 'function') window[fn](); } catch (e) {} }
+  function isQr(pm) { const v = String(pm || '').toLowerCase(); return v === 'promptpay' || v === 'qr' || v === 'transfer'; }
 
   // ---------------------------------------------------------
   // Open / close
@@ -47,9 +54,9 @@
     const dlg = $('phoneScanDialog');
     if (!dlg) return;
     try { if (typeof stopScanner === 'function') stopScanner(); } catch (e) {}
-    renderTarget();
+    hideSheet('psPay'); hideSheet('psSummary'); hideSheet('psDone');
     renderList();
-    hideDone();
+    renderTally();
     if (!dlg.open) dlg.showModal();
     document.documentElement.classList.add('ps-open');
     paused = false;
@@ -73,12 +80,16 @@
     wakeLock = null;
   }
 
+  function showSheet(id) { const s = $(id); if (s) s.hidden = false; paused = true; }
+  function hideSheet(id) { const s = $(id); if (s) s.hidden = true; }
+  function anySheetOpen() { return ['psPay', 'psSummary', 'psDone'].some(id => $(id) && !$(id).hidden); }
+  function resumeIfIdle() { if (!anySheetOpen()) paused = false; }
+
   // ---------------------------------------------------------
   // Camera
   // ---------------------------------------------------------
   async function startCamera() {
     const video = $('psVideo');
-    const msg = $('psCamMsg');
     stopCamera();
     if (!window.ZXingBrowser) {
       showCamMsg('โหลดตัวสแกนไม่สำเร็จ • พิมพ์บาร์โค้ดในช่องด้านล่างแทนได้');
@@ -96,6 +107,7 @@
         video,
         (result) => { if (result) onCode(result.getText()); }
       );
+      const msg = $('psCamMsg');
       if (msg) msg.hidden = true;
       const torchBtn = $('psTorchBtn');
       if (torchBtn) torchBtn.hidden = !canTorch();
@@ -103,8 +115,7 @@
       updateTorchBtn();
     } catch (err) {
       console.warn('Phone scan camera error:', err);
-      const name = err?.name || '';
-      showCamMsg(name === 'NotAllowedError'
+      showCamMsg(err?.name === 'NotAllowedError'
         ? 'ไม่ได้รับอนุญาตให้ใช้กล้อง • เปิดสิทธิ์กล้องในการตั้งค่าเบราว์เซอร์ แล้วกด "เปิดกล้องอีกครั้ง"'
         : 'เปิดกล้องไม่ได้ • กด "เปิดกล้องอีกครั้ง" หรือพิมพ์บาร์โค้ดด้านล่าง', true);
     }
@@ -183,7 +194,7 @@
     }
     if (it) {
       it.qty += qty;
-      items = [it, ...items.filter(x => x !== it)]; // move to top
+      items = [it, ...items.filter(x => x !== it)];
     } else {
       it = {
         product_id: p.id,
@@ -222,11 +233,11 @@
     n.className = `ps-notice is-${type || 'info'}`;
     n.hidden = false;
     clearTimeout(noticeTimer);
-    noticeTimer = setTimeout(() => { n.hidden = true; }, 3500);
+    noticeTimer = setTimeout(() => { n.hidden = true; }, 4000);
   }
 
   // ---------------------------------------------------------
-  // Manual entry (when the barcode will not scan)
+  // Manual entry
   // ---------------------------------------------------------
   function searchProducts(q) {
     const t = q.trim().toLowerCase();
@@ -299,11 +310,24 @@
     renderList();
   }
 
+  // Use the latest product price/name before charging
+  function syncPrices() {
+    for (const it of items) {
+      const p = products().find(x => x.id === it.product_id);
+      if (p) {
+        it.price = Number(p.sale_price || 0);
+        it.product_name = p.product_name;
+        it.stock = Number(p.stock_qty || 0);
+      }
+    }
+    saveItems();
+  }
+
   function totals() {
     return {
       lines: items.length,
       qty: items.reduce((s, x) => s + x.qty, 0),
-      amount: items.reduce((s, x) => s + x.qty * x.price, 0)
+      amount: Math.round(items.reduce((s, x) => s + x.qty * x.price, 0) * 100) / 100
     };
   }
 
@@ -334,73 +358,382 @@
     const t = totals();
     const count = $('psCount');
     const total = $('psTotal');
-    const send = $('psSendBtn');
+    const payBtn = $('psPayBtn');
+    const sendBtn = $('psSendBtn');
     const clear = $('psClearBtn');
     if (count) count.textContent = t.qty ? `${t.lines} รายการ · ${t.qty} ชิ้น` : 'ยังไม่มีสินค้า';
     if (total) total.textContent = `฿${money(t.amount)}`;
-    if (send) send.disabled = !t.qty || sending;
+    if (payBtn) { payBtn.disabled = !t.qty || busy; payBtn.textContent = t.qty ? `💰 คิดเงิน ฿${money(t.amount)}` : '💰 คิดเงิน'; }
+    if (sendBtn) sendBtn.disabled = !t.qty || busy;
     if (clear) clear.hidden = !t.qty;
   }
 
-  function renderTarget() {
-    const sel = $('psTarget');
-    if (!sel) return;
+  // ---------------------------------------------------------
+  // Device tally: "เครื่อง A · วันนี้ 3 บิล · ฿1,250"
+  // ---------------------------------------------------------
+  function mySalesToday() {
+    const st = appState();
+    const me = terminalName().trim().toUpperCase();
+    const today = todayISO();
+    return (st?.sales || []).filter(s =>
+      s.sale_date === today &&
+      String(s.terminal_code || '').trim().toUpperCase() === me &&
+      !s.is_cancelled
+    );
+  }
+
+  function tally() {
+    const sales = mySalesToday();
+    const cash = sales.filter(s => !isQr(s.payment_method));
+    const qr = sales.filter(s => isQr(s.payment_method));
+    const sum = (arr) => arr.reduce((s, x) => s + Number(x.total_amount || 0), 0);
+    return {
+      sales,
+      bills: sales.length,
+      total: sum(sales),
+      cashBills: cash.length, cashTotal: sum(cash),
+      qrBills: qr.length, qrTotal: sum(qr),
+      pending: sales.filter(s => s.is_pending_sync).length
+    };
+  }
+
+  function renderTally() {
+    const t = tally();
+    const name = $('psDeviceName');
+    const line = $('psTally');
+    if (name) name.textContent = terminalName();
+    if (line) line.textContent = `วันนี้ ${t.bills} บิล · ฿${money(t.total)}`;
+    if (!$('psSummary')?.hidden) renderSummary();
+  }
+
+  function openPhoneSummary() {
+    renderSummary();
+    showSheet('psSummary');
+  }
+  function closePhoneSummary() {
+    hideSheet('psSummary');
+    resumeIfIdle();
+  }
+
+  function renderSummary() {
+    const box = $('psSummaryBody');
+    if (!box) return;
+    const t = tally();
     const target = window.getRemoteTarget?.() || 'ALL';
     const choices = window.remoteTerminalChoices?.() || ['ALL'];
     if (!choices.includes(target)) choices.push(target);
-    sel.innerHTML = choices.map(c => `<option value="${escapeHtml(c)}" ${c === target ? 'selected' : ''}>${c === 'ALL' ? 'ส่งทุกเครื่อง' : 'ส่ง ' + escapeHtml(c)}</option>`).join('');
+    const autoOpen = lsGet(MODE_KEY, 'false') === 'true';
+    const dateTh = new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
+
+    box.innerHTML = `
+      <div class="ps-sum-hero">
+        <div class="ps-sum-device">${escapeHtml(terminalName())}</div>
+        <div class="ps-sum-date">ยอดขายวันนี้ • ${escapeHtml(dateTh)}</div>
+        <div class="ps-sum-total">฿${money(t.total)}</div>
+        <div class="ps-sum-bills">${t.bills} บิล</div>
+      </div>
+
+      <div class="ps-sum-grid">
+        <div class="ps-sum-cell">
+          <span>💵 เงินสด</span>
+          <strong>฿${money(t.cashTotal)}</strong>
+          <small>${t.cashBills} บิล</small>
+        </div>
+        <div class="ps-sum-cell">
+          <span>📱 โอน / QR</span>
+          <strong>฿${money(t.qrTotal)}</strong>
+          <small>${t.qrBills} บิล</small>
+        </div>
+      </div>
+
+      ${(() => {
+        const h = window.getHandoverInfo?.(terminalName()) || { received: 0, count: 0 };
+        const left = Math.round((t.cashTotal - h.received) * 100) / 100;
+        return `
+      <div class="ps-sum-handover">
+        <span>เงินสดที่ต้องส่งศูนย์กลาง${h.count ? '' : ' (ไม่รวมเงินทอนตั้งต้น)'}</span>
+        <strong>฿${money(Math.max(0, left))}</strong>
+      </div>
+      ${h.count ? `<div class="ps-sum-sent">ขายเงินสดได้ ฿${money(t.cashTotal)} · ส่งศูนย์กลางแล้ว ${h.count} ครั้ง ฿${money(h.received)}${left < -0.009 ? ` · <b>ส่งเกิน ฿${money(-left)}</b>` : ''}</div>` : ''}`;
+      })()}
+      ${t.pending ? `<div class="ps-notice is-warn">⏳ ${t.pending} บิลยังไม่ซิงค์ขึ้นระบบ • ต่ออินเทอร์เน็ตแล้วระบบจะส่งเอง</div>` : ''}
+
+      <h3 class="ps-sum-h">บิลของเครื่องนี้วันนี้</h3>
+      <div class="ps-sum-list">
+        ${t.sales.length ? t.sales.slice(0, 60).map(s => `
+          <div class="ps-sum-bill">
+            <span class="ps-sum-time">${escapeHtml(String(s.sale_time || '').slice(0, 5))}</span>
+            <span class="ps-sum-no">${escapeHtml(s.sale_no || '')}${s.is_pending_sync ? ' <em>รอซิงค์</em>' : ''}</span>
+            <span class="ps-sum-pm ${isQr(s.payment_method) ? 'is-qr' : ''}">${isQr(s.payment_method) ? 'QR' : 'เงินสด'}</span>
+            <strong>฿${money(s.total_amount)}</strong>
+          </div>`).join('') : '<div class="ps-empty-small">ยังไม่มีบิลวันนี้</div>'}
+      </div>
+
+      <h3 class="ps-sum-h">ตั้งค่าเครื่องนี้</h3>
+      <label class="ps-field">
+        <span>ชื่อเครื่อง (แสดงในรายงานแยกเครื่อง)</span>
+        <span class="ps-field-row">
+          <input id="psDeviceInput" type="text" maxlength="20" value="${escapeHtml(terminalName())}" placeholder="เช่น เครื่อง A">
+          <button type="button" class="ps-btn-secondary" onclick="savePhoneDeviceName()">บันทึก</button>
+        </span>
+      </label>
+      <label class="ps-field">
+        <span>ปุ่ม 📤 ส่งบิลไปเครื่องคิดเงิน (แท็บเล็ต)</span>
+        <select class="ps-select" onchange="setRemoteTarget(this.value)">
+          ${choices.map(c => `<option value="${escapeHtml(c)}" ${c === target ? 'selected' : ''}>${c === 'ALL' ? 'ส่งทุกเครื่องคิดเงิน' : 'ส่งไป ' + escapeHtml(c)}</option>`).join('')}
+        </select>
+      </label>
+      <label class="ps-switch-row">
+        <span>เปิดหน้านี้ทันทีเมื่อเปิดแอป (ใช้มือถือเป็นเครื่องคิดเงิน)</span>
+        <input type="checkbox" ${autoOpen ? 'checked' : ''} onchange="setPhoneCashierMode(this.checked)">
+      </label>
+      <button type="button" class="ps-btn-secondary ps-btn-block" onclick="closePhoneScan()">เปิดแอปเต็ม (สต็อก / รายงาน / ตั้งค่า)</button>
+    `;
+  }
+
+  function savePhoneDeviceName() {
+    const v = String($('psDeviceInput')?.value || '').trim().slice(0, 20);
+    if (!v) { notice('กรุณาใส่ชื่อเครื่อง', 'warn'); return; }
+    const st = appState();
+    if (st) st.terminal = v;
+    try { localStorage.setItem(typeof TERMINAL_KEY !== 'undefined' ? TERMINAL_KEY : 'ea_fairsale_terminal', v); } catch (e) {}
+    window.refreshRemoteInbox?.();
+    renderTally();
+    notice(`ตั้งชื่อเครื่องเป็น "${v}" แล้ว • บิลใหม่จะบันทึกในชื่อนี้`, 'info');
+  }
+
+  function setPhoneCashierMode(on) {
+    lsSet(MODE_KEY, on ? 'true' : 'false');
+    notice(on ? 'เปิดแอปครั้งถัดไปจะเข้าหน้านี้ทันที' : 'ปิดการเปิดหน้านี้อัตโนมัติแล้ว', 'info');
   }
 
   // ---------------------------------------------------------
-  // Send
+  // Payment (คิดเงิน)
+  // ---------------------------------------------------------
+  function quickAmounts(total) {
+    const set = new Set([total]);
+    [20, 50, 100, 500, 1000].forEach(n => { const v = Math.ceil(total / n) * n; if (v >= total) set.add(v); });
+    return [...set].sort((a, b) => a - b).slice(0, 6);
+  }
+
+  function openPhonePay() {
+    if (!items.length || busy) return;
+    syncPrices();
+    renderList();
+    pay = { method: 'cash', received: '' };
+    renderPay();
+    showSheet('psPay');
+  }
+  function closePhonePay() {
+    hideSheet('psPay');
+    resumeIfIdle();
+  }
+
+  function setPhonePayMethod(m) {
+    pay.method = m === 'promptpay' ? 'promptpay' : 'cash';
+    renderPay();
+  }
+  function setPhonePayReceived(v) {
+    pay.received = v === '' ? '' : Number(v);
+    renderPay(true);
+  }
+
+  function renderPay(keepInput) {
+    const body = $('psPayBody');
+    if (!body) return;
+    const t = totals();
+    const total = t.amount;
+    const rec = Number(pay.received || 0);
+    const change = rec >= total ? rec - total : 0;
+    const short = pay.method === 'cash' && rec > 0 && rec < total;
+
+    if (keepInput) {
+      // Update only the parts that change while typing (keep focus in the input)
+      const ch = $('psPayChange');
+      if (ch) {
+        ch.className = `ps-pay-change ${short ? 'is-short' : ''}`;
+        ch.innerHTML = short ? `ยังขาด <strong>฿${money(total - rec)}</strong>` : `เงินทอน <strong>฿${money(change)}</strong>`;
+      }
+      document.querySelectorAll('.ps-quick-btn').forEach(b => b.classList.toggle('is-active', Number(b.dataset.v) === rec));
+      const c = $('psPayConfirm');
+      if (c) c.disabled = short || busy;
+      return;
+    }
+
+    const promptPayRaw = appState()?.settings?.promptPayId || appState()?.settings?.shopPhone || '';
+    const promptPayClean = String(promptPayRaw).replace(/[^0-9]/g, '');
+
+    body.innerHTML = `
+      <div class="ps-pay-total">
+        <span>ยอดที่ต้องรับ · ${t.lines} รายการ ${t.qty} ชิ้น</span>
+        <strong>฿${money(total)}</strong>
+      </div>
+      <div class="ps-seg">
+        <button type="button" class="${pay.method === 'cash' ? 'is-active' : ''}" onclick="setPhonePayMethod('cash')">💵 เงินสด</button>
+        <button type="button" class="${pay.method === 'promptpay' ? 'is-active' : ''}" onclick="setPhonePayMethod('promptpay')">📱 โอน / QR</button>
+      </div>
+      ${pay.method === 'cash' ? `
+        <div class="ps-quick">
+          ${quickAmounts(total).map((v, i) => `<button type="button" class="ps-quick-btn ${rec === v ? 'is-active' : ''}" data-v="${v}" onclick="setPhonePayReceived(${v}); document.getElementById('psPayInput').value='${v}'">${i === 0 ? 'พอดี' : '฿' + money(v).replace('.00', '')}</button>`).join('')}
+        </div>
+        <label class="ps-pay-input">
+          <span>รับเงินมา</span>
+          <input id="psPayInput" type="number" inputmode="decimal" min="0" step="any" placeholder="${money(total)}" value="${pay.received === '' ? '' : pay.received}" oninput="setPhonePayReceived(this.value)">
+        </label>
+        <div id="psPayChange" class="ps-pay-change ${short ? 'is-short' : ''}">
+          ${short ? `ยังขาด <strong>฿${money(total - rec)}</strong>` : `เงินทอน <strong>฿${money(change)}</strong>`}
+        </div>
+      ` : `
+        <div class="ps-qr">
+          ${promptPayClean ? `
+            <img src="https://promptpay.io/${promptPayClean}/${total.toFixed(2)}.png" alt="PromptPay QR" width="200" height="200"
+                 onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'ps-qr-fallback',textContent:'พร้อมเพย์ ${promptPayClean}'}))">
+            <div class="ps-qr-id">พร้อมเพย์ ${escapeHtml(promptPayRaw)}</div>
+          ` : `<div class="ps-notice is-warn">ยังไม่ได้ตั้งเบอร์พร้อมเพย์ (ตั้งค่าในแอปเต็ม → ตั้งค่า)</div>`}
+          <div class="ps-qr-hint">ตรวจว่าเงินเข้าแล้ว จึงกดยืนยัน</div>
+        </div>
+      `}
+      <button type="button" id="psPayConfirm" class="ps-pay-confirm" onclick="confirmPhonePay()" ${short ? 'disabled' : ''}>
+        ✅ ยืนยันรับเงิน ฿${money(total)}
+      </button>
+    `;
+  }
+
+  async function confirmPhonePay() {
+    if (busy || !items.length) return;
+    const st = appState();
+    if (!st || typeof checkoutCart !== 'function') return;
+
+    syncPrices();
+    const total = totals().amount;
+    const rec = Number(pay.received || 0);
+    if (pay.method === 'cash' && rec > 0 && rec < total) { renderPay(true); return; }
+
+    // Build the POS cart from this bill (current product prices)
+    const cart = [];
+    for (const it of items) {
+      const p = products().find(x => x.id === it.product_id);
+      if (!p) { notice(`ไม่พบสินค้า ${it.product_name} ในระบบ • กดรีเฟรชข้อมูลในแอปเต็ม`, 'error'); return; }
+      cart.push({
+        product_id: p.id,
+        name: p.product_name,
+        barcode: p.barcode || '',
+        unit: p.unit || p.unit_name || 'ชิ้น',
+        qty: it.qty,
+        unit_price: Number(p.sale_price || 0),
+        original_price: Number(p.sale_price || 0),
+        stock: Number(p.stock_qty || 0),
+        discount_note: '',
+        is_discounted: false
+      });
+    }
+
+    busy = true;
+    const btn = $('psPayConfirm');
+    if (btn) { btn.disabled = true; btn.textContent = 'กำลังบันทึก...'; }
+    const prevBill = st.lastBill;
+    const prevCart = st.cart;
+    st.cart = cart;
+    st.billDiscount = { type: 'none', value: 0, note: '' };
+    st.paymentMethod = pay.method;
+    st.receivedCash = pay.method === 'cash' ? (rec || total) : 0;
+
+    try {
+      await checkoutCart();
+    } catch (e) {
+      console.error('Phone checkout error:', e);
+    }
+
+    // checkoutCart opens the desktop receipt dialog; the phone shows its own result.
+    const receipt = $('receiptDialog');
+    if (receipt?.open) receipt.close();
+
+    const ok = st.cart.length === 0 && st.lastBill && st.lastBill !== prevBill;
+    busy = false;
+    if (!ok) {
+      st.cart = prevCart || [];
+      try { saveCartLocal(); } catch (e) {}
+      if (btn) { btn.disabled = false; btn.textContent = `✅ ยืนยันรับเงิน ฿${money(total)}`; }
+      notice('บันทึกบิลไม่สำเร็จ • ตรวจข้อความแจ้งเตือน แล้วลองใหม่', 'error');
+      return;
+    }
+
+    const bill = st.lastBill;
+    items = [];
+    saveItems();
+    renderList();
+    hideSheet('psPay');
+    sound('beepSuccess');
+    vibrate([60, 60, 160]);
+    showDone({
+      icon: '✓',
+      title: pay.method === 'cash' ? 'รับเงินสดแล้ว' : 'รับเงินโอน/QR แล้ว',
+      label: pay.method === 'cash' ? 'เงินทอน' : 'ยอดที่รับ',
+      big: `฿${money(pay.method === 'cash' ? bill.change : bill.total)}`,
+      meta: `บิล ${bill.saleNo} · ยอด ฿${money(bill.total)}${pay.method === 'cash' ? ` · รับมา ฿${money(bill.received)}` : ''}`,
+      offline: /^S\d/.test(String(bill.saleNo || '')),
+      canCancel: false
+    });
+    renderTally();
+  }
+
+  // ---------------------------------------------------------
+  // Send to tablet (secondary)
   // ---------------------------------------------------------
   async function sendPhoneScan() {
-    if (sending || !items.length) return;
-    sending = true;
-    const btn = $('psSendBtn');
-    if (btn) { btn.disabled = true; btn.textContent = 'กำลังส่ง...'; }
+    if (busy || !items.length) return;
+    const target = window.getRemoteTarget?.() || 'ALL';
+    if (!confirm(`ส่งรายการนี้ไปให้${target === 'ALL' ? 'เครื่องคิดเงิน (แท็บเล็ต)' : ' ' + target} คิดเงินแทน?`)) return;
+    busy = true;
+    renderList();
     paused = true;
     try {
-      const sentTotal = totals();
+      const t = totals();
       const data = await window.sendRemoteCartItems(items);
       lastSent = data;
       items = [];
       saveItems();
-      renderList();
       sound('beepSuccess');
       vibrate([60, 60, 160]);
-      showDone(data, sentTotal);
+      showDone({
+        icon: '📤',
+        title: target === 'ALL' ? 'ส่งไปเครื่องคิดเงินแล้ว' : `ส่งไป ${target} แล้ว`,
+        label: 'เลขบิล • บอกลูกค้า',
+        big: data.ticket_no,
+        meta: `${data.item_count} รายการ · ${Number(data.total_qty)} ชิ้น · ประมาณ ฿${money(data.est_total ?? t.amount)}`,
+        canCancel: true
+      });
     } catch (err) {
       paused = false;
       notice('ส่งไม่สำเร็จ: ' + (err?.message || err), 'error');
       sound('beepError');
     } finally {
-      sending = false;
-      if (btn) btn.textContent = '📤 ส่งไปเครื่องคิดเงิน';
+      busy = false;
       renderList();
     }
   }
 
-  function showDone(data, t) {
+  function showDone(o) {
     const d = $('psDone');
     if (!d) return;
-    const target = window.getRemoteTarget?.() || 'ALL';
-    $('psDoneTicket').textContent = data.ticket_no;
-    $('psDoneMeta').textContent = `${data.item_count} รายการ · ${Number(data.total_qty)} ชิ้น · ประมาณ ฿${money(data.est_total ?? t.amount)}`;
-    $('psDoneTarget').textContent = target === 'ALL' ? 'ส่งไปทุกเครื่องคิดเงินแล้ว' : `ส่งไปเครื่อง ${target} แล้ว`;
-    d.hidden = false;
-  }
-
-  function hideDone() {
-    const d = $('psDone');
-    if (d) d.hidden = true;
+    $('psDoneBody').innerHTML = `
+      <div class="ps-done-check">${escapeHtml(o.icon)}</div>
+      <div class="ps-done-target">${escapeHtml(o.title)}</div>
+      <div class="ps-done-label">${escapeHtml(o.label)}</div>
+      <div class="ps-done-ticket">${escapeHtml(o.big)}</div>
+      <div class="ps-done-meta">${escapeHtml(o.meta)}</div>
+      ${o.offline ? '<div class="ps-notice is-warn">ออฟไลน์อยู่ • บิลเก็บในเครื่องแล้ว จะซิงค์เองเมื่อมีเน็ต</div>' : ''}
+      <button type="button" class="ps-done-next" onclick="newPhoneScanBill()">เริ่มบิลถัดไป</button>
+      ${o.canCancel ? '<button type="button" class="ps-done-cancel" onclick="cancelLastPhoneScanBill()">ยกเลิกบิลที่ส่ง</button>' : ''}
+    `;
+    showSheet('psDone');
   }
 
   function newPhoneScanBill() {
-    hideDone();
+    hideSheet('psDone');
     lastSent = null;
-    paused = false;
     lastCode = '';
+    resumeIfIdle();
   }
 
   async function cancelLastPhoneScanBill() {
@@ -408,12 +741,8 @@
     if (!confirm(`ยกเลิกบิล ${lastSent.ticket_no}?`)) return;
     try {
       const ok = await window.cancelRemoteCartRaw(lastSent.id);
-      if (ok) {
-        notice(`ยกเลิกบิล ${lastSent.ticket_no} แล้ว`, 'info');
-        newPhoneScanBill();
-      } else {
-        notice('ยกเลิกไม่ได้ เครื่องคิดเงินรับบิลไปแล้ว', 'warn');
-      }
+      if (ok) { newPhoneScanBill(); notice(`ยกเลิกบิล ${lastSent?.ticket_no || ''} แล้ว`, 'info'); }
+      else notice('ยกเลิกไม่ได้ เครื่องคิดเงินรับบิลไปแล้ว', 'warn');
     } catch (err) {
       notice('ยกเลิกไม่สำเร็จ: ' + (err?.message || err), 'error');
     }
@@ -423,13 +752,35 @@
   function init() {
     const dlg = $('phoneScanDialog');
     if (!dlg) return;
-    // Esc / Android back button closes the dialog: make sure the camera stops.
     dlg.addEventListener('close', () => { stopCamera(); releaseWakeLock(); document.documentElement.classList.remove('ps-open'); });
+    // Android back / Esc: close sheets first instead of leaving the cashier screen
+    dlg.addEventListener('cancel', (e) => {
+      if (anySheetOpen()) {
+        e.preventDefault();
+        hideSheet('psPay'); hideSheet('psSummary'); hideSheet('psDone');
+        resumeIfIdle();
+      }
+    });
     document.addEventListener('visibilitychange', () => {
       if (!dlg.open) return;
       if (document.hidden) stopCamera();
-      else { requestWakeLock(); startCamera(); }
+      else { requestWakeLock(); startCamera(); renderTally(); }
     });
+    window.EaOfflineSync?.onSyncComplete?.(() => setTimeout(renderTally, 1500));
+    window.addEventListener('ea:data-refreshed', () => { if (dlg.open) renderTally(); });
+
+    // Phone cashier mode: open this screen when the app starts
+    if (lsGet(MODE_KEY, 'false') === 'true') {
+      const started = Date.now();
+      const wait = setInterval(() => {
+        const st = appState();
+        if ((st && !st.loading && st.products?.length) || Date.now() - started > 8000) {
+          clearInterval(wait);
+          openPhoneScan();
+        }
+      }, 300);
+    }
+    setInterval(() => { if (dlg.open) renderTally(); }, 15000);
   }
 
   Object.assign(window, {
@@ -442,6 +793,15 @@
     phoneScanPick,
     changePhoneScanQty,
     clearPhoneScan,
+    openPhonePay,
+    closePhonePay,
+    setPhonePayMethod,
+    setPhonePayReceived,
+    confirmPhonePay,
+    openPhoneSummary,
+    closePhoneSummary,
+    savePhoneDeviceName,
+    setPhoneCashierMode,
     sendPhoneScan,
     newPhoneScanBill,
     cancelLastPhoneScanBill

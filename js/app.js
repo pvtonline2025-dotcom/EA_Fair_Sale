@@ -699,7 +699,10 @@ function saveBillDiscountLocal(){
 }
 function escapeHtml(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
 let toastTimer=null;
-function toast(t,duration=2100){const x=el("toast");if(!x)return;x.textContent=t;x.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>x.classList.remove("show"),Math.max(1200,Number(duration)||2100))}
+function toast(t,duration=2100){const x=el("toast");if(!x)return;
+  // Modal dialogs live in the browser top layer; move the toast into the top-most open dialog so it stays visible.
+  const host=[...document.querySelectorAll("dialog[open]")].pop()||document.body;if(x.parentElement!==host)host.appendChild(x);
+  x.textContent=t;x.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>x.classList.remove("show"),Math.max(1200,Number(duration)||2100))}
 function isQrPayment(pm){const v=String(pm||"").toLowerCase();return v==="promptpay"||v==="qr"||v==="transfer"}
 function card(title,body,action=""){return `<section class="card"><div class="card-head"><h2>${title}</h2>${action}</div><div class="card-body">${body}</div></section>`}
 function setHeader(t,s){el("pageTitle").textContent=t;el("pageSubtitle").textContent=s}
@@ -4350,13 +4353,23 @@ function renderMenu(){
             <span class="menu-tile-badge">${state.expenses ? state.expenses.length : 0} รายการ</span>
           </div>
         </button>
-        <button class="image-menu-btn" onclick="startRemoteScan()" aria-label="มือถือสแกนแล้วส่งไปเครื่องคิดเงิน">
+        <button class="image-menu-btn" onclick="go('hub')" aria-label="ศูนย์กลาง ยอดทุกเครื่อง">
+          <div class="menu-custom-tile history-tile hub-tile">
+            <div class="menu-tile-bg"></div>
+            <div class="menu-tile-content">
+              <span class="menu-tile-icon">🏢</span>
+              <div class="menu-tile-title">ศูนย์กลาง (ยอดทุกเครื่อง)</div>
+              <div class="menu-tile-subtitle">ยอดแยกเครื่อง · รับเงินสด · สต็อกใกล้หมด</div>
+            </div>
+          </div>
+        </button>
+        <button class="image-menu-btn" onclick="startRemoteScan()" aria-label="มือถือสแกนคิดเงิน">
           <div class="menu-custom-tile scanner-tile remote-scan-tile">
             <div class="menu-tile-bg"></div>
             <div class="menu-tile-content">
               <span class="menu-tile-icon">📱</span>
-              <div class="menu-tile-title">สแกนส่งเครื่องคิดเงิน</div>
-              <div class="menu-tile-subtitle">มือถือสแกนหลายชิ้น → ส่งแท็บเล็ตเป็น 1 บิล</div>
+              <div class="menu-tile-title">มือถือสแกนคิดเงิน</div>
+              <div class="menu-tile-subtitle">สแกน → รับเงิน → ตัดสต็อก · สรุปยอดรายเครื่อง</div>
             </div>
           </div>
         </button>
@@ -21164,7 +21177,7 @@ function updateBottomNav(){
     if(state.page==="home") active=target==="home";
     else if(state.page==="sale") active=target==="sale";
     else if(state.page==="stock" || state.page==="movement" || state.page==="lowStock" || state.page==="audit") active=target==="stock";
-    else if(state.page==="menu" || state.page==="dashboardToday" || state.page==="dashboardAll" || state.page==="salesHistory" || state.page==="expenses" || state.page==="report" || state.page==="settings") active=target==="menu";
+    else if(state.page==="menu" || state.page==="dashboardToday" || state.page==="dashboardAll" || state.page==="salesHistory" || state.page==="expenses" || state.page==="report" || state.page==="settings" || state.page==="hub") active=target==="menu";
 
     btn.classList.toggle("active",active);
   });
@@ -21296,6 +21309,7 @@ function render(){
   else if(state.page==="movement")renderMovement();
   else if(state.page==="audit")renderPhysicalAuditPage();
   else if(state.page==="report")renderReport();
+  else if(state.page==="hub" && typeof window.renderHub==="function")window.renderHub();
   else renderSettings();
 }
 loadAll();

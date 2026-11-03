@@ -4314,21 +4314,6 @@ function renderMenu(){
   el("content").innerHTML=`
     ${connectionNotice()}
     <section class="app-home image-menu-home">
-      <div class="welcome-strip compact-welcome">
-        <div class="welcome-strip-head" style="width:100%">
-          <div>
-            <div class="eyebrow">EA FAIR SALE • ${state.terminal}</div>
-            <h2>วันนี้ต้องการทำอะไร?</h2>
-            <p>แตะรูปเมนูเพื่อเริ่มใช้งาน</p>
-          </div>
-          <div class="today-summary">
-            <span>ยอดขายวันนี้</span>
-            <strong>฿${money(sales)}</strong>
-            <small>${pct}% ของเป้าหมาย</small>
-          </div>
-        </div>
-      </div>
-
       <div class="image-menu-grid">
         <button class="image-menu-btn" onclick="go('sale')" aria-label="POS ขายสินค้า">
           <img src="./images/btn-sale.png" alt="Sale Products">

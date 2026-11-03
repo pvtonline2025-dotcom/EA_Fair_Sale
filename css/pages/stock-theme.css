@@ -1,0 +1,245 @@
+/* =========================================================
+   สต็อกสินค้า + เมนู — theme-aware look (light & dark, every palette)
+   Loaded last. Uses the theme tokens set by applyTheme().
+   ========================================================= */
+#content {
+  --st-surface: var(--surface-card, #1e293b);
+  --st-soft: var(--surface-elevated, #283548);
+  --st-hover: var(--surface-hover, #334155);
+  --st-border: var(--card-border, #334155);
+  --st-text: var(--text-main, #f8fafc);
+  --st-sub: var(--text-sub, #cbd5e1);
+  --st-muted: var(--text-muted, #94a3b8);
+  --st-accent: var(--primary, #2563eb);
+  --st-accent-text: var(--primary-light, #60a5fa);
+  --st-ok: #10b981;
+  --st-warn: #f59e0b;
+  --st-bad: #ef4444;
+}
+[data-color-mode="light"] #content { --st-ok: #059669; --st-warn: #b45309; --st-bad: #dc2626; }
+
+/* ---- search + filters ---- */
+#content .stock-search-wrap {
+  background: var(--st-surface) !important;
+  border: 1px solid var(--st-border) !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+}
+#content .stock-search-input { background: transparent !important; color: var(--st-text) !important; font-size: 15px !important; }
+#content .stock-search-input::placeholder { color: var(--st-muted) !important; }
+#content .stock-search-icon { color: var(--st-muted) !important; }
+#content .stock-search-camera-btn { background: var(--st-accent) !important; color: #fff !important; border: 0 !important; border-radius: 10px !important; }
+
+#content .stock-filter-tabs { gap: 8px !important; flex-wrap: wrap; background: transparent !important; border: 0 !important; padding: 0 !important; }
+#content .stock-filter-btn {
+  background: var(--st-soft) !important;
+  color: var(--st-sub) !important;
+  border: 1px solid var(--st-border) !important;
+  border-radius: 999px !important;
+  min-height: 40px;
+  padding: 0 14px !important;
+  font-size: 13.5px !important;
+  font-weight: 800 !important;
+  box-shadow: none !important;
+}
+#content .stock-filter-btn.active { background: var(--st-accent) !important; color: #fff !important; border-color: var(--st-accent) !important; }
+#content .stock-filter-btn.active .ea-ic { color: #fff !important; }
+
+#content .stock-sort-wrap {
+  background: var(--st-soft) !important;
+  border: 1px solid var(--st-border) !important;
+  border-radius: 12px !important;
+}
+#content .stock-sort-label { color: var(--st-muted) !important; font-size: 12.5px !important; }
+#content .stock-sort-select, #content .stock-pagesize-select {
+  background: var(--st-surface) !important;
+  color: var(--st-text) !important;
+  border: 1px solid var(--st-border) !important;
+  border-radius: 8px !important;
+  font-size: 14px !important;
+  min-height: 36px;
+}
+#content .stock-view-switcher {
+  background: var(--st-soft) !important;
+  border: 1px solid var(--st-border) !important;
+  border-radius: 12px !important;
+  padding: 3px !important;
+}
+#content .view-switch-btn { background: transparent !important; color: var(--st-sub) !important; border: 0 !important; border-radius: 9px !important; font-weight: 800 !important; font-size: 13px !important; min-height: 36px; }
+#content .view-switch-btn.active { background: var(--st-accent) !important; color: #fff !important; }
+
+/* ---- card + toolbar buttons ---- */
+#content .card {
+  background: var(--st-surface) !important;
+  border: 1px solid var(--st-border) !important;
+  box-shadow: none !important;
+}
+#content .card-head h2 { color: var(--st-text) !important; }
+#content .card-head .btn {
+  min-height: 42px;
+  border-radius: 12px !important;
+  font-size: 13.5px !important;
+  font-weight: 800 !important;
+  box-shadow: none !important;
+}
+#content .card-head .btn:not(.btn-info):not(.btn-warning):not(.btn-primary):not(.btn-success) {
+  background: var(--st-soft) !important;
+  color: var(--st-text) !important;
+  border: 1px solid var(--st-border) !important;
+}
+
+/* ---- table ---- */
+#content .table-wrap { border: 1px solid var(--st-border) !important; border-radius: 14px !important; background: var(--st-surface) !important; }
+#content .stock-table { background: transparent !important; }
+#content .stock-table th {
+  background: var(--st-soft) !important;
+  color: var(--st-muted) !important;
+  font-size: 12.5px !important;
+  font-weight: 800 !important;
+  border-bottom: 1px solid var(--st-border) !important;
+}
+#content .stock-table td {
+  background: transparent !important;
+  color: var(--st-text) !important;
+  border-bottom: 1px solid var(--st-border) !important;
+  font-size: 14px !important;
+  vertical-align: middle;
+}
+#content .stock-table tbody tr:hover td { background: var(--st-hover) !important; }
+#content .stock-table td.col-code { color: var(--st-muted) !important; font-size: 12.5px !important; font-weight: 700 !important; }
+#content .stock-table td.col-name { color: var(--st-text) !important; font-weight: 800 !important; font-size: 14.5px !important; }
+#content .stock-table td.col-name * { color: inherit !important; }
+#content .stock-table td.col-name a:hover { color: var(--st-accent-text) !important; text-decoration: underline !important; }
+#content .stock-table td.col-price { color: var(--st-accent-text) !important; font-weight: 900 !important; white-space: nowrap; }
+#content .stock-table td.col-price strong { color: var(--st-accent-text) !important; }
+#content .stock-table td.col-price small, #content .stock-table td.col-price span { color: var(--st-muted) !important; font-weight: 600 !important; }
+#content .stock-table td.col-qty { font-weight: 900 !important; white-space: nowrap; }
+#content .stock-table td.col-qty small, #content .stock-table td.col-qty span { color: var(--st-muted) !important; font-weight: 600 !important; }
+
+/* barcode chip */
+#content .barcode-value {
+  background: var(--st-soft) !important;
+  color: var(--st-sub) !important;
+  border: 1px solid var(--st-border) !important;
+  border-radius: 8px !important;
+  font-size: 12px !important;
+}
+
+/* status pills */
+#content .status { border: 0 !important; border-radius: 999px !important; font-weight: 800 !important; font-size: 12px !important; padding: 3px 10px !important; }
+#content .status.ok { background: color-mix(in srgb, var(--st-ok) 14%, transparent) !important; color: var(--st-ok) !important; }
+#content .status.low { background: color-mix(in srgb, var(--st-warn) 16%, transparent) !important; color: var(--st-warn) !important; }
+#content .status.out { background: color-mix(in srgb, var(--st-bad) 14%, transparent) !important; color: var(--st-bad) !important; }
+
+/* row action buttons */
+#content .mini-btn {
+  background: var(--st-soft) !important;
+  color: var(--st-text) !important;
+  border: 1px solid var(--st-border) !important;
+  border-radius: 9px !important;
+  font-size: 12.5px !important;
+  font-weight: 800 !important;
+  min-height: 34px;
+  box-shadow: none !important;
+}
+#content .mini-btn:hover { background: var(--st-hover) !important; }
+#content .mini-btn.info { color: var(--st-warn) !important; }
+#content .mini-btn.receive { background: color-mix(in srgb, var(--st-ok) 14%, var(--st-surface)) !important; color: var(--st-ok) !important; border-color: color-mix(in srgb, var(--st-ok) 40%, transparent) !important; }
+#content .mini-btn.edit { background: var(--st-accent) !important; color: #fff !important; border-color: var(--st-accent) !important; }
+
+/* ---- card view ---- */
+#content .stock-item-card {
+  background: var(--st-surface) !important;
+  border: 1px solid var(--st-border) !important;
+  border-radius: 14px !important;
+  box-shadow: none !important;
+}
+#content .stock-item-card:hover { border-color: var(--st-accent) !important; }
+#content .stock-item-name { color: var(--st-text) !important; font-weight: 800 !important; font-size: 15px !important; }
+#content .stock-item-meta, #content .stock-item-meta * { color: var(--st-muted) !important; }
+#content .stock-code-chip { background: var(--st-soft) !important; color: var(--st-sub) !important; border: 1px solid var(--st-border) !important; }
+#content .stock-item-bottom { border-top: 1px solid var(--st-border) !important; }
+#content .stock-item-price { color: var(--st-accent-text) !important; font-weight: 900 !important; }
+#content .stock-item-qty, #content .stock-item-qty * { color: var(--st-text) !important; }
+
+/* ---- pagination ---- */
+#content .stock-pagination-info, #content .stock-pagesize-wrap { color: var(--st-muted) !important; font-size: 13px !important; }
+
+/* =========================================================
+   เมนู: tile "ตรวจนับสต็อกจริง" had white text on a light tint
+   ========================================================= */
+#content .menu-custom-tile.audit-tile {
+  background: linear-gradient(135deg, #0e7490 0%, #0891b2 55%, #22d3ee 100%) !important;
+  border: 0 !important;
+}
+#content .menu-custom-tile.audit-tile .menu-tile-title,
+#content .menu-custom-tile.audit-tile .menu-tile-subtitle,
+#content .menu-custom-tile.audit-tile .menu-tile-icon { color: #ffffff !important; }
+#content .menu-custom-tile.audit-tile .menu-tile-subtitle { opacity: .85; }
+#content .menu-custom-tile.audit-tile .menu-tile-icon { background: rgba(255, 255, 255, .16) !important; border-color: rgba(255, 255, 255, .3) !important; }
+#content .menu-custom-tile.audit-tile .menu-tile-badge { background: rgba(255, 255, 255, .22) !important; color: #fff !important; border-color: rgba(255, 255, 255, .35) !important; }
+
+/* "ใบสั่งเติมสต็อก" (btn-warning) — amber tint that fits both modes */
+#content .card-head .btn.btn-warning {
+  background: color-mix(in srgb, var(--st-warn) 14%, var(--st-surface)) !important;
+  color: var(--st-warn) !important;
+  border: 1px solid color-mix(in srgb, var(--st-warn) 45%, transparent) !important;
+}
+
+/* card view: 4 actions as a tidy 2 × 2 grid */
+#content .stock-item-actions {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 6px !important;
+  width: 100%;
+}
+#content .stock-item-actions .mini-btn {
+  width: 100% !important;
+  white-space: nowrap !important;
+  justify-content: center;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px !important;
+  min-height: 38px;
+}
+#content .stock-item-bottom { flex-direction: column !important; align-items: stretch !important; gap: 10px !important; }
+
+/* menu header: small texts readable in light mode */
+#content .welcome-strip .eyebrow { color: var(--st-accent-text) !important; }
+#content .today-summary small, #content .today-summary span { color: var(--st-muted) !important; }
+
+/* =========================================================
+   เมนู: ปุ่มเล็กลง (more columns, smaller text/icons)
+   ========================================================= */
+#content .image-menu-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+}
+@media (min-width: 700px)  { #content .image-menu-grid { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; } }
+@media (min-width: 1000px) { #content .image-menu-grid { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; } }
+@media (min-width: 1300px) { #content .image-menu-grid { grid-template-columns: repeat(6, minmax(0, 1fr)) !important; } }
+#content .image-menu-btn {
+  min-height: 0 !important;
+  aspect-ratio: 16 / 10 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .12) !important;
+}
+#content .menu-tile-content { gap: 2px !important; padding: 6px !important; }
+#content .menu-tile-icon { font-size: 18px !important; width: 34px !important; height: 34px !important; margin-bottom: 2px !important; }
+#content .menu-tile-icon .ea-ic { width: 20px; height: 20px; }
+#content .menu-tile-title { font-size: 12.5px !important; line-height: 1.25 !important; }
+#content .menu-tile-subtitle { font-size: 9.5px !important; line-height: 1.2 !important; }
+#content .menu-tile-badge { font-size: 9px !important; padding: 1px 6px !important; top: 6px !important; right: 6px !important; }
+#content .menu-count-badge { transform: scale(.85); }
+@media (max-width: 480px) {
+  #content .menu-tile-subtitle { display: none !important; }
+  #content .menu-tile-title { font-size: 11.5px !important; }
+}
+#content .menu-tile-content { max-width: 100%; box-sizing: border-box; }
+#content .menu-tile-title, #content .menu-tile-subtitle {
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 6px;
+}
+#content .menu-tile-title {
+  white-space: normal !important; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}

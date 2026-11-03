@@ -237,12 +237,32 @@
   }
   function copyRestockText() { copyText(restockText(), '📋 คัดลอกใบเบิกแล้ว • วางในแชท LINE ได้เลย'); }
 
-  function printHtml(title, body) {
+  // A4 document: on screen shows an A4 sheet preview; printing fits the content to one A4 page
+  // when possible (fit=true shrinks up to 60%, longer reports continue on page 2).
+  function printHtml(title, body, opts) {
+    const fit = opts?.fit !== false;
     const html = `<!doctype html><html lang="th"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
       <meta name="viewport" content="width=device-width, initial-scale=1">
+      <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&display=swap" rel="stylesheet">
       <style>
-        @page { size: A4; margin: 12mm; }
+        @page { size: A4 portrait; margin: 12mm; }
+        * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        html { background: #e5e7eb; }
         body { font-family: "Sarabun", "Noto Sans Thai", Tahoma, sans-serif; color: #111; font-size: 13px; margin: 0; }
+        .bar { position: sticky; top: 0; z-index: 2; display: flex; gap: 8px; justify-content: center; padding: 10px; background: #1f2937; }
+        .bar button { height: 44px; padding: 0 18px; border-radius: 10px; border: 0; font: 700 15px "Sarabun", sans-serif; cursor: pointer; }
+        .bar .p { background: #10b981; color: #fff; } .bar .x { background: #4b5563; color: #fff; }
+        .sheet { width: 210mm; min-height: 297mm; margin: 16px auto; padding: 12mm; background: #fff; box-shadow: 0 4px 18px rgba(0,0,0,.18); }
+        .content { width: 186mm; }
+        table { table-layout: auto; } td { word-break: break-word; }
+        thead { display: table-header-group; } tr { page-break-inside: avoid; }
+        @media print {
+          html { background: #fff; } .bar { display: none; }
+          .sheet { width: auto; min-height: 0; margin: 0; padding: 0; box-shadow: none; }
+          .content { width: 100%; }
+        }
+        @media screen and (max-width: 820px) { .sheet { zoom: .5; } }
         h1 { font-size: 20px; margin: 0 0 2px; } h2 { font-size: 15px; margin: 16px 0 6px; border-bottom: 2px solid #111; padding-bottom: 3px; }
         .sub { color: #444; margin-bottom: 8px; }
         table { width: 100%; border-collapse: collapse; } th, td { border: 1px solid #999; padding: 5px 7px; text-align: left; vertical-align: top; }
@@ -253,11 +273,11 @@
         .warn { color: #b45309; font-weight: 700; } .bad { color: #b91c1c; font-weight: 700; } .ok { color: #047857; font-weight: 700; }
         .sign { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 36px; text-align: center; }
         .sign div { border-top: 1px solid #111; padding-top: 6px; }
-        .daily-title { font-size: 34px; font-weight: 800; color: #e11d48; margin: 6px 0 2px; }
+        .daily-title { font-size: 30px; font-weight: 800; color: #e11d48; margin: 6px 0 2px; }
         .daily-shop { color: #555; padding-bottom: 8px; border-bottom: 3px solid #f97316; margin-bottom: 8px; display: inline-block; }
-        table.daily { border: 0; } table.daily th, table.daily td { border: 0; border-bottom: 1px solid #e5e5e5; padding: 6px 6px; }
+        table.daily { border: 0; } table.daily th, table.daily td { border: 0; border-bottom: 1px solid #e5e5e5; padding: 4px 6px; font-size: 13px; }
         table.daily th { background: none; border-bottom: 2px solid #999; font-size: 14px; }
-        table.daily .c { text-align: center; } table.daily tr.has-w td { border-bottom: 0; }
+        table.daily .c { text-align: center; white-space: nowrap; } table.daily th:first-child, table.daily td:first-child { width: 17mm; } table.daily tr.has-w td { border-bottom: 0; }
         table.daily tr.w td { font-size: 12px; color: #333; padding-top: 0; }
         .promo { color: #e11d48; font-weight: 700; } .muted { color: #777; }
         .grand { display: flex; justify-content: flex-end; align-items: baseline; gap: 24px; margin-top: 10px; padding-top: 8px; border-top: 2px solid #999; }
@@ -265,19 +285,39 @@
         .qrs { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; }
         .qrc { border: 2px dashed #555; padding: 16px; text-align: center; page-break-inside: avoid; }
         .qrc svg { width: 220px; height: 220px; } .qrc h3 { font-size: 26px; margin: 6px 0; }
-      </style></head><body>${body}</body></html>`;
+      </style></head><body data-fit="${fit ? '1' : '0'}">
+        <div class="bar"><button class="p" onclick="window.print()">🖨️ พิมพ์ / บันทึก PDF (A4)</button><button class="x" onclick="window.close()">ปิด</button></div>
+        <div class="sheet"><div class="content">${body}</div></div>
+        <script>
+          (function () {
+            var MM = 96 / 25.4;
+            function fitPage() {
+              var c = document.querySelector('.content');
+              c.style.zoom = 1;
+              if (document.body.getAttribute('data-fit') !== '1') return;
+              var avail = (297 - 24) * MM - 4;          // printable height of one A4 page
+              var h = c.scrollHeight;
+              if (h > avail) c.style.zoom = Math.max(0.6, Math.floor((avail / h) * 1000) / 1000);
+            }
+            window.__eaFit = fitPage;
+            var go = function () { fitPage(); if (window.__eaAutoPrint) setTimeout(function () { window.focus(); window.print(); }, 150); };
+            (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(go, go);
+          })();
+        <\/script>
+      </body></html>`;
     const w = window.open('', '_blank');
     if (w) {
+      w.__eaAutoPrint = true;
       w.document.open(); w.document.write(html); w.document.close();
-      setTimeout(() => { try { w.focus(); w.print(); } catch (e) {} }, 400);
       return;
     }
     // Popup blocked: print through a hidden iframe
     const f = document.createElement('iframe');
     f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
     document.body.appendChild(f);
+    f.contentWindow.__eaAutoPrint = true;
     f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
-    setTimeout(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) {} setTimeout(() => f.remove(), 2000); }, 400);
+    setTimeout(() => f.remove(), 60000);
   }
 
   function printRestock() {
@@ -473,7 +513,7 @@
     printHtml('QR จุดคิดเงิน', `
       <h1>QR เปิดจุดคิดเงิน – ${escapeHtml(shopName())}</h1>
       <div class="sub">สแกนด้วยกล้องมือถือ → เข้าหน้าคิดเงินของจุดนั้นทันที</div>
-      <div class="qrs">${stations().map(n => `<div class="qrc">${qrSvg(stationUrl(n), 8)}<h3>${escapeHtml(n)}</h3><div>สแกนเพื่อเริ่มคิดเงิน</div></div>`).join('')}</div>`);
+      <div class="qrs">${stations().map(n => `<div class="qrc">${qrSvg(stationUrl(n), 8)}<h3>${escapeHtml(n)}</h3><div>สแกนเพื่อเริ่มคิดเงิน</div></div>`).join('')}</div>`, { fit: false });
   }
 
   // =========================================================

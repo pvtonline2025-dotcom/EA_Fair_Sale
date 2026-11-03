@@ -4260,7 +4260,7 @@ function renderHome(){
         <div class="tdd-col tdd-col-3">
 
           <!-- Card 3 Top: 🏆 STATUS 🏆 (แสดงสถานะ ว่า ตอนนี้ ใกล้ถึงเป้าหมายหรือยัง อนิเมชั่น) -->
-          <div class="tdd-panel tdd-col3-status-card" onclick="go('settings')" title="แตะเพื่อดูรายละเอียดเป้าหมาย">
+          <div class="tdd-panel tdd-col3-status-card" data-keep-emoji onclick="go('settings')" title="แตะเพื่อดูรายละเอียดเป้าหมาย">
             <div class="tdd-panel-head">
               <h3 class="tdd-panel-title">
                 <span>🏆 STATUS 🏆</span>

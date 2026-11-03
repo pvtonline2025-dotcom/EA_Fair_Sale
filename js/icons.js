@@ -169,6 +169,8 @@
     if (!text || !HAS.test(text)) return;
     const parent = node.parentNode;
     if (!parent) return;
+    // Areas marked data-keep-emoji (e.g. the STATUS mascot card) keep their emoji
+    if (parent.closest?.('[data-keep-emoji]')) return;
     // Text inside charts (SVG <text>) cannot hold another icon → remove the emoji
     if ((parent.nodeName === 'text' || parent.nodeName === 'tspan') && parent.closest?.('svg')) {
       node.nodeValue = stripEmoji(text);
@@ -194,6 +196,7 @@
   }
 
   function convertElementAttrs(el) {
+    if (el.closest?.('[data-keep-emoji]')) return;
     for (const a of ATTRS) {
       const v = el.getAttribute?.(a);
       if (v && HAS.test(v)) el.setAttribute(a, stripEmoji(v));

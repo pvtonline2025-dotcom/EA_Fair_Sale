@@ -319,11 +319,9 @@
     };
   }
 
+  // ยอดขายรายวัน: สินค้า / ราคา / จำนวน / หน่วย / ผลรวม เท่านั้น
   function printDailyReport() {
     const d = reportData();
-    const stockOf = (id) => { const p = d.products.find(x => x.id === id); return p ? Number(p.stock_qty || 0) : '-'; };
-    const outstanding = d.cashTotal - d.received;
-    const restock = restockList();
     const salesTable = `
       <div class="daily-title">ยอดขายรายวัน</div>
       <div class="daily-shop">${escapeHtml(shopName())} • ${escapeHtml(dateTh())} • พิมพ์ ${escapeHtml(timeTh())} น.${d.pending ? ` • <span class="warn">มี ${d.pending} บิลยังไม่ซิงค์</span>` : ''}</div>
@@ -345,8 +343,15 @@
       <div class="grand"><span>รวมทั้งหมด</span><strong>${money(d.sold.reduce((a, r) => a + r.amount, 0))}</strong></div>
       ${d.discount > 0 ? `<div class="sub">ส่วนลดท้ายบิล −${money(d.discount)} • ยอดขายสุทธิ ${money(d.total)}</div>` : ''}`;
 
-    printHtml('ยอดขายรายวัน', salesTable + `
-      <div style="page-break-before: always"></div>
+    printHtml('ยอดขายรายวัน', salesTable);
+  }
+
+  // สรุปเงินสดประจำวัน (แยกจากรายงานยอดขาย)
+  function printCashSummary() {
+    const d = reportData();
+    const outstanding = d.cashTotal - d.received;
+    const restock = restockList();
+    printHtml('สรุปเงินสดประจำวัน', `
       <h1>สรุปเงินสดประจำวัน – ${escapeHtml(shopName())}</h1>
       <div class="sub">${escapeHtml(dateTh())} • พิมพ์เวลา ${escapeHtml(timeTh())} น.${d.pending ? ` • <span class="warn">มี ${d.pending} บิลยังไม่ซิงค์</span>` : ''}</div>
       <div class="kpis">
@@ -387,8 +392,22 @@
 
   function dailyReportText() {
     const d = reportData();
+    let t = `📊 ยอดขายรายวัน ${shopName()}\n${dateTh()} (ณ ${timeTh()} น.)\n\n`;
+    d.sold.forEach((r, i) => {
+      t += `${i + 1}. ${r.name}${r.note ? ` **${r.note}**` : ''}  ${r.price === 0 ? 'แถม' : fmtPrice(r.price)} × ${fmtQty(r.qty)} ${r.unit} = ${money(r.amount)}\n`;
+      if (r.weights.length) t += `   ⚖️ ${r.weights.map(w => fmtQty(w)).join(', ')}\n`;
+    });
+    t += `\nรวมทั้งหมด ${money(d.sold.reduce((a, r) => a + r.amount, 0))}`;
+    if (d.discount > 0) t += `\nส่วนลดท้ายบิล −${money(d.discount)} • ยอดขายสุทธิ ${money(d.total)}`;
+    if (d.pending) t += `\n⚠️ มี ${d.pending} บิลยังไม่ซิงค์`;
+    return t;
+  }
+  function copyDailyReportText() { copyText(dailyReportText(), '📋 คัดลอกยอดขายรายวันแล้ว • วางในแชท LINE ได้เลย'); }
+
+  function cashSummaryText() {
+    const d = reportData();
     const outstanding = d.cashTotal - d.received;
-    let t = `📊 สรุปยอดขาย ${shopName()}\n${dateTh()} (ณ ${timeTh()} น.)\n\n`;
+    let t = `💵 สรุปเงินสดประจำวัน ${shopName()}\n${dateTh()} (ณ ${timeTh()} น.)\n\n`;
     t += `ยอดขายรวม ฿${money(d.total)} • ${d.bills} บิล • ${d.units} ชิ้น\n`;
     t += `💵 เงินสด ฿${money(d.cashTotal)} (${d.cashBills} บิล)\n📱 โอน/QR ฿${money(d.qrTotal)} (${d.qrBills} บิล)\n`;
     if (d.discount > 0) t += `ส่วนลดท้ายบิล ฿${money(d.discount)}\n`;
@@ -397,16 +416,11 @@
       const diff = x.received - x.cash;
       t += `${x.code}: ${x.bills} บิล ฿${money(x.total)} (สด ${money(x.cash)} / QR ${money(x.qr)}) รับเงินแล้ว ${money(x.received)}${Math.abs(diff) < 0.01 ? ' ✓ครบ' : diff < 0 ? ` ❗ค้าง ${money(-diff)}` : ` เกิน ${money(diff)}`}\n`;
     });
-    t += `\n— สินค้าที่ขาย —\n`;
-    d.sold.forEach((r, i) => {
-      t += `${i + 1}. ${r.name}${r.note ? ` **${r.note}**` : ''}  ${r.price === 0 ? 'แถม' : fmtPrice(r.price)} × ${fmtQty(r.qty)} ${r.unit} = ${money(r.amount)}\n`;
-      if (r.weights.length) t += `   ⚖️ ${r.weights.map(w => fmtQty(w)).join(', ')}\n`;
-    });
     t += `\nเงินสดนำส่ง ฿${money(d.cashTotal)}${Math.abs(outstanding) < 0.01 ? ' (รับครบแล้ว)' : outstanding > 0 ? ` (ยังค้างรับจากเครื่อง ฿${money(outstanding)})` : ` (รับเกิน ฿${money(-outstanding)})`}`;
     if (d.pending) t += `\n⚠️ มี ${d.pending} บิลยังไม่ซิงค์`;
     return t;
   }
-  function copyDailyReportText() { copyText(dailyReportText(), '📋 คัดลอกสรุปยอดแล้ว • วางในแชท LINE ได้เลย'); }
+  function copyCashSummaryText() { copyText(cashSummaryText(), '📋 คัดลอกสรุปเงินสดแล้ว • วางในแชท LINE ได้เลย'); }
 
   // =========================================================
   // QR: open a cashier station on any phone
@@ -468,8 +482,14 @@
   function renderToolbar() {
     return `
       <div class="hub-toolbar">
-        <button type="button" class="hub-tool" onclick="printDailyReport()">📄 พิมพ์รายงานปิดวัน</button>
-        <button type="button" class="hub-tool" onclick="copyDailyReportText()">📋 คัดลอกสรุปยอด (LINE)</button>
+        <span class="hub-tool-group">
+          <button type="button" class="hub-tool" onclick="printDailyReport()">📄 พิมพ์ยอดขายรายวัน</button>
+          <button type="button" class="hub-tool hub-tool-sm" onclick="copyDailyReportText()" title="คัดลอกยอดขายรายวันส่ง LINE">📋 LINE</button>
+        </span>
+        <span class="hub-tool-group">
+          <button type="button" class="hub-tool" onclick="printCashSummary()">💵 พิมพ์สรุปเงินสด</button>
+          <button type="button" class="hub-tool hub-tool-sm" onclick="copyCashSummaryText()" title="คัดลอกสรุปเงินสดส่ง LINE">📋 LINE</button>
+        </span>
         <button type="button" class="hub-tool" onclick="document.querySelector('.hub-restock')?.scrollIntoView({behavior:'smooth'})">📦 เบิกสินค้า</button>
         <button type="button" class="hub-tool ${showQr ? 'is-active' : ''}" onclick="toggleHubQr()">📲 QR เปิดจุดคิดเงิน</button>
       </div>
@@ -503,6 +523,9 @@
     printRestock,
     printDailyReport,
     copyDailyReportText,
+    printCashSummary,
+    copyCashSummaryText,
+    hubCashSummaryText: cashSummaryText,
     toggleHubQr,
     hubSetStations,
     printStationQr,

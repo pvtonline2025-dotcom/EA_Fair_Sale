@@ -33,6 +33,16 @@
 
   const $ = (id) => document.getElementById(id);
 
+  const SEND_KEY = 'ea_phone_show_send';         // show the "send to tablet" button
+  const FULL_SESSION_KEY = 'ea_full_app_session'; // admin opened the full app in this tab
+  function isPhoneScreen() {
+    return Math.min(window.screen?.width || 9999, window.screen?.height || 9999, window.innerWidth) < 600;
+  }
+  // Phones open the scan-and-charge screen by default; other devices only when switched on
+  function autoOpenEnabled() {
+    const v = lsGet(MODE_KEY, '');
+    return v === '' ? isPhoneScreen() : v === 'true';
+  }
   function lsGet(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } }
   function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
   function loadItems() {
@@ -400,6 +410,7 @@
       const input = $('psManualInput');
       if (input) { input.value = ''; input.blur(); }
       phoneScanSearchInput('');
+      togglePhoneManual(false);
     }
   }
 
@@ -552,7 +563,8 @@
     const target = window.getRemoteTarget?.() || 'ALL';
     const choices = window.remoteTerminalChoices?.() || ['ALL'];
     if (!choices.includes(target)) choices.push(target);
-    const autoOpen = lsGet(MODE_KEY, 'false') === 'true';
+    const autoOpen = autoOpenEnabled();
+    const showSend = lsGet(SEND_KEY, 'false') === 'true';
     const dateTh = new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
 
     box.innerHTML = `
@@ -607,17 +619,21 @@
           <button type="button" class="ps-btn-secondary" onclick="savePhoneDeviceName()">บันทึก</button>
         </span>
       </label>
-      <label class="ps-field">
-        <span>ปุ่ม 📤 ส่งบิลไปเครื่องคิดเงิน (แท็บเล็ต)</span>
+      <label class="ps-switch-row">
+        <span>เปิดหน้าสแกนคิดเงินทันทีเมื่อเปิดแอป</span>
+        <input type="checkbox" ${autoOpen ? 'checked' : ''} onchange="setPhoneCashierMode(this.checked)">
+      </label>
+      <label class="ps-switch-row">
+        <span>แสดงปุ่ม 📤 ส่งรายการให้แท็บเล็ตคิดเงินแทน</span>
+        <input type="checkbox" ${showSend ? 'checked' : ''} onchange="setPhoneShowSend(this.checked)">
+      </label>
+      ${showSend ? `<label class="ps-field">
+        <span>ส่งไปเครื่อง</span>
         <select class="ps-select" onchange="setRemoteTarget(this.value)">
           ${choices.map(c => `<option value="${escapeHtml(c)}" ${c === target ? 'selected' : ''}>${c === 'ALL' ? 'ส่งทุกเครื่องคิดเงิน' : 'ส่งไป ' + escapeHtml(c)}</option>`).join('')}
         </select>
-      </label>
-      <label class="ps-switch-row">
-        <span>เปิดหน้านี้ทันทีเมื่อเปิดแอป (ใช้มือถือเป็นเครื่องคิดเงิน)</span>
-        <input type="checkbox" ${autoOpen ? 'checked' : ''} onchange="setPhoneCashierMode(this.checked)">
-      </label>
-      <button type="button" class="ps-btn-secondary ps-btn-block" onclick="closePhoneScan()">เปิดแอปเต็ม (สต็อก / รายงาน / ตั้งค่า)</button>
+      </label>` : ''}
+      <button type="button" class="ps-btn-secondary ps-btn-block ps-admin-exit" onclick="exitToFullApp()">🔒 สำหรับผู้ดูแล: เปิดแอปเต็ม (สต็อก / รายงาน)</button>
     `;
   }
 
@@ -630,6 +646,29 @@
     window.refreshRemoteInbox?.();
     renderTally();
     notice(`ตั้งชื่อเครื่องเป็น "${v}" แล้ว • บิลใหม่จะบันทึกในชื่อนี้`, 'info');
+  }
+
+  function setPhoneShowSend(on) {
+    lsSet(SEND_KEY, on ? 'true' : 'false');
+    applySendVisibility();
+    renderSummary();
+  }
+  function applySendVisibility() {
+    const b = $('psSendBtn');
+    if (b) b.hidden = lsGet(SEND_KEY, 'false') !== 'true';
+  }
+  function exitToFullApp() {
+    if (!confirm('ออกไปแอปเต็ม (สำหรับผู้ดูแล)?\nพนักงานคิดเงินไม่ต้องใช้หน้านี้')) return;
+    try { sessionStorage.setItem(FULL_SESSION_KEY, '1'); } catch (e) {}
+    closePhoneScan();
+  }
+  function togglePhoneManual(show) {
+    const f = $('psManualForm'), b = $('psManualToggle');
+    const open = show ?? (f ? f.hidden : false);
+    if (f) f.hidden = !open;
+    if (b) b.hidden = open;
+    if (open) setTimeout(() => $('psManualInput')?.focus(), 30);
+    else { const i = $('psManualInput'); if (i) i.value = ''; phoneScanSearchInput(''); }
   }
 
   function setPhoneCashierMode(on) {
@@ -896,8 +935,8 @@
     dlg.addEventListener('close', () => { stopCamera(); releaseWakeLock(); document.documentElement.classList.remove('ps-open'); });
     // Android back / Esc: close sheets first instead of leaving the cashier screen
     dlg.addEventListener('cancel', (e) => {
+      e.preventDefault();   // staff cannot leave the cashier screen by accident
       if (anySheetOpen()) {
-        e.preventDefault();
         hideSheet('psPay'); hideSheet('psSummary'); hideSheet('psDone'); hideSheet('psWeight'); hideSheet('psPrice');
         weightCtx = null; priceKey = null;
         resumeIfIdle();
@@ -929,15 +968,23 @@
     } catch (e) {}
 
     // Phone cashier mode: open this screen when the app starts
-    if (fromQr || lsGet(MODE_KEY, 'false') === 'true') {
+    let fullSession = false;
+    try { fullSession = sessionStorage.getItem(FULL_SESSION_KEY) === '1'; } catch (e) {}
+    applySendVisibility();
+    if (fromQr || (autoOpenEnabled() && !fullSession)) {
+      document.documentElement.classList.add('ps-booting');
       const started = Date.now();
       const wait = setInterval(() => {
         const st = appState();
         if ((st && !st.loading && st.products?.length) || Date.now() - started > 8000) {
           clearInterval(wait);
+          document.documentElement.classList.remove('ps-booting');
           openPhoneScan().then(() => { if (fromQr) notice(`พร้อมคิดเงินที่จุด "${terminalName()}" • ยอดของจุดนี้จะส่งเข้าศูนย์กลาง`, 'info'); });
         }
       }, 300);
+    }
+    else {
+      document.documentElement.classList.remove('ps-booting');
     }
     setInterval(() => { if (dlg.open) renderTally(); }, 15000);
   }
@@ -953,6 +1000,9 @@
     changePhoneScanQty,
     clearPhoneScan,
     openPhonePay,
+    setPhoneShowSend,
+    exitToFullApp,
+    togglePhoneManual,
     openPhonePriceSheet: openPriceSheet,
     closePhonePriceSheet: closePriceSheet,
     setPhoneLinePrice,

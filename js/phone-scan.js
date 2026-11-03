@@ -546,17 +546,22 @@
     const rec = Number(pay.received || 0);
     const change = rec >= total ? rec - total : 0;
     const short = pay.method === 'cash' && rec > 0 && rec < total;
+    const missing = pay.method === 'cash' && pay.received === '';   // cashier must enter what was received
+    const blocked = short || missing;
+    const changeHtml = missing ? 'กดยอดเงินที่รับมา หรือพิมพ์จำนวน'
+      : short ? `ยังขาด <strong>฿${money(total - rec)}</strong>` : `เงินทอน <strong>฿${money(change)}</strong>`;
+    const changeCls = `ps-pay-change ${short ? 'is-short' : ''} ${missing ? 'is-missing' : ''}`;
 
     if (keepInput) {
       // Update only the parts that change while typing (keep focus in the input)
       const ch = $('psPayChange');
       if (ch) {
-        ch.className = `ps-pay-change ${short ? 'is-short' : ''}`;
-        ch.innerHTML = short ? `ยังขาด <strong>฿${money(total - rec)}</strong>` : `เงินทอน <strong>฿${money(change)}</strong>`;
+        ch.className = changeCls;
+        ch.innerHTML = changeHtml;
       }
       document.querySelectorAll('.ps-quick-btn').forEach(b => b.classList.toggle('is-active', Number(b.dataset.v) === rec));
       const c = $('psPayConfirm');
-      if (c) c.disabled = short || busy;
+      if (c) c.disabled = blocked || busy;
       return;
     }
 
@@ -578,11 +583,9 @@
         </div>
         <label class="ps-pay-input">
           <span>รับเงินมา</span>
-          <input id="psPayInput" type="number" inputmode="decimal" min="0" step="any" placeholder="${money(total)}" value="${pay.received === '' ? '' : pay.received}" oninput="setPhonePayReceived(this.value)">
+          <input id="psPayInput" type="number" inputmode="decimal" min="0" step="any" placeholder="0" value="${pay.received === '' ? '' : pay.received}" oninput="setPhonePayReceived(this.value)">
         </label>
-        <div id="psPayChange" class="ps-pay-change ${short ? 'is-short' : ''}">
-          ${short ? `ยังขาด <strong>฿${money(total - rec)}</strong>` : `เงินทอน <strong>฿${money(change)}</strong>`}
-        </div>
+        <div id="psPayChange" class="${changeCls}">${changeHtml}</div>
       ` : `
         <div class="ps-qr">
           ${promptPayClean ? `
@@ -593,7 +596,7 @@
           <div class="ps-qr-hint">ตรวจว่าเงินเข้าแล้ว จึงกดยืนยัน</div>
         </div>
       `}
-      <button type="button" id="psPayConfirm" class="ps-pay-confirm" onclick="confirmPhonePay()" ${short ? 'disabled' : ''}>
+      <button type="button" id="psPayConfirm" class="ps-pay-confirm" onclick="confirmPhonePay()" ${blocked ? 'disabled' : ''}>
         ✅ ยืนยันรับเงิน ฿${money(total)}
       </button>
     `;
@@ -607,7 +610,7 @@
     syncPrices();
     const total = totals().amount;
     const rec = Number(pay.received || 0);
-    if (pay.method === 'cash' && rec > 0 && rec < total) { renderPay(true); return; }
+    if (pay.method === 'cash' && (pay.received === '' || rec < total)) { renderPay(true); return; }
 
     // Build the POS cart from this bill (current product prices)
     const cart = [];
@@ -769,14 +772,31 @@
     window.EaOfflineSync?.onSyncComplete?.(() => setTimeout(renderTally, 1500));
     window.addEventListener('ea:data-refreshed', () => { if (dlg.open) renderTally(); });
 
+    // Opened from the hub QR code: ?cashier=<station name>
+    let fromQr = false;
+    try {
+      const params = new URLSearchParams(location.search);
+      const station = String(params.get('cashier') || '').trim().slice(0, 20);
+      if (station) {
+        fromQr = true;
+        const st = appState();
+        if (st) st.terminal = station;
+        try { localStorage.setItem(typeof TERMINAL_KEY !== 'undefined' ? TERMINAL_KEY : 'ea_fairsale_terminal', station); } catch (e) {}
+        lsSet(MODE_KEY, 'true');
+        params.delete('cashier');
+        const q = params.toString();
+        history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + location.hash);
+      }
+    } catch (e) {}
+
     // Phone cashier mode: open this screen when the app starts
-    if (lsGet(MODE_KEY, 'false') === 'true') {
+    if (fromQr || lsGet(MODE_KEY, 'false') === 'true') {
       const started = Date.now();
       const wait = setInterval(() => {
         const st = appState();
         if ((st && !st.loading && st.products?.length) || Date.now() - started > 8000) {
           clearInterval(wait);
-          openPhoneScan();
+          openPhoneScan().then(() => { if (fromQr) notice(`พร้อมคิดเงินที่จุด "${terminalName()}" • ยอดของจุดนี้จะส่งเข้าศูนย์กลาง`, 'info'); });
         }
       }, 300);
     }

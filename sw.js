@@ -1,5 +1,5 @@
 // EA Fair Sale - Service Worker with Background Sync & Offline Support
-const CACHE_NAME = 'ea-fair-sale-v13';
+const CACHE_NAME = 'ea-fair-sale-v14';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -15,6 +15,7 @@ const STATIC_ASSETS = [
   '/js/phone-scan.js',
   '/css/phone-scan.css',
   '/js/hub.js',
+  '/js/hub-report.js',
   '/css/hub.css',
   '/css/variables.css',
   '/css/base.css',
@@ -53,7 +54,8 @@ const STATIC_ASSETS = [
   'https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js',
   'https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-browser.min.js',
-  'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js'
+  'https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js',
+  'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js'
 ];
 
 // Never replay sales from a service worker using an anonymous credential.

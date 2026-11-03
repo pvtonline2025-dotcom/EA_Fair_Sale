@@ -51,7 +51,9 @@
         sb.from('ea_products').select('*').eq('is_active', true).order('product_name'),
         sb.from('ea_sales').select('*').eq('sale_date', today).order('created_at', { ascending: false }).limit(2000),
         sb.from('ea_sale_items').select('*').gte('created_at', startOfToday.toISOString()).limit(5000),
-        sb.from('ea_cash_handovers').select('*').eq('handover_date', today).order('created_at', { ascending: true })
+        handoverReady
+          ? sb.from('ea_cash_handovers').select('*').eq('handover_date', today).order('created_at', { ascending: true })
+          : Promise.resolve({ data: null, error: { message: 'skipped' } })
       ]);
       if (p.error || sales.error || items.error) return;
 
@@ -65,7 +67,10 @@
       s.sales = [...(sales.data || []), ...keepSales];
       s.saleItems = [...(items.data || []), ...keepItems];
       if (h.error) {
-        handoverReady = !/ea_cash_handovers|PGRST205|does not exist|schema cache/i.test(h.error.message || '');
+        if (h.error.message !== 'skipped') {
+          // 404 = migration V10 not installed: stop asking until the app is reloaded
+          handoverReady = !(h.status === 404 || /ea_cash_handovers|PGRST205|does not exist|schema cache|not found/i.test(`${h.error.code || ''} ${h.error.message || ''}`));
+        }
       } else {
         handoverReady = true;
         s.handovers = h.data || [];
@@ -76,8 +81,9 @@
       else if (typeof saveLocalState === 'function') saveLocalState();
       lastRefreshAt = Date.now();
 
+      const typing = document.activeElement && document.activeElement.closest?.('.hub') && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
       if (s.page === 'hub') {
-        if (openForm) pendingRender = true; else renderHub();
+        if (openForm || typing) pendingRender = true; else renderHub();
       } else if (s.page === 'home' && typeof renderHome === 'function') {
         renderHome();
       }
@@ -186,6 +192,8 @@
           <button type="button" class="hub-btn-ghost" onclick="hubRefreshNow()">↻ อัปเดตตอนนี้</button>
         </div>
 
+        ${window.renderHubToolbar ? window.renderHubToolbar() : ''}
+
         <div class="hub-kpis">
           <div class="hub-kpi hub-kpi-main">
             <span>ยอดขายรวมวันนี้ (ทุกเครื่อง)</span>
@@ -207,6 +215,8 @@
         <div class="hub-devices">
           ${devices.length ? devices.map(renderDevice).join('') : '<div class="hub-empty">ยังไม่มีบิลวันนี้</div>'}
         </div>
+
+        ${window.renderHubRestockPanel ? window.renderHubRestockPanel() : ''}
 
         <div class="hub-cols">
           <div class="hub-panel">
@@ -381,6 +391,7 @@
     saveHubHandover,
     hubHandoverDiff,
     getHandoverInfo,
+    hubDeviceStats: deviceStats,
     eaQuietRefresh: quietRefresh
   });
 

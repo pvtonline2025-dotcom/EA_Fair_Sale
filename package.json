@@ -1,13 +1,13 @@
 {
   "name": "ea-fair-sale",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 3000",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
-    "check:js": "node --check js/app.js && node --check js/offline-sync.js && node --check js/install-app.js && node --check js/remote-cart.js && node --check js/phone-scan.js && node --check js/hub.js && node --check js/fetch-wrapper.js && node --check js/supabase-config.js && node --check sw.js && node --check vite.config.mjs",
+    "check:js": "node --check js/app.js && node --check js/offline-sync.js && node --check js/install-app.js && node --check js/remote-cart.js && node --check js/phone-scan.js && node --check js/hub.js && node --check js/hub-report.js && node --check js/fetch-wrapper.js && node --check js/supabase-config.js && node --check sw.js && node --check vite.config.mjs",
     "lint": "npm run check:js"
   },
   "engines": {

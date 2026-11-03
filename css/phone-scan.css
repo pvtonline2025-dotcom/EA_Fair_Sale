@@ -348,6 +348,7 @@ html.ps-open, html.ps-open body { overflow: hidden; }
   font-size: 16px; font-weight: 800; color: #6ee7b7;
 }
 .ps-pay-change strong { font-size: 32px; font-weight: 900; color: var(--ps-text); font-variant-numeric: tabular-nums; }
+.ps-pay-change.is-missing { justify-content: center; background: var(--ps-surface); border-color: var(--ps-border); color: var(--ps-sub); }
 .ps-pay-change.is-short { background: rgba(245, 158, 11, .14); border-color: rgba(245, 158, 11, .5); color: #fcd34d; }
 .ps-qr { margin-top: 14px; text-align: center; }
 .ps-qr img { width: 200px; height: 200px; padding: 10px; border-radius: 14px; background: #fff; }

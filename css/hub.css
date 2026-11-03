@@ -144,3 +144,47 @@
   .hub-devices { grid-template-columns: 1fr; }
   .hub-device-grid strong { font-size: 14.5px; }
 }
+
+/* ---- Toolbar ---- */
+.hub-toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+.hub-tool {
+  min-height: 48px; padding: 0 16px; border-radius: 12px;
+  border: 1px solid var(--hub-border); background: var(--hub-surface); color: var(--hub-text);
+  font-size: 14.5px; font-weight: 800; cursor: pointer;
+}
+.hub-tool.is-active { border-color: var(--hub-ok); background: rgba(16, 185, 129, .16); }
+.hub-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.hub-hint { font-size: 12.5px; color: var(--hub-sub); margin-top: 8px; }
+
+/* ---- Restock ---- */
+.hub-restock.is-now { border: 2px solid var(--hub-warn); box-shadow: 0 0 0 4px rgba(245, 158, 11, .15); }
+.hub-window { font-size: 13px; font-weight: 800; padding: 4px 10px; border-radius: 999px; background: var(--hub-surface-2); color: var(--hub-sub); }
+.hub-window-now { background: var(--hub-warn); color: #111; animation: hub-blink 1.6s infinite; }
+@keyframes hub-blink { 50% { opacity: .65; } }
+.hub-restock-cfg { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; font-size: 13px; font-weight: 700; color: var(--hub-sub); }
+.hub-restock-cfg label { display: inline-flex; align-items: center; gap: 6px; }
+.hub-restock-cfg input[type="time"] {
+  height: 38px; padding: 0 8px; border-radius: 8px;
+  border: 1px solid var(--hub-border); background: var(--hub-surface-2); color: var(--hub-text); font-weight: 700;
+}
+.hub-check input { width: 20px; height: 20px; accent-color: var(--hub-ok); }
+.hub-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.hub-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.hub-table th { text-align: right; font-size: 12.5px; color: var(--hub-sub); font-weight: 800; padding: 6px 8px; border-bottom: 1px solid var(--hub-border); white-space: nowrap; }
+.hub-table th:first-child { text-align: left; }
+.hub-table td { padding: 8px; border-bottom: 1px solid var(--hub-border); }
+.hub-td-name { font-weight: 700; min-width: 140px; }
+.hub-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hub-num.is-low, .hub-num .is-low { color: var(--hub-warn-text); }
+.hub-num.is-out, .hub-num .is-out { color: var(--hub-bad-text); }
+.hub-qty {
+  width: 76px; height: 40px; padding: 0 8px; border-radius: 8px; text-align: right;
+  border: 1px solid var(--hub-border); background: var(--hub-surface-2); color: var(--hub-text);
+  font-size: 16px; font-weight: 900;
+}
+
+/* ---- QR stations ---- */
+.hub-qr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-top: 12px; }
+.hub-qr-card { padding: 12px; border-radius: 14px; background: #fff; color: #0f172a; text-align: center; }
+.hub-qr-img svg { width: 100%; max-width: 180px; height: auto; display: block; margin: 0 auto; }
+.hub-qr-name { margin-top: 6px; font-size: 20px; font-weight: 900; }

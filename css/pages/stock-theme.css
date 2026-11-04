@@ -332,3 +332,223 @@ body.audit-fs .main, body.audit-fs .content, body.audit-fs .app-shell{ overflow-
 body.audit-fs{ overflow-x:clip !important; overflow-y:visible !important; }
 .audit-table--page td:nth-child(1) code{ white-space:nowrap; }
 body.audit-fs .audit-search-wrap{ flex:1 1 280px; min-width:260px; }
+
+/* ปุ่มลบสินค้าในหน้าต่างแก้ไข */
+.btn.btn-delete-product{
+  background:transparent !important; color:#ef4444 !important;
+  border:1.5px solid rgba(239,68,68,.55) !important; font-weight:800;
+}
+.btn.btn-delete-product:hover{ background:rgba(239,68,68,.12) !important; }
+[data-color-mode="light"] .btn.btn-delete-product{ color:#dc2626 !important; border-color:#fca5a5 !important; }
+
+/* ===== หน้าต่างเพิ่ม/แก้ไขสินค้า: เต็มหน้าจอ ===== */
+dialog#modal.modal-fullpage{
+  width:100vw !important; max-width:none !important;
+  height:100vh; height:100dvh; max-height:none !important;
+  margin:0 !important; border-radius:0 !important; inset:0;
+  overflow:hidden !important; background:var(--bg, #0f172a) !important;
+}
+dialog#modal.modal-fullpage .modal-card{
+  height:100%; max-height:none !important; border:0; border-radius:0; box-shadow:none;
+}
+dialog#modal.modal-fullpage .modal-head{
+  padding:12px max(18px, env(safe-area-inset-right)) 12px max(18px, env(safe-area-inset-left));
+  padding-top:calc(12px + env(safe-area-inset-top, 0px));
+}
+dialog#modal.modal-fullpage .modal-head h3{ font-size:18px; }
+dialog#modal.modal-fullpage .modal-body{
+  padding:20px 24px 0;
+  display:flex; flex-direction:column;
+}
+dialog#modal.modal-fullpage .modal-body > .form-grid,
+dialog#modal.modal-fullpage .modal-body > .actions{
+  width:100%; max-width:1100px; margin-left:auto; margin-right:auto;
+}
+dialog#modal.modal-fullpage .modal-body > .form-grid{ gap:14px 20px; }
+@media (min-width: 900px){
+  dialog#modal.modal-fullpage .modal-body > .form-grid{ grid-template-columns:repeat(2, minmax(0,1fr)); }
+}
+/* ปุ่ม บันทึก / ยกเลิก / ลบ ติดด้านล่างเสมอ */
+dialog#modal.modal-fullpage .modal-body > .actions{
+  position:sticky; bottom:0; z-index:5;
+  margin-top:auto !important; padding:12px 0 calc(14px + env(safe-area-inset-bottom, 0px));
+  background:var(--surface-card, #1e293b);
+  box-shadow:0 -10px 16px -8px rgba(0,0,0,.35);
+}
+dialog#modal.modal-fullpage .modal-body > .actions::before{
+  content:""; position:absolute; inset:0 -24px; background:inherit; z-index:-1;
+  border-top:1px solid var(--card-border, #334155);
+}
+dialog#modal.modal-fullpage .modal-body > .actions .btn{ min-height:46px; }
+dialog#modal.modal-fullpage .modal-body > .actions .btn-primary{ min-width:170px; font-size:15px; }
+dialog#modal.modal-fullpage::backdrop{ background:var(--bg, #0f172a); }
+dialog#modal.modal-fullpage .modal-body > *{ width:100%; max-width:1100px; margin-left:auto; margin-right:auto; }
+dialog#modal.modal-fullpage .modal-body > .actions{ order:99; }
+dialog#modal.modal-fullpage .modal-body > :not(.actions):not(.form-grid){ margin-top:14px; flex-shrink:0; }
+dialog#modal.modal-fullpage .modal-body{ padding-bottom:0 !important; }
+
+/* ===== รายละเอียดสต็อก & แนะนำสั่งเติม: เต็มหน้าจอ ===== */
+dialog#stockDetailDialog{
+  width:100vw !important; max-width:none !important;
+  height:100vh; height:100dvh; max-height:none !important;
+  margin:0 !important; border-radius:0 !important; inset:0; overflow:hidden !important;
+  background:var(--bg, #0f172a) !important;
+}
+dialog#stockDetailDialog::backdrop{ background:var(--bg, #0f172a); }
+dialog#stockDetailDialog > .modal-card{
+  width:100% !important; max-width:none !important; height:100%; max-height:none !important;
+  border:0; border-radius:0; box-shadow:none;
+}
+dialog#stockDetailDialog .modal-head{ padding-top:calc(12px + env(safe-area-inset-top, 0px)); }
+dialog#stockDetailDialog #stockDetailBody{
+  max-height:none !important; flex:1 1 auto; padding:20px 24px 0 !important;
+  display:grid; grid-template-columns:minmax(0,1fr); gap:14px; align-content:start;
+}
+dialog#stockDetailDialog #stockDetailBody > *{
+  width:100%; max-width:1180px; margin:0 auto !important; justify-self:center;
+}
+/* ปุ่มด้านล่างติดขอบล่างเสมอ */
+dialog#stockDetailDialog #stockDetailBody > .modal-foot{
+  position:sticky; bottom:0; z-index:5;
+  padding:12px 0 calc(14px + env(safe-area-inset-bottom, 0px));
+  background:var(--surface-card, #1e293b);
+  box-shadow:0 -10px 16px -8px rgba(0,0,0,.3);
+}
+dialog#stockDetailDialog #stockDetailBody > .modal-foot::before{
+  content:""; position:absolute; inset:0 -24px; background:inherit; z-index:-1;
+  border-top:1px solid var(--card-border, #334155);
+}
+dialog#stockDetailDialog #stockDetailBody > .modal-foot .btn{ min-height:44px; }
+/* จอแนวนอนกว้าง: สั่งเติม (ซ้าย) + ประวัติเคลื่อนไหว (ขวา) */
+@media (min-width: 1100px){
+  dialog#stockDetailDialog #stockDetailBody{
+    grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);
+    max-width:none;
+  }
+  dialog#stockDetailDialog #stockDetailBody > *{ grid-column:1 / -1; max-width:1180px; }
+  dialog#stockDetailDialog #stockDetailBody > .auto-refill-panel{
+    grid-column:1; justify-self:end; max-width:620px; margin:0 !important;
+  }
+  dialog#stockDetailDialog #stockDetailBody > .auto-refill-panel + div{
+    grid-column:2; justify-self:start; max-width:545px; margin:0 !important; align-self:stretch;
+  }
+}
+/* ปุ่มปิด: เห็นชัดทุกธีม */
+dialog#stockDetailDialog .icon-close,
+dialog#modal .icon-close{
+  background:#ef4444 !important; color:#ffffff !important; border:1px solid #f87171 !important;
+  width:40px; height:40px; border-radius:10px;
+}
+dialog#stockDetailDialog .icon-close svg,
+dialog#modal .icon-close svg{ display:block !important; width:18px; height:18px; color:#ffffff !important; }
+dialog#stockDetailDialog .icon-close svg path,
+dialog#modal .icon-close svg path{ stroke:#ffffff !important; }
+/* จัดแนวให้ตรงกันทุกแถว (กว้างสุด 1180px กึ่งกลาง) + ปุ่มชิดล่าง */
+dialog#stockDetailDialog #stockDetailBody{
+  padding-left:max(24px, calc((100% - 1180px) / 2)) !important;
+  padding-right:max(24px, calc((100% - 1180px) / 2)) !important;
+  grid-template-rows:auto auto auto 1fr auto; align-content:stretch;
+}
+dialog#stockDetailDialog #stockDetailBody > *{ max-width:none !important; margin:0 !important; justify-self:stretch !important; align-self:start; }
+dialog#stockDetailDialog #stockDetailBody > .modal-foot{ align-self:end; }
+dialog#stockDetailDialog #stockDetailBody > .modal-foot::before{ inset:0 calc(-1 * max(24px, (100vw - 1180px) / 2)); }
+@media (min-width: 1100px){
+  dialog#stockDetailDialog #stockDetailBody{ grid-template-rows:auto auto 1fr auto; }
+  dialog#stockDetailDialog #stockDetailBody > .auto-refill-panel + div{ align-self:stretch; }
+}
+dialog#stockDetailDialog #stockDetailBody{ overflow-x:hidden; }
+
+/* ===== ช่วงวันงาน (ระบบคำนวณสั่งเติม) ===== */
+.event-period-box{
+  margin:4px 0 12px; padding:10px 12px; border-radius:10px;
+  background:rgba(56,189,248,.08); border:1px solid rgba(56,189,248,.35);
+}
+.event-period-row{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px; font-weight:700; }
+.event-period-label{ color:#38bdf8; font-weight:800; }
+.event-period-row input[type="date"]{
+  height:36px; padding:4px 8px; border-radius:8px; font:inherit; font-size:13px;
+  background:var(--surface, #0f172a); color:var(--text-main, #f8fafc); border:1px solid var(--card-border, #334155);
+  width:auto; min-width:140px;
+}
+.event-period-chips{ display:inline-flex; gap:6px; margin-left:auto; }
+.event-period-chips .refill-period-btn{ padding:6px 10px; }
+.event-period-status{ margin-top:8px; font-size:12.5px; color:var(--text-sub, #cbd5e1); }
+.event-period-status b{ color:#38bdf8; font-size:14px; }
+.event-period-hint{ color:#f59e0b; font-weight:700; }
+[data-color-mode="light"] .event-period-box{ background:#f0f9ff; border-color:#bae6fd; }
+[data-color-mode="light"] .event-period-row input[type="date"]{ background:#fff; color:#0f172a; border-color:#cbd5e1; }
+[data-color-mode="light"] .event-period-status{ color:#334155; }
+[data-color-mode="light"] .event-period-status b, [data-color-mode="light"] .event-period-label{ color:#0369a1; }
+[data-color-mode="light"] .event-period-hint{ color:#b45309; }
+
+/* ===== ใบเบิกสินค้าเป็นรูปภาพ ===== */
+.lowstock-restock-wrap{ margin-bottom:16px; }
+.lowstock-restock-wrap:empty{ display:none; }
+.hub-btn.hub-btn-img{ background:linear-gradient(135deg,#06c755,#04a547) !important; color:#fff !important; border-color:#06c755 !important; font-weight:800; }
+dialog.restock-img-dialog{
+  width:min(96vw, 720px) !important; max-width:none !important; max-height:94dvh !important;
+  padding:0; border:0; border-radius:16px; overflow:hidden !important;
+  background:var(--surface-card, #1e293b) !important; color:var(--text-main, #f8fafc) !important;
+  display:none; flex-direction:column;
+}
+dialog.restock-img-dialog[open]{ display:flex; }
+.restock-img-dialog .rid-head{ display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--card-border, #334155); font-size:16px; }
+.restock-img-dialog .rid-close{ width:40px; height:40px; border-radius:10px; border:1px solid #f87171; background:#ef4444; color:#fff; font-size:18px; font-weight:800; cursor:pointer; }
+.restock-img-dialog .rid-body{ flex:1 1 auto; overflow:auto; padding:14px; background:#0b1220; display:flex; justify-content:center; }
+.restock-img-dialog .rid-body img{ width:100%; max-width:540px; height:auto; border-radius:10px; box-shadow:0 6px 24px rgba(0,0,0,.4); background:#fff; }
+.restock-img-dialog .rid-actions{ display:flex; gap:10px; padding:12px 16px 4px; flex-wrap:wrap; }
+.restock-img-dialog .rid-btn{
+  flex:1 1 150px; min-height:48px; border-radius:12px; font:inherit; font-size:15px; font-weight:800; cursor:pointer;
+  background:transparent; color:var(--text-main, #f8fafc); border:1.5px solid var(--card-border, #475569);
+}
+.restock-img-dialog .rid-btn.rid-primary{ background:#06c755; border-color:#06c755; color:#fff; }
+.restock-img-dialog .rid-hint{ padding:6px 16px 14px; font-size:12.5px; color:var(--text-muted, #94a3b8); }
+[data-color-mode="light"] .restock-img-dialog .rid-body{ background:#e2e8f0; }
+.lowstock-restock-wrap.hub{ padding-bottom:0; gap:0; }
+
+/* ===== ฟอนต์ที่ผู้ใช้เลือก ===== */
+html.ea-font, html.ea-font body{ font-family:var(--app-font) !important; }
+html.ea-font :is(button, input, select, textarea, dialog){ font-family:inherit; }
+
+.font-picker{ margin-top:18px; padding-top:14px; border-top:1px solid var(--card-border, #334155); }
+.font-picker-title{ font-size:15px; font-weight:800; margin-bottom:10px; color:var(--text-main, #f8fafc); }
+.font-picker-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(180px, 1fr)); gap:10px; }
+.font-card{
+  display:flex; flex-direction:column; align-items:flex-start; gap:3px; text-align:left;
+  padding:12px 14px; border-radius:12px; cursor:pointer; min-height:92px;
+  background:var(--surface, #1e293b); color:var(--text-main, #f8fafc);
+  border:1.5px solid var(--card-border, #334155);
+}
+html.ea-font .font-card{ font-family:unset; }
+.font-card:hover{ border-color:var(--primary, #38bdf8); }
+.font-card.active{ border-color:var(--primary, #0284c7); box-shadow:0 0 0 3px color-mix(in srgb, var(--primary, #0284c7) 30%, transparent); }
+.font-card-sample{ font-size:19px; font-weight:700; line-height:1.3; }
+.font-card-name{ font-size:13px; font-weight:700; color:var(--primary-light, #38bdf8); }
+.font-card-note{ font-size:11.5px; color:var(--text-muted, #94a3b8); }
+.font-picker-hint{ margin-top:10px; font-size:11.5px; color:var(--text-muted, #94a3b8); }
+[data-color-mode="light"] .font-card{ background:#ffffff; color:#0f172a; border-color:#e2e8f0; }
+[data-color-mode="light"] .font-card-name{ color:#0369a1; }
+.restock-img-dialog .rid-note{ padding:12px 16px 0; }
+.restock-img-dialog .rid-note label{ display:block; font-size:13.5px; font-weight:800; margin-bottom:6px; }
+.restock-img-dialog .rid-note label span{ font-weight:500; font-size:12px; color:var(--text-muted, #94a3b8); }
+.restock-img-dialog .rid-note textarea{
+  width:100%; box-sizing:border-box; min-height:64px; resize:vertical; padding:10px 12px; border-radius:10px;
+  font:inherit; font-size:16px; line-height:1.45;
+  background:var(--surface, #0f172a); color:var(--text-main, #f8fafc); border:1.5px solid #f59e0b;
+}
+[data-color-mode="light"] .restock-img-dialog .rid-note textarea{ background:#fffbeb; color:#1f2937; }
+.restock-img-dialog .rid-body{ max-height:52dvh; }
+
+/* ===== หน้าเติมสต็อก: โหมดปกติ / ขั้นสูง ===== */
+.lowstock-simple-title{ margin:4px 0 12px; font-size:17px; font-weight:800; color:var(--text-main, #f8fafc); }
+.lowstock-advanced-toggle{
+  margin:22px 0 8px; padding:14px 16px; border-radius:12px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  border:1.5px dashed var(--card-border, #334155); color:var(--text-muted, #94a3b8); font-size:12.5px;
+}
+.lowstock-advanced-head{
+  display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+  margin-bottom:10px; padding:10px 14px; border-radius:12px; font-size:13px; font-weight:700;
+  background:rgba(245,158,11,.10); border:1px solid rgba(245,158,11,.4); color:var(--text-main, #f8fafc);
+}
+[data-color-mode="light"] .lowstock-simple-title{ color:#0f172a; }
+[data-color-mode="light"] .lowstock-advanced-head{ color:#78350f; background:#fffbeb; border-color:#fcd34d; }

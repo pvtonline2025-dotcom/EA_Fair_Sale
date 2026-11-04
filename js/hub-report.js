@@ -121,6 +121,9 @@
     const left = Math.max(0, close - now);
     const dayLen = close - open;
     const sold = soldByProduct();
+    // วันสุดท้ายของงาน: ไม่ต้องเผื่อขายพรุ่งนี้
+    let lastEventDay = false;
+    try { const ev = window.getEventPeriod?.(); lastEventDay = !!(ev && ev.started && ev.daysLeftAfterToday === 0); } catch (_) {}
 
     const rows = [];
     for (const p of (s?.products || [])) {
@@ -130,7 +133,7 @@
       const min = Number(p.min_stock || 0);
       const rate = soldQty / elapsed;                       // pieces per hour today
       const needToday = rate * left;
-      const needTomorrow = cfg.tomorrow ? rate * dayLen : 0;
+      const needTomorrow = (cfg.tomorrow && !lastEventDay) ? rate * dayLen : 0;
       const suggest = Math.max(0, Math.ceil(needToday + needTomorrow + min - stock));
       const hoursToOut = rate > 0 ? stock / rate : Infinity;
       const outAt = rate > 0 && hoursToOut < left ? fmtH(now + hoursToOut) : '';
@@ -142,7 +145,7 @@
       }
     }
     rows.sort((a, b) => a.hoursToOut - b.hoursToOut || b.suggest - a.suggest);
-    return { rows, cfg, left, now };
+    return { rows, cfg, left, now, lastEventDay };
   }
 
   function qtyFor(r) { return adjust[r.id] ?? r.suggest; }
@@ -169,7 +172,7 @@
         <div class="hub-restock-cfg">
           <label>เปิดร้าน <input type="time" value="${escapeHtml(cfg.open)}" onchange="hubSetCfg('open', this.value)"></label>
           <label>ปิดร้าน <input type="time" value="${escapeHtml(cfg.close)}" onchange="hubSetCfg('close', this.value)"></label>
-          <label class="hub-check"><input type="checkbox" ${cfg.tomorrow ? 'checked' : ''} onchange="hubSetCfg('tomorrow', this.checked)"> เผื่อขายพรุ่งนี้ทั้งวัน</label>
+          <label class="hub-check"><input type="checkbox" ${cfg.tomorrow ? 'checked' : ''} onchange="hubSetCfg('tomorrow', this.checked)"> เผื่อขายพรุ่งนี้ทั้งวัน${f.lastEventDay ? ' <b style="color:#f59e0b">(วันนี้วันสุดท้ายของงาน — ไม่เผื่อ)</b>' : ''}</label>
         </div>
         ${f.rows.length ? `
           <div class="hub-table-wrap">
@@ -189,8 +192,9 @@
           </div>
           <div class="hub-hint">คำนวณจากความเร็วการขายวันนี้ × ชั่วโมงที่เหลือถึงปิดร้าน${cfg.tomorrow ? ' + ขายพรุ่งนี้ทั้งวัน' : ''} + สต็อกขั้นต่ำ − คงเหลือ • แก้จำนวนได้</div>
           <div class="hub-actions">
-            <button type="button" class="hub-btn-ghost" onclick="copyRestockText()">📋 คัดลอกใบเบิก (LINE)</button>
-            <button type="button" class="hub-btn" onclick="printRestock()">🖨️ พิมพ์ใบเบิก</button>
+            <button type="button" class="hub-btn hub-btn-img" onclick="openRestockImage()">📷 ใบเบิกเป็นรูป (ส่ง LINE)</button>
+            <button type="button" class="hub-btn-ghost" onclick="copyRestockText()">📋 คัดลอกข้อความ</button>
+            <button type="button" class="hub-btn-ghost" onclick="printRestock()">🖨️ พิมพ์</button>
           </div>
         ` : '<div class="hub-empty">ยังไม่มีสินค้าที่ต้องเบิก ✓</div>'}
       </div>`;
@@ -200,7 +204,8 @@
     if (key === 'tomorrow') lsSet(K.tomorrow, value ? 'true' : 'false');
     else if (key === 'open') lsSet(K.open, value || '09:00');
     else if (key === 'close') lsSet(K.close, value || '21:00');
-    window.renderHub?.();
+    const page = window.getEaAppState?.()?.page;
+    if (page === 'lowStock') window.renderLowStock?.(); else window.renderHub?.();
   }
   function hubSetRestockQty(id, v) {
     const n = Math.max(0, Math.floor(Number(v) || 0));
@@ -219,9 +224,10 @@
     const list = restockList();
     let t = `📦 ใบเบิกสินค้า ${shopName()}\n${dateTh()} ${timeTh()} น.\n\n`;
     if (!list.length) return t + 'ไม่มีรายการที่ต้องเบิก';
-    list.forEach((r, i) => { t += `${i + 1}. ${r.name} — เบิก ${r.qty} ${r.unit} (เหลือ ${r.stock}, ขายวันนี้ ${r.soldQty})\n`; });
-    t += `\nรวม ${list.length} รายการ ${list.reduce((a, r) => a + r.qty, 0)} ชิ้น`;
-    return t;
+    list.forEach((r, i) => { t += `${i + 1}. ${r.name} — เบิก ${r.qty} ${r.unit}\n`; });
+    const note = getRestockNote().trim();
+    if (note) t += `\n📝 หมายเหตุ / สั่งพิเศษ:\n${note}`;
+    return t.trim();
   }
 
   async function copyText(text, okMsg) {
@@ -236,6 +242,235 @@
     }
   }
   function copyRestockText() { copyText(restockText(), '📋 คัดลอกใบเบิกแล้ว • วางในแชท LINE ได้เลย'); }
+
+  // =========================================================
+  // ใบเบิกเป็นรูปภาพ (PNG) — แชร์ไป LINE / บันทึกรูป / คัดลอกรูป
+  // =========================================================
+  function eventLine() {
+    try {
+      const ev = window.getEventPeriod?.();
+      if (ev && ev.started && !ev.ended) return `งานวันที่ ${ev.dayNo}/${ev.totalDays}${ev.daysLeftAfterToday ? ` • เหลืออีก ${ev.daysLeftAfterToday} วัน` : ' • วันสุดท้าย'}`;
+    } catch (_) {}
+    return '';
+  }
+  function wrapLines(ctx, text, maxW, maxLines) {
+    const chars = Array.from(String(text || ''));
+    const lines = []; let cur = '';
+    for (const ch of chars) {
+      if (ctx.measureText(cur + ch).width > maxW && cur) {
+        // ตัดที่ช่องว่างล่าสุดถ้ามี
+        const sp = cur.lastIndexOf(' ');
+        if (sp > cur.length * 0.5) { lines.push(cur.slice(0, sp)); cur = cur.slice(sp + 1) + ch; }
+        else { lines.push(cur); cur = ch; }
+        if (lines.length === maxLines) break;
+      } else cur += ch;
+    }
+    if (lines.length < maxLines && cur) lines.push(cur);
+    const consumed = lines.join('').replace(/\s/g, '').length;
+    if (consumed < String(text).replace(/\s/g, '').length) {
+      let last = lines[lines.length - 1];
+      while (last && ctx.measureText(last + '…').width > maxW) last = last.slice(0, -1);
+      lines[lines.length - 1] = last + '…';
+    }
+    return lines;
+  }
+  // หมายเหตุ / สั่งพิเศษ (จำไว้รายวันในเครื่อง)
+  function noteKey() { const d = new Date(); return `ea_restock_note_${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+  function getRestockNote() { try { return localStorage.getItem(noteKey()) || ''; } catch (_) { return ''; } }
+  function setRestockNote(v) { try { localStorage.setItem(noteKey(), String(v || '')); } catch (_) {} }
+
+  function drawRestockImage(list, note = getRestockNote()) {
+    const W = 1080, PAD = 48;
+    const FONT = (window.getAppFontStack && window.getAppFontStack()) || '"Sarabun","Noto Sans Thai","Thonburi",-apple-system,"Segoe UI",sans-serif';
+    const cv = document.createElement('canvas');
+    const ctx = cv.getContext('2d');
+    // คอลัมน์: # | สินค้า | เบิก | หน่วย
+    const colNo = PAD, colName = PAD + 70, colQtyR = W - PAD - 150, colUnit = W - PAD - 125;
+    const nameW = colQtyR - 110 - colName;
+    ctx.font = `600 34px ${FONT}`;
+    const rowsDraw = list.map(r => ({ ...r, lines: wrapLines(ctx, r.name, nameW, 2) }));
+    const rowH = rowsDraw.map(r => r.lines.length > 1 ? 112 : 78);
+
+    // หมายเหตุ: ตัดบรรทัดตามความกว้าง (สูงสุด 14 บรรทัด)
+    const noteText = String(note || '').trim();
+    ctx.font = `500 30px ${FONT}`;
+    const noteLines = [];
+    if (noteText) {
+      for (const para of noteText.split(/\r?\n/)) {
+        if (!para.trim()) { noteLines.push(''); continue; }
+        noteLines.push(...wrapLines(ctx, para, W - 2 * PAD - 20, 6));
+        if (noteLines.length >= 14) break;
+      }
+    }
+    const noteH = noteLines.length ? 84 + noteLines.slice(0, 14).length * 44 : 0;
+
+    const headH = 250, tableHead = 70, footH = 70;
+    const H = headH + tableHead + rowH.reduce((a, b) => a + b, 0) + (noteH ? noteH + 30 : 0) + footH;
+    cv.width = W; cv.height = H;
+
+    // พื้นหลัง + หัว
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, H);
+    const g = ctx.createLinearGradient(0, 0, W, 0); g.addColorStop(0, '#0f766e'); g.addColorStop(1, '#0369a1');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, headH - 30);
+    ctx.fillStyle = '#ffffff'; ctx.textBaseline = 'alphabetic';
+    ctx.font = `800 58px ${FONT}`; ctx.fillText('📦 ใบเบิกสินค้า', PAD, 92);
+    ctx.font = `600 32px ${FONT}`; ctx.fillText(shopName(), PAD, 142);
+    ctx.font = `500 28px ${FONT}`; ctx.fillStyle = 'rgba(255,255,255,.92)';
+    const ev = eventLine();
+    ctx.fillText(`${dateTh()} • ${timeTh()} น.${ev ? '   ' + ev : ''}`, PAD, 190);
+
+    // หัวตาราง
+    let y = headH;
+    ctx.fillStyle = '#f1f5f9'; ctx.fillRect(PAD - 16, y, W - 2 * PAD + 32, tableHead);
+    ctx.fillStyle = '#475569'; ctx.font = `700 26px ${FONT}`;
+    ctx.fillText('#', colNo, y + 45); ctx.fillText('สินค้า', colName, y + 45);
+    ctx.textAlign = 'right'; ctx.fillText('เบิก', colQtyR, y + 45);
+    ctx.textAlign = 'left'; ctx.fillText('หน่วย', colUnit, y + 45);
+    y += tableHead;
+
+    // แถวสินค้า
+    rowsDraw.forEach((r, i) => {
+      const h = rowH[i];
+      if (i % 2 === 1) { ctx.fillStyle = '#f8fafc'; ctx.fillRect(PAD - 16, y, W - 2 * PAD + 32, h); }
+      const mid = y + h / 2;
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#94a3b8'; ctx.font = `700 30px ${FONT}`; ctx.fillText(String(i + 1), colNo, mid + 11);
+      ctx.fillStyle = '#0f172a'; ctx.font = `600 34px ${FONT}`;
+      if (r.lines.length > 1) { ctx.fillText(r.lines[0], colName, mid - 8); ctx.fillText(r.lines[1], colName, mid + 34); }
+      else ctx.fillText(r.lines[0] || '', colName, mid + 12);
+      ctx.textAlign = 'right'; ctx.font = `800 46px ${FONT}`; ctx.fillStyle = '#0f766e';
+      ctx.fillText(fmtQty(r.qty), colQtyR, mid + 16);
+      ctx.textAlign = 'left'; ctx.font = `600 30px ${FONT}`; ctx.fillStyle = '#334155';
+      const u = wrapLines(ctx, r.unit, W - PAD - colUnit, 1); ctx.fillText(u[0] || '', colUnit, mid + 11);
+      ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(PAD - 16, y + h); ctx.lineTo(W - PAD + 16, y + h); ctx.stroke();
+      y += h;
+    });
+
+    // หมายเหตุ / สั่งพิเศษ
+    if (noteH) {
+      y += 30;
+      ctx.fillStyle = '#fffbeb'; ctx.strokeStyle = '#fcd34d'; ctx.lineWidth = 2;
+      roundRect(ctx, PAD - 16, y, W - 2 * PAD + 32, noteH, 16); ctx.fill(); ctx.stroke();
+      ctx.textAlign = 'left'; ctx.fillStyle = '#92400e'; ctx.font = `800 30px ${FONT}`;
+      ctx.fillText('📝 หมายเหตุ / สั่งพิเศษ', PAD + 4, y + 52);
+      ctx.fillStyle = '#1f2937'; ctx.font = `500 30px ${FONT}`;
+      noteLines.slice(0, 14).forEach((ln, k) => ctx.fillText(ln, PAD + 4, y + 100 + k * 44));
+      y += noteH;
+    }
+
+    ctx.textAlign = 'left'; ctx.fillStyle = '#94a3b8'; ctx.font = `500 22px ${FONT}`;
+    ctx.fillText('สร้างจาก EA Fair Sale', PAD, H - 26);
+    return cv;
+  }
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  let restockImg = null; // { blob, url, file }
+  function restockFileName() {
+    const d = new Date(); const p = n => String(n).padStart(2, '0');
+    return `restock-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.png`;
+  }
+  async function loadImageFonts() {
+    try {
+      const fam = (window.getAppFontStack?.() || '').split(',')[0];
+      if (fam && document.fonts?.load) await Promise.race([
+        Promise.all(['500 28px', '600 34px', '700 30px', '800 58px'].map(w => document.fonts.load(`${w} ${fam}`, 'ใบเบิก'))),
+        new Promise(r => setTimeout(r, 2500))
+      ]);
+      await document.fonts?.ready;
+    } catch (_) {}
+  }
+  async function buildRestockImage(list) {
+    const cv = drawRestockImage(list, getRestockNote());
+    const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+    if (!blob) return null;
+    if (restockImg?.url) URL.revokeObjectURL(restockImg.url);
+    const file = new File([blob], restockFileName(), { type: 'image/png' });
+    restockImg = { blob, url: URL.createObjectURL(blob), file, list };
+    return restockImg;
+  }
+  let noteTimer = null;
+  function onRestockNoteInput(v) {
+    setRestockNote(v);
+    clearTimeout(noteTimer);
+    noteTimer = setTimeout(async () => {
+      if (!restockImg) return;
+      const img = await buildRestockImage(restockImg.list);
+      const el = document.querySelector('#restockImgDialog .rid-body img');
+      if (img && el) el.src = img.url;
+    }, 350);
+  }
+  async function openRestockImage() {
+    const list = restockList();
+    if (!list.length) { toast('ยังไม่มีรายการที่ต้องเบิก (จำนวนเบิกเป็น 0 ทั้งหมด)'); return; }
+    await loadImageFonts();
+    const img = await buildRestockImage(list);
+    if (!img) { toast('สร้างรูปไม่สำเร็จ'); return; }
+    let dlg = document.getElementById('restockImgDialog');
+    if (!dlg) {
+      dlg = document.createElement('dialog');
+      dlg.id = 'restockImgDialog';
+      dlg.className = 'restock-img-dialog';
+      document.body.appendChild(dlg);
+      dlg.addEventListener('close', () => { if (restockImg?.url) { URL.revokeObjectURL(restockImg.url); restockImg = null; } });
+    }
+    const canShare = !!(navigator.canShare && navigator.canShare({ files: [img.file] }));
+    const canCopy = !!(window.ClipboardItem && navigator.clipboard?.write);
+    dlg.innerHTML = `
+      <div class="rid-head">
+        <strong>📷 ใบเบิกสินค้า (${list.length} รายการ)</strong>
+        <button type="button" class="rid-close" onclick="document.getElementById('restockImgDialog').close()" aria-label="ปิด">✕</button>
+      </div>
+      <div class="rid-body"><img src="${img.url}" alt="ใบเบิกสินค้า"></div>
+      <div class="rid-note">
+        <label for="restockNoteInput">📝 หมายเหตุ / สั่งพิเศษ <span>(ขึ้นในรูปทันที • เว้นว่างได้)</span></label>
+        <textarea id="restockNoteInput" rows="2" placeholder="เช่น ขอถุงใส่ของ 2 แพ็ค, สายยางสีเขียวเพิ่ม 1 ม้วน, ส่งก่อน 9 โมง" oninput="onRestockNoteInput(this.value)">${escapeHtml(getRestockNote())}</textarea>
+      </div>
+      <div class="rid-actions">
+        ${canShare ? '<button type="button" class="rid-btn rid-primary" onclick="shareRestockImage()">📤 แชร์ไป LINE</button>' : ''}
+        <button type="button" class="rid-btn ${canShare ? '' : 'rid-primary'}" onclick="downloadRestockImage()">💾 บันทึกรูป</button>
+        ${canCopy ? '<button type="button" class="rid-btn" onclick="copyRestockImage()">📋 คัดลอกรูป</button>' : ''}
+      </div>
+      <div class="rid-hint">${canShare ? 'กด "แชร์ไป LINE" แล้วเลือก LINE → เลือกกลุ่มภายใน' : 'บันทึกรูปแล้วส่งเข้า LINE หรือกด "คัดลอกรูป" แล้ววาง (Ctrl+V) ในแชท LINE'}</div>`;
+    if (!dlg.open) dlg.showModal();
+  }
+  // ก่อนแชร์/บันทึก/คัดลอก: วาดรูปล่าสุดให้ตรงกับหมายเหตุที่เพิ่งพิมพ์
+  async function ensureLatestImage() {
+    clearTimeout(noteTimer);
+    const ta = document.getElementById('restockNoteInput');
+    if (ta) setRestockNote(ta.value);
+    if (restockImg) {
+      const img = await buildRestockImage(restockImg.list);
+      const el = document.querySelector('#restockImgDialog .rid-body img');
+      if (img && el) el.src = img.url;
+    }
+  }
+  async function shareRestockImage() {
+    if (!restockImg) return;
+    await ensureLatestImage();
+    try {
+      await navigator.share({ files: [restockImg.file], title: 'ใบเบิกสินค้า', text: `ใบเบิกสินค้า ${shopName()} ${dateTh()}` });
+    } catch (e) {
+      if (e?.name !== 'AbortError') { toast('แชร์ไม่สำเร็จ — ลองกด "บันทึกรูป" แทน'); }
+    }
+  }
+  async function downloadRestockImage() {
+    if (!restockImg) return;
+    await ensureLatestImage();
+    const a = document.createElement('a');
+    a.href = restockImg.url; a.download = restockImg.file.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    toast('💾 บันทึกรูปใบเบิกแล้ว');
+  }
+  async function copyRestockImage() {
+    if (!restockImg) return;
+    await ensureLatestImage();
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': restockImg.blob })]);
+      toast('📋 คัดลอกรูปแล้ว • วางในแชท LINE ได้เลย');
+    } catch (e) { toast('คัดลอกรูปไม่สำเร็จ — ใช้ "บันทึกรูป" แทน'); }
+  }
 
   // A4 document: on screen shows an A4 sheet preview; printing fits the content to one A4 page
   // when possible (fit=true shrinks up to 60%, longer reports continue on page 2).
@@ -328,11 +563,11 @@
       <h1>ใบเบิกสินค้า – ${escapeHtml(shopName())}</h1>
       <div class="sub">${escapeHtml(dateTh())} เวลา ${escapeHtml(timeTh())} น.</div>
       <table>
-        <thead><tr><th>#</th><th>สินค้า</th><th class="r">ขายวันนี้</th><th class="r">คงเหลือ</th><th class="r">เบิก</th><th>หน่วย</th><th>ได้รับจริง</th></tr></thead>
-        <tbody>${list.map((r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.name)}</td><td class="r">${r.soldQty}</td><td class="r">${r.stock}</td><td class="r b">${r.qty}</td><td>${escapeHtml(r.unit)}</td><td></td></tr>`).join('')}
-          <tr class="tot"><td colspan="4">รวม ${list.length} รายการ</td><td class="r">${list.reduce((a, r) => a + r.qty, 0)}</td><td colspan="2"></td></tr>
+        <thead><tr><th>#</th><th>สินค้า</th><th class="r">เบิก</th><th>หน่วย</th><th>ได้รับจริง</th></tr></thead>
+        <tbody>${list.map((r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.name)}</td><td class="r b">${r.qty}</td><td>${escapeHtml(r.unit)}</td><td></td></tr>`).join('')}
         </tbody>
       </table>
+      ${getRestockNote().trim() ? `<div style="margin-top:12px;padding:10px 12px;border:1px solid #fcd34d;background:#fffbeb;border-radius:8px;white-space:pre-wrap;"><b>📝 หมายเหตุ / สั่งพิเศษ:</b>\n${escapeHtml(getRestockNote().trim())}</div>` : ''}
       <div class="sign"><div>ผู้เบิก</div><div>ผู้จ่ายสินค้า</div></div>`);
   }
 
@@ -563,6 +798,12 @@
     hubSetRestockQty,
     copyRestockText,
     printRestock,
+    openRestockImage,
+    shareRestockImage,
+    downloadRestockImage,
+    copyRestockImage,
+    onRestockNoteInput,
+    hubRestockImageCanvas: () => drawRestockImage(restockList()),
     printDailyReport,
     copyDailyReportText,
     printCashSummary,

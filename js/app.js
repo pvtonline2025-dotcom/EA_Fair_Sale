@@ -441,6 +441,94 @@ function applyTheme(themeId, mode) {
   }
 }
 
+/* ---------- ฟอนต์ของแอป (เลือกได้ จำค่าไว้ในเครื่อง + ฐานข้อมูล) ---------- */
+const APP_FONTS = [
+  { id: "default", name: "ค่าเริ่มต้น", note: "ฟอนต์ของเครื่อง", family: null },
+  { id: "sarabun", name: "Sarabun", note: "สารบรรณ อ่านง่าย มีหัว", family: "Sarabun", w: "400;600;700;800" },
+  { id: "noto", name: "Noto Sans Thai", note: "เรียบ สะอาด", family: "Noto Sans Thai", w: "400;500;600;700;800" },
+  { id: "ibm", name: "IBM Plex Sans Thai", note: "ทันสมัย มืออาชีพ", family: "IBM Plex Sans Thai", w: "400;500;600;700" },
+  { id: "anuphan", name: "Anuphan", note: "โมเดิร์น ไม่มีหัว", family: "Anuphan", w: "400;500;600;700" },
+  { id: "prompt", name: "Prompt", note: "ไม่มีหัว ตัวหนาชัด", family: "Prompt", w: "400;500;600;700;800" },
+  { id: "kanit", name: "Kanit", note: "ไม่มีหัว กระชับ", family: "Kanit", w: "400;500;600;700;800" },
+  { id: "baijam", name: "Bai Jamjuree", note: "เหลี่ยม ทันสมัย", family: "Bai Jamjuree", w: "400;500;600;700" },
+  { id: "chakra", name: "Chakra Petch", note: "เหลี่ยม เท่", family: "Chakra Petch", w: "400;500;600;700" },
+  { id: "mitr", name: "Mitr", note: "กลมมน เป็นมิตร", family: "Mitr", w: "400;500;600;700" }
+];
+const APP_FONT_FALLBACK = '"Noto Sans Thai", Tahoma, -apple-system, "Segoe UI", sans-serif';
+function appFontById(id){ return APP_FONTS.find(x => x.id === id) || APP_FONTS[0]; }
+function googleFontHref(fonts){
+  const fams = fonts.filter(x => x.family).map(x => `family=${encodeURIComponent(x.family).replace(/%20/g, "+")}:wght@${x.w}`);
+  return fams.length ? `https://fonts.googleapis.com/css2?${fams.join("&")}&display=swap` : "";
+}
+function getAppFontId(){
+  let id = state.settings?.appFont;
+  if(!id){ try { id = localStorage.getItem("ea_app_font"); } catch(_) {} }
+  return appFontById(id).id;
+}
+function getAppFontStack(){
+  const f = appFontById(getAppFontId());
+  return f.family ? `"${f.family}", ${APP_FONT_FALLBACK}` : APP_FONT_FALLBACK;
+}
+function applyAppFont(id){
+  const f = appFontById(id);
+  const root = document.documentElement;
+  let link = document.getElementById("eaAppFontLink");
+  if(f.family){
+    const href = googleFontHref([f]);
+    if(!link){
+      link = document.createElement("link");
+      link.id = "eaAppFontLink"; link.rel = "stylesheet";
+      document.head.appendChild(link);
+    }
+    if(link.getAttribute("href") !== href) link.setAttribute("href", href);
+    root.style.setProperty("--app-font", `"${f.family}", ${APP_FONT_FALLBACK}`);
+    root.classList.add("ea-font");
+  } else {
+    root.style.removeProperty("--app-font");
+    root.classList.remove("ea-font");
+  }
+  root.dataset.appFont = f.id;
+}
+function selectAppFont(id){
+  const f = appFontById(id);
+  if(!state.settings) state.settings = {};
+  state.settings.appFont = f.id;
+  try { localStorage.setItem("ea_app_font", f.id); } catch(_) {}
+  applyAppFont(f.id);
+  saveLocalState();
+  if (sb && !state.isOffline) {
+    upsertSetting("app_font", f.id).catch(err => console.warn("Upsert app_font failed:", err));
+  }
+  toast(`🔤 เปลี่ยนฟอนต์เป็น "${f.name}" แล้ว`);
+  const modalContent = el("themePickerModalContent");
+  if (modalContent) modalContent.innerHTML = renderThemeSelectorHTML();
+  if (state.page === "settings" && typeof renderSettings === "function") renderSettings();
+}
+function renderFontSelectorHTML(){
+  // โหลดทุกฟอนต์เพื่อแสดงตัวอย่าง (ครั้งเดียว)
+  if(!document.getElementById("eaFontPreviewLink")){
+    const l = document.createElement("link");
+    l.id = "eaFontPreviewLink"; l.rel = "stylesheet";
+    l.href = googleFontHref(APP_FONTS.map(x => x.family ? { ...x, w: "400;700" } : x));
+    document.head.appendChild(l);
+  }
+  const cur = getAppFontId();
+  return `
+    <div class="font-picker">
+      <div class="font-picker-title">🔤 ฟอนต์ตัวอักษร</div>
+      <div class="font-picker-grid">
+        ${APP_FONTS.map(f => `
+          <button type="button" class="font-card ${f.id === cur ? "active" : ""}" onclick="selectAppFont('${f.id}')" aria-pressed="${f.id === cur}"
+            style="font-family:${f.family ? `'${f.family}', ` : ""}${APP_FONT_FALLBACK.replace(/"/g, "'")};">
+            <span class="font-card-sample">สินค้าขายดี ฿1,250</span>
+            <span class="font-card-name">${escapeHtml(f.name)}${f.id === cur ? " ✓" : ""}</span>
+            <span class="font-card-note">${escapeHtml(f.note)}</span>
+          </button>`).join("")}
+      </div>
+      <div class="font-picker-hint">ฟอนต์จะดาวน์โหลดครั้งแรกตอนมีอินเทอร์เน็ต ถ้าออฟไลน์จะใช้ฟอนต์ของเครื่องแทนชั่วคราว</div>
+    </div>`;
+}
+
 function selectTheme(themeId) {
   if (!THEMES[themeId]) return;
   if (!state.settings) state.settings = {};
@@ -509,8 +597,8 @@ function openThemePickerModal() {
       <div style="display:flex; align-items:center; gap:12px;">
         <div style="width:40px; height:40px; border-radius:10px; background:linear-gradient(135deg,var(--primary,#0284c7),var(--primary-light,#38bdf8)); display:flex; align-items:center; justify-content:center; font-size:20px; color:#fff;">🎨</div>
         <div>
-          <h3 style="margin:0; font-size:18px; font-weight:800; color:var(--text-main,#f8fafc);">ตั้งค่าสีธีม & โหมดแสดงผล (App Theme)</h3>
-          <p style="margin:2px 0 0 0; font-size:12px; color:var(--text-muted,#94a3b8);">สลับ Dark/Light mode และเลือกโทนสีแบรนด์ได้ตามต้องการ</p>
+          <h3 style="margin:0; font-size:18px; font-weight:800; color:var(--text-main,#f8fafc);">ตั้งค่าสีธีม ฟอนต์ & โหมดแสดงผล</h3>
+          <p style="margin:2px 0 0 0; font-size:12px; color:var(--text-muted,#94a3b8);">สลับ Dark/Light mode เลือกโทนสี และฟอนต์ตัวอักษรได้ตามต้องการ</p>
         </div>
       </div>
       <button onclick="closeThemePickerModal()" style="background:var(--surface,#1e293b); border:1px solid var(--card-border,#334155); color:var(--text-muted,#94a3b8); font-size:16px; border-radius:50%; width:34px; height:34px; cursor:pointer; display:flex; align-items:center; justify-content:center;">✕</button>
@@ -539,21 +627,21 @@ function renderThemeSelectorHTML() {
   return `
     <div style="background:var(--bg-secondary); border:1px solid var(--card-border); border-radius:12px; padding:12px 16px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
       <div>
-        <div style="font-weight:800; font-size:14px; color:var(--text-main);">โหมดแสดงผลหน้าจอ (Display Mode)</div>
-        <div style="font-size:12px; color:var(--text-muted);">เลือกสลับระหว่างโหมดมืด (Dark Mode) และโหมดสว่าง (Light Mode)</div>
+        <div style="font-weight:800; font-size:14px; color:var(--text-main);">โหมดแสดงผลหน้าจอ</div>
+        <div style="font-size:12px; color:var(--text-muted);">เลือกสลับระหว่างโหมดมืด และโหมดสว่าง</div>
       </div>
       <div style="display:flex; gap:6px; background:var(--surface); padding:4px; border-radius:10px; border:1px solid var(--card-border);">
         <button type="button" class="btn ${currentMode === 'dark' ? 'btn-primary' : 'btn-light'}" onclick="toggleColorMode('dark')" style="padding:6px 14px; font-size:12px; border-radius:8px; font-weight:700;">
-          🌙 โหมดมืด (Dark)
+          🌙 โหมดมืด
         </button>
         <button type="button" class="btn ${currentMode === 'light' ? 'btn-primary' : 'btn-light'}" onclick="toggleColorMode('light')" style="padding:6px 14px; font-size:12px; border-radius:8px; font-weight:700;">
-          ☀️ โหมดสว่าง (Light)
+          ☀️ โหมดสว่าง
         </button>
       </div>
     </div>
 
     <p style="margin-top:0;color:var(--text-muted);font-size:12px;margin-bottom:12px;">
-      เลือกจานสีแบรนด์ร้านค้า (Theme Palette) จะถูกนำไปใช้ร่วมกับโหมด ${currentMode === 'light' ? 'สว่าง (Light Mode)' : 'มืด (Dark Mode)'} แบบเรียลไทม์ทันที
+      เลือกจานสีแบรนด์ร้านค้า จะถูกนำไปใช้ร่วมกับโหมด ${currentMode === 'light' ? 'สว่าง (Light Mode)' : 'มืด (Dark Mode)'} แบบเรียลไทม์ทันที
     </p>
 
     <div class="theme-grid">
@@ -584,6 +672,7 @@ function renderThemeSelectorHTML() {
         `;
       }).join("")}
     </div>
+      ${renderFontSelectorHTML()}
   `;
 }
 
@@ -648,6 +737,8 @@ const state = {
   auditHistoryFilterStatus: "all", // "all" | "matched" | "discrepancy" | "shortage" | "surplus"
   auditHistorySearch: ""
 };
+// ใช้ฟอนต์ที่เลือกไว้ทันทีตอนเปิดแอป
+try { applyAppFont(getAppFontId()); } catch(e) { console.warn('applyAppFont', e); }
 window.getEaAppState = () => state;
 
 let scannerControls=null;
@@ -861,11 +952,10 @@ function checkAndNotifyLowStock(productsList) {
       const unit = prod.unit || prod.unit_name || 'ชิ้น';
       const isOut = Number(prod.stock_qty) <= 0;
 
-      // 1. In-App Toast
-      const toastMsg = isOut 
-        ? `🚨 หมดสต็อก! "${prod.product_name}" เหลือ 0 ${unit} (เกณฑ์ขั้นต่ำ ${prod.min_stock})`
-        : `⚠️ สต็อกต่ำกว่าเกณฑ์! "${prod.product_name}" เหลือเพียง ${prod.stock_qty} ${unit} (เกณฑ์ขั้นต่ำ ${prod.min_stock})`;
-      toast(toastMsg, 5000);
+      // 1. In-App Toast (รายการเดียวเท่านั้น — หลายรายการรวมเป็นข้อความเดียวด้านล่าง)
+      if (newlyLow.length === 1) {
+        toast(isOut ? `หมดแล้ว: ${prod.product_name}` : `ใกล้หมด: ${prod.product_name} เหลือ ${prod.stock_qty} ${unit}`, 4000);
+      }
 
       // 2. Web Push Notification API
       const notifTitle = isOut ? `🚨 แจ้งเตือน: สินค้าหมดสต็อก!` : `⚠️ แจ้งเตือน: สต็อกสินค้าต่ำกว่าเกณฑ์!`;
@@ -878,8 +968,7 @@ function checkAndNotifyLowStock(productsList) {
       });
     });
 
-    // 3. Automated Background Email Notification Service to Manager
-    triggerLowStockEmail(false);
+    if (newlyLow.length > 1) toast(`สินค้าใกล้หมด/หมดแล้ว ${newlyLow.length} รายการ • ดูที่ปุ่มกระดิ่ง`, 4000);
   }
 }
 
@@ -1118,7 +1207,6 @@ function openLowStockAlertModal() {
         <span style="color: #f87171; font-weight: 700; font-size: 13px;">พบสินค้าต่ำกว่าเกณฑ์ขั้นต่ำทั้งหมด ${lowItems.length} รายการ</span>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
           <button type="button" class="btn warning small" onclick="exportMasterReportExcel()">📥 ดาวน์โหลด Reorder Excel</button>
-          <button type="button" class="btn primary small" onclick="triggerLowStockEmail(true)" style="background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);">📧 ส่งอีเมลแจ้งเตือนผู้จัดการ</button>
         </div>
       </div>
       <div class="table-wrap" style="max-height: 360px; overflow-y: auto;">
@@ -1703,13 +1791,16 @@ async function loadAll(){
       throw err;
     }
     state.isOffline=false;
-    state.products=p.data||[];state.sales=s.data||[];state.saleItems=i.data||[];state.movements=m.data||[];
+    state.products=p.data||[];applyLocalProductExtras(state.products);state.sales=s.data||[];state.saleItems=i.data||[];state.movements=m.data||[];
     
     for(const r of g.data||[]){
       if(r.setting_key==="shop_name")state.settings.shopName=r.setting_value||"EA Fair Sale";
       if(r.setting_key==="shop_branch")state.settings.shopBranch=r.setting_value||"";
       if(r.setting_key==="shop_address")state.settings.shopAddress=r.setting_value||"";
       if(r.setting_key==="shop_phone")state.settings.shopPhone=r.setting_value||"";
+      if(r.setting_key==="event_start_date")state.settings.eventStartDate=r.setting_value||"";
+      if(r.setting_key==="app_font"&&r.setting_value){state.settings.appFont=r.setting_value;try{localStorage.setItem("ea_app_font",r.setting_value)}catch(_){}applyAppFont(r.setting_value);}
+      if(r.setting_key==="event_end_date")state.settings.eventEndDate=r.setting_value||"";
       if(r.setting_key==="prompt_pay_id")state.settings.promptPayId=r.setting_value||"";
       if(r.setting_key==="shop_tax_id")state.settings.shopTaxId=r.setting_value||"";
       if(r.setting_key==="shop_line")state.settings.shopLine=r.setting_value||"";
@@ -1740,6 +1831,22 @@ async function loadAll(){
   }
 }
 
+
+// สินค้าขายดี: เลือกจัดอันดับตามจำนวนเงิน / จำนวนสินค้า (จำค่าไว้ในเครื่อง)
+function getHotSortMode(){
+  if(state.hotSortBy === "revenue" || state.hotSortBy === "qty") return state.hotSortBy;
+  let v = null;
+  try{ v = localStorage.getItem("ea_hot_sort_by"); }catch(_){}
+  state.hotSortBy = (v === "revenue" || v === "qty") ? v : "qty";
+  return state.hotSortBy;
+}
+function setHotSortMode(mode){
+  state.hotSortBy = mode === "revenue" ? "revenue" : "qty";
+  try{ localStorage.setItem("ea_hot_sort_by", state.hotSortBy); }catch(_){}
+  const y = window.scrollY;
+  render();
+  window.scrollTo({ top: y });
+}
 
 function getTodayItemStats(){
   const salesToday = todaySales();
@@ -2617,6 +2724,19 @@ function setCriticalSort(mode){
   else render();
 }
 
+function sumProductSoldSince(productId, sinceISO){
+  const ids = new Set();
+  for(const s of (state.sales || [])){
+    const d = s.sale_date || (s.created_at ? s.created_at.slice(0, 10) : "");
+    if(d && d >= sinceISO) ids.add(s.id);
+  }
+  let total = 0;
+  for(const it of (state.saleItems || [])){
+    if(it.product_id === productId && ids.has(it.sale_id)) total += Number(it.qty || 0);
+  }
+  return total;
+}
+
 function calculate30DaySalesVelocity(productId, currentStock){
   const now = new Date();
   const past30DaysDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -2640,10 +2760,10 @@ function calculate30DaySalesVelocity(productId, currentStock){
   // Fallback to stock movements if sales items are empty or recorded in movements
   if(totalSold30D === 0 && Array.isArray(state.movements)){
     for(const m of state.movements){
-      if(m.product_id === productId && (m.movement_type === "sale" || m.movement_type === "out")){
+      if(m.product_id === productId && /^(sale|out)$/i.test(String(m.movement_type || ""))){
         const md = m.movement_date || (m.created_at ? m.created_at.slice(0, 10) : "");
         if(md && md >= past30DaysISO){
-          totalSold30D += Math.abs(Number(m.quantity || 0));
+          totalSold30D += Math.abs(Number(m.qty_change ?? m.quantity ?? 0));
         }
       }
     }
@@ -3788,7 +3908,7 @@ function openQuickRefillModal(productId, defaultQty = 10){
 
       <div class="refill-modal-body">
         <div class="refill-prod-info">
-          <h4>${escapeHtml(prod.product_name)}</h4>
+          <h4 data-keep-text>${escapeHtml(prod.product_name)}</h4>
           <p>รหัส: ${escapeHtml(prod.product_code || '-')} • Barcode: ${escapeHtml(prod.barcode || '-')}</p>
           <div style="margin-top:8px; font-size:13px; color:#cbd5e1;">
             Stock ปัจจุบัน: <strong style="color:${stock <= 0 ? '#f87171' : '#fbbf24'}">${stock} ชิ้น</strong> | จุดขั้นต่ำ: <strong>${min} ชิ้น</strong>
@@ -3900,7 +4020,7 @@ function renderHourlyChart(){
 }
 
 function renderHome(){
-  setHeader("สรุปภาพรวมรายวัน", "ภาพรวมการขายและสต็อกสินค้าประจำวัน");
+  setHeader("ภาพรวมวันนี้", "");
 
   const total = todayTotal();
   const daySales = todaySales();
@@ -3928,6 +4048,7 @@ function renderHome(){
   const days = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
   const months = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
   const thaiDateStr = `วัน${days[now.getDay()]}ที่ ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear() + 543}`;
+  setHeader("ภาพรวมวันนี้", `${thaiDateStr} • ${state.isOffline ? "ออฟไลน์" : "ออนไลน์"}`);
 
   // Determine Goal Status and Face Emoji Animation Theme
   let statusBadgeText = "";
@@ -4000,8 +4121,14 @@ function renderHome(){
     }
   }
 
-  // Find max quantity sold to draw proportional bar
+  // จัดอันดับตามที่เลือก: "qty" = จำนวนสินค้า, "revenue" = จำนวนเงิน
+  const hotSortBy = getHotSortMode();
+  const hotMetric = (i) => hotSortBy === "revenue" ? (Number(i.revenue) || 0) : (Number(i.qty) || 0);
+  hotSaleItems.sort((a, b) => (hotMetric(b) - hotMetric(a)) || ((Number(b.revenue) || 0) - (Number(a.revenue) || 0)) || ((Number(b.qty) || 0) - (Number(a.qty) || 0)));
+
+  // Find max of the chosen metric to draw proportional bar
   const maxHotQty = Math.max(1, ...hotSaleItems.map(i => Number(i.qty) || 0));
+  const maxHotMetric = Math.max(1, ...hotSaleItems.map(hotMetric));
 
   // Build Hot Sale section with complete information for every item
   let hotSaleHtml = '';
@@ -4020,32 +4147,33 @@ function renderHome(){
       <div class="tdd-hot-list">
         ${hotSaleItems.map((item, idx) => {
           const rankClass = idx === 0 ? "gold" : (idx === 1 ? "silver" : (idx === 2 ? "bronze" : ""));
-          const rankLabel = idx === 0 ? "🥇 1" : (idx === 1 ? "🥈 2" : (idx === 2 ? "🥉 3" : `#${idx + 1}`));
+          const rankLabel = String(idx + 1);
           const prod = (state.products || []).find(p => p.id === item.product_id || p.product_name === item.product_name);
           const cat = prod?.category || item.category || "";
           const price = prod?.sale_price ? Number(prod.sale_price) : 0;
           const qty = Number(item.qty) || 0;
           const revenue = Number(item.revenue || item.total || (qty * price));
-          const pct = Math.round((qty / maxHotQty) * 100);
+          const unitName = prod?.unit || prod?.unit_name || "ชิ้น";
+          const pct = Math.round((hotMetric(item) / maxHotMetric) * 100);
 
           return `
             <div class="tdd-hot-row" onclick="go('report')" title="ดูรายละเอียดสถิติยอดขาย">
               <span class="tdd-rank-pill ${rankClass}">${rankLabel}</span>
               <div class="tdd-hot-name-wrap">
                 <div class="tdd-hot-name">${escapeHtml(item.product_name || item.name || "สินค้า")}</div>
-                <div class="tdd-hot-meta">
-                  ${cat ? `<span class="tdd-hot-cat">${escapeHtml(cat)}</span>` : ''}
-                  ${price > 0 ? `<span>฿${money(price)}/ชิ้น</span>` : ''}
-                  <strong style="color: #38bdf8;">ขายแล้ว ${qty} ชิ้น</strong>
-                </div>
                 ${qty > 0 ? `
-                  <div class="tdd-hot-bar-wrap" title="${pct}% ของสินค้าขายดีอันดับ 1">
+                  <div class="tdd-hot-bar-wrap" title="${pct}% ของอันดับ 1 (${hotSortBy === 'revenue' ? 'ตามจำนวนเงิน' : 'ตามจำนวนสินค้า'})">
                     <div class="tdd-hot-bar-fill" style="width: ${pct}%;"></div>
                   </div>` : ''}
               </div>
               <div class="tdd-hot-sales">
-                <div class="tdd-hot-amount">฿${money(revenue)}</div>
-                <div class="tdd-hot-units">ยอดรวม</div>
+                ${hotSortBy === 'revenue' ? `
+                  <div class="tdd-hot-amount">฿${money(revenue)}</div>
+                  <div class="tdd-hot-units">${qty} ${escapeHtml(unitName)}</div>
+                ` : `
+                  <div class="tdd-hot-amount tdd-hot-amount-qty">${qty.toLocaleString('th-TH')} <small>${escapeHtml(unitName)}</small></div>
+                  <div class="tdd-hot-units">฿${money(revenue)}</div>
+                `}
               </div>
             </div>`;
         }).join('')}
@@ -4088,13 +4216,9 @@ function renderHome(){
             <div class="tdd-stock-row ${isOut ? '' : 'is-low'}" onclick="go('stock')" title="คลิกเพื่อจัดการสต็อก">
               <div class="tdd-stock-info">
                 <div class="tdd-stock-name">${escapeHtml(p.product_name)}</div>
-                <div class="tdd-stock-meta">
-                  <span>ขั้นต่ำ: ${min} ชิ้น</span>
-                  ${p.category ? ` • <span>${escapeHtml(p.category)}</span>` : ''}
-                </div>
               </div>
               <span class="tdd-stock-badge ${isOut ? 'out' : 'low'}">
-                ${isOut ? '🚫 หมดสต็อก (0)' : `⚠️ เหลือ ${s} ชิ้น`}
+                ${isOut ? 'หมด' : `เหลือ ${s} ${escapeHtml(p.unit || 'ชิ้น')}`}
               </span>
             </div>`;
         }).join('')}
@@ -4104,37 +4228,6 @@ function renderHome(){
   el("content").innerHTML = `
     ${connectionNotice()}
     <div class="tablet-daily-dashboard">
-
-      <!-- Compact Tablet Header Bar (AppSheet / Tablet Hub Style) -->
-      <div class="tdd-top-bar">
-        <div class="tdd-top-bar-left">
-          <div class="tdd-top-bar-title-wrap">
-            <span class="tdd-top-icon">📊</span>
-            <h2 class="tdd-top-bar-title">DASHBOARD TODAY</h2>
-            <span class="tdd-top-bar-badge">สรุปภาพรวมรายวัน</span>
-          </div>
-          <div class="tdd-top-bar-meta">
-            <span class="tdd-top-date">📅 ${thaiDateStr}</span>
-            <span class="tdd-top-dot">•</span>
-            <span>สาขา: <strong class="tdd-top-branch">${escapeHtml(state.settings.branch || "TERMINAL-01")}</strong></span>
-            <span class="tdd-top-dot">•</span>
-            <span class="tdd-top-online" style="color: ${state.isOffline ? '#f59e0b' : '#10b981'}; font-weight: 700;">
-              ${state.isOffline ? '⚡ โหมดออฟไลน์' : '🟢 ออนไลน์ปกติ'}
-            </span>
-          </div>
-        </div>
-        <div class="tdd-top-bar-right">
-          <button class="tdd-header-action-btn stock" type="button" onclick="go('stock')" title="จัดการคลังและสต็อกสินค้า">
-            <span>📦 สต็อก</span>
-          </button>
-          <button class="tdd-header-action-btn history" type="button" onclick="go('salesHistory')" title="ดูประวัติการขายประจำวัน">
-            <span>🧾 ประวัติบิล</span>
-          </button>
-          <button class="tdd-header-action-btn report" type="button" onclick="go('report')" title="ดูรายงานสรุปยอดขาย">
-            <span>📊 รายงาน</span>
-          </button>
-        </div>
-      </div>
 
       <!-- 3-Column Operational Grid (Col 1: ~40% | Col 2: ~40% | Col 3: ~20%) -->
       <div class="tdd-three-cols-grid">
@@ -4148,7 +4241,7 @@ function renderHome(){
           <div class="tdd-panel tdd-card-top tdd-sales-summary-card" onclick="go('salesHistory')" title="แตะเพื่อดูประวัติการขาย">
             <div class="tdd-panel-head">
               <h3 class="tdd-panel-title">
-                <span>💰 ยอดขายรวมวันนี้ 💰</span>
+                <span>ยอดขายวันนี้</span>
               </h3>
               <span class="tdd-panel-link-icon" title="ดูประวัติบิล">↗</span>
             </div>
@@ -4156,8 +4249,8 @@ function renderHome(){
             <div class="tdd-sales-amount-row">
               <div class="tdd-sales-amount-val green">฿${money(total)}</div>
               <div class="tdd-sales-stats-pills">
-                <span class="tdd-stat-pill">🧾 ${bills} บิล</span>
-                <span class="tdd-stat-pill">📦 ${units} ชิ้น</span>
+                <span class="tdd-stat-pill">${bills} บิล</span>
+                <span class="tdd-stat-pill">${units} ชิ้น</span>
               </div>
             </div>
 
@@ -4172,8 +4265,8 @@ function renderHome(){
                   <div class="tdd-split-qr" style="width: ${qrPct}%" title="QR / โอน ${qrPct}%"></div>
                 </div>
                 <div class="tdd-pay-legend-compact">
-                  <span class="tdd-legend-cash">💵 สด ฿${money(cashTotal)} (${cashPct}%)</span>
-                  <span class="tdd-legend-qr">📲 QR ฿${money(qrTotal)} (${qrPct}%)</span>
+                  <span class="tdd-legend-cash">เงินสด ฿${money(cashTotal)}</span>
+                  <span class="tdd-legend-qr">โอน/QR ฿${money(qrTotal)}</span>
                 </div>
               </div>
             </div>
@@ -4183,9 +4276,12 @@ function renderHome(){
           <div class="tdd-panel tdd-card-bottom tdd-hotsale-panel">
             <div class="tdd-panel-head">
               <h3 class="tdd-panel-title">
-                <span>💥 ${isHotSaleAllTime ? 'สินค้าขายดีประจำร้าน' : 'HOT SALE (สินค้าขายดี)'} 💥</span>
-                <span class="tdd-panel-badge">${hotSaleItems.length} รายการ</span>
+                <span>${isHotSaleAllTime ? 'สินค้าขายดีประจำร้าน' : 'สินค้าขายดีวันนี้'}</span>
               </h3>
+              <div class="tdd-hot-sort" role="group" aria-label="จัดอันดับตาม">
+                <button type="button" class="${hotSortBy === 'revenue' ? 'active' : ''}" aria-pressed="${hotSortBy === 'revenue'}" onclick="event.stopPropagation(); setHotSortMode('revenue')" title="จัดอันดับตามจำนวนเงิน"><span class="lbl-long">จำนวนเงิน</span><span class="lbl-short">฿ เงิน</span></button>
+                <button type="button" class="${hotSortBy === 'qty' ? 'active' : ''}" aria-pressed="${hotSortBy === 'qty'}" onclick="event.stopPropagation(); setHotSortMode('qty')" title="จัดอันดับตามจำนวนสินค้าที่ขาย"><span class="lbl-long">จำนวนสินค้า</span><span class="lbl-short">จำนวน</span></button>
+              </div>
               <button class="tdd-panel-action" type="button" onclick="go('report')">
                 <span>ดูทั้งหมด</span>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -4207,17 +4303,13 @@ function renderHome(){
           <div class="tdd-panel tdd-card-top tdd-target-card" onclick="go('settings')" title="แตะเพื่อตั้งค่าเป้าหมายรายวัน">
             <div class="tdd-panel-head">
               <h3 class="tdd-panel-title">
-                <span>🎯 เป้าหมายยอดขาย 🎯</span>
+                <span>เป้าหมายวันนี้</span>
               </h3>
               <span class="tdd-panel-link-icon" title="ตั้งค่าเป้าหมาย">⚙️</span>
             </div>
 
-            <div class="tdd-target-highlight-banner">
-              <span>⭐ เป้าหมาย ${money(target)} บาท/วัน ⭐</span>
-            </div>
-
             <div class="tdd-target-status-line">
-              <span class="tdd-target-status-label">สถานะ : <strong>${targetPct}%</strong></span>
+              <span class="tdd-target-status-label"><strong>${targetPct}%</strong></span>
               <span class="tdd-target-status-value">฿${money(total)} / ฿${money(target)}</span>
             </div>
 
@@ -4227,9 +4319,9 @@ function renderHome(){
 
             <div class="tdd-target-footer-info">
               <span class="tdd-target-remain-tag ${targetPct >= 100 ? 'done' : ''}">
-                ${targetPct >= 100 ? `🎉 บรรลุเป้าหมายแล้ว! (+฿${money(overTarget)})` : `ขาดอีก ฿${money(remainTarget)} บาท`}
+                ${targetPct >= 100 ? `ถึงเป้าแล้ว +฿${money(overTarget)}` : `ขาดอีก ฿${money(remainTarget)}`}
               </span>
-              <span class="tdd-target-edit-hint">แตะเพื่อแก้ไข ↗</span>
+
             </div>
           </div>
 
@@ -4237,10 +4329,8 @@ function renderHome(){
           <div class="tdd-panel tdd-card-bottom tdd-stock-alerts-panel">
             <div class="tdd-panel-head">
               <h3 class="tdd-panel-title">
-                <span>⚠️ สินค้าเหลือน้อย ⚠️</span>
-                <span class="tdd-panel-badge red">
-                  ${stockAlerts.length} รายการ
-                </span>
+                <span>สินค้าใกล้หมด</span>
+                <span class="tdd-panel-badge red">${stockAlerts.length}</span>
               </h3>
               <button class="tdd-panel-action" type="button" onclick="go('stock')">
                 <span>จัดการสต็อก</span>
@@ -4263,7 +4353,7 @@ function renderHome(){
           <div class="tdd-panel tdd-col3-status-card" data-keep-emoji onclick="go('settings')" title="แตะเพื่อดูรายละเอียดเป้าหมาย">
             <div class="tdd-panel-head">
               <h3 class="tdd-panel-title">
-                <span>🏆 STATUS 🏆</span>
+                <span>สถานะ</span>
               </h3>
             </div>
 
@@ -4307,133 +4397,54 @@ function renderHome(){
 }
 
 function renderMenu(){
-  setHeader("MENU","เลือกเมนูที่ต้องการใช้งาน");
-  const sales=todayTotal();
-  const pct=Math.min(100,Math.round(sales/Math.max(1,state.settings.target)*100));
-
-  el("content").innerHTML=`
-    ${connectionNotice()}
-    <section class="app-home image-menu-home">
-      <div class="image-menu-grid">
-        <button class="image-menu-btn" onclick="go('sale')" aria-label="POS ขายสินค้า">
-          <img src="./images/btn-sale.png" alt="Sale Products">
-        </button>
-        <button class="image-menu-btn" onclick="go('salesHistory')" aria-label="ประวัติการขาย">
-          <div class="menu-custom-tile history-tile">
-            <div class="menu-tile-bg"></div>
-            <div class="menu-tile-content">
-              <span class="menu-tile-icon">📜</span>
-              <div class="menu-tile-title">ประวัติการขาย</div>
-              <div class="menu-tile-subtitle">Sales History · ดูบิลย้อนหลัง</div>
-            </div>
-            <span class="menu-tile-badge">${state.sales ? state.sales.length : 0} บิล</span>
-          </div>
-        </button>
-        <button class="image-menu-btn" onclick="go('expenses')" aria-label="บันทึกค่าใช้จ่ายและกำไรสุทธิ">
-          <div class="menu-custom-tile expense-tile">
-            <div class="menu-tile-bg"></div>
-            <div class="menu-tile-content">
-              <span class="menu-tile-icon">💸</span>
-              <div class="menu-tile-title">ค่าใช้จ่าย & กำไรสุทธิ</div>
-              <div class="menu-tile-subtitle">Expenses · คำนวณกำไรแท้จริง</div>
-            </div>
-            <span class="menu-tile-badge">${state.expenses ? state.expenses.length : 0} รายการ</span>
-          </div>
-        </button>
-        <button class="image-menu-btn" onclick="go('hub')" aria-label="ศูนย์กลาง ยอดทุกเครื่อง">
-          <div class="menu-custom-tile history-tile hub-tile">
-            <div class="menu-tile-bg"></div>
-            <div class="menu-tile-content">
-              <span class="menu-tile-icon">🏢</span>
-              <div class="menu-tile-title">ศูนย์กลาง (ยอดทุกเครื่อง)</div>
-              <div class="menu-tile-subtitle">ยอดแยกเครื่อง · รับเงินสด · สต็อกใกล้หมด</div>
-            </div>
-          </div>
-        </button>
-        <button class="image-menu-btn" onclick="startRemoteScan()" aria-label="มือถือสแกนคิดเงิน">
-          <div class="menu-custom-tile scanner-tile remote-scan-tile">
-            <div class="menu-tile-bg"></div>
-            <div class="menu-tile-content">
-              <span class="menu-tile-icon">📱</span>
-              <div class="menu-tile-title">มือถือสแกนคิดเงิน</div>
-              <div class="menu-tile-subtitle">สแกน → รับเงิน → ตัดสต็อก · สรุปยอดรายเครื่อง</div>
-            </div>
-          </div>
-        </button>
-        <button class="image-menu-btn" onclick="startScanner()" aria-label="สแกนบาร์โค้ดด้วยกล้อง">
-          <div class="menu-custom-tile scanner-tile">
-            <div class="menu-tile-bg"></div>
-            <div class="menu-tile-content">
-              <span class="menu-tile-icon">📷</span>
-              <div class="menu-tile-title">สแกนบาร์โค้ดด่วน</div>
-              <div class="menu-tile-subtitle">Camera Scanner · กล้องอุปกรณ์</div>
-            </div>
-            <span class="menu-tile-badge">สแกนสด</span>
-          </div>
-        </button>
-        <button class="image-menu-btn" onclick="openBarcodePrintModal()" aria-label="พิมพ์ฉลากบาร์โค้ดสินค้า">
-          <div class="menu-custom-tile barcode-tile">
-            <div class="menu-tile-bg"></div>
-            <div class="menu-tile-content">
-              <span class="menu-tile-icon">🖨️</span>
-              <div class="menu-tile-title">พิมพ์บาร์โค้ดสินค้า</div>
-              <div class="menu-tile-subtitle">Print Barcode · สติกเกอร์ & A4</div>
-            </div>
-            <span class="menu-tile-badge">พิมพ์ฉลาก</span>
-          </div>
-        </button>
-        <button class="image-menu-btn" onclick="go('audit')" aria-label="ตรวจนับสต็อกจริง & กระทบยอด">
-          <div class="menu-custom-tile audit-tile">
-            <div class="menu-tile-bg"></div>
-            <div class="menu-tile-content">
-              <span class="menu-tile-icon">🔍</span>
-              <div class="menu-tile-title">ตรวจนับสต็อกจริง</div>
-              <div class="menu-tile-subtitle">Physical Audit · สแกนกระทบยอด</div>
-            </div>
-            <span class="menu-tile-badge">Batch Scan</span>
-          </div>
-        </button>
-        <button class="image-menu-btn" onclick="go('dashboardToday')" aria-label="Dashboard วันนี้">
-          <img src="./images/btn-dashboard-today.png" alt="Report Today">
-        </button>
-        <button class="image-menu-btn" onclick="go('dashboardAll')" aria-label="Dashboard รวมทั้งงาน">
-          <img src="./images/btn-dashboard-all.png" alt="Home Dashboard">
-        </button>
-        <button class="image-menu-btn" onclick="goMovement('IN')" aria-label="รับสินค้าเข้า">
-          <img src="./images/btn-add-stock.png" alt="Add Stock">
-        </button>
-        <button class="image-menu-btn" onclick="goMovement('OUT')" aria-label="เบิกสินค้าออก">
-          <img src="./images/btn-out-stock.png" alt="Out Stock">
-        </button>
-        <button class="image-menu-btn" onclick="openNewProductFromHome()" aria-label="เพิ่มสินค้าใหม่">
-          <img src="./images/btn-new-product.png" alt="New Products">
-        </button>
-        <button class="image-menu-btn" onclick="go('stock')" aria-label="สต็อกสินค้า">
-          <img src="./images/btn-stock.png" alt="Stock Products">
-        </button>
-        <button class="image-menu-btn menu-with-badge" onclick="go('lowStock')" aria-label="สินค้าใกล้หมด">
-          <img src="./images/btn-low-stock.png" alt="Low Stock">
-          <span class="menu-count-badge">${lowProducts().length}</span>
-        </button>
-        <button class="image-menu-btn" onclick="go('report')" aria-label="ส่งออกรายงาน">
-          <img src="./images/btn-export.png" alt="Export Report">
-        </button>
-        <button class="image-menu-btn" onclick="openThemePickerModal()" aria-label="ตั้งค่าสีธีมและโหมดมืดสว่าง">
-          <div class="menu-custom-tile theme-tile" style="background: linear-gradient(135deg, #0284c7 0%, #38bdf8 100%); border-radius:16px; min-height:85px; position:relative; overflow:hidden; display:flex; align-items:center; padding:12px; border:1px solid rgba(56,189,248,0.4);">
-            <div class="menu-tile-bg"></div>
-            <div class="menu-tile-content" style="z-index:2; text-align:left;">
-              <span class="menu-tile-icon" style="font-size:22px;">🎨</span>
-              <div class="menu-tile-title" style="font-weight:800; font-size:14px; color:#ffffff;">สีธีม & Dark/Light</div>
-              <div class="menu-tile-subtitle" style="font-size:11px; color:rgba(255,255,255,0.85);">สลับโหมดมืด/สว่าง · 7 โทนสี</div>
-            </div>
-            <span class="menu-tile-badge" style="position:absolute; top:8px; right:8px; background:rgba(0,0,0,0.3); color:#fff; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700;">โหมด & สี</span>
-          </div>
-        </button>
-        <button class="image-menu-btn" onclick="go('settings')" aria-label="ตั้งค่า">
-          <img src="./images/btn-setting.png" alt="Setting">
-        </button>
-      </div>
+  setHeader("เมนูทั้งหมด","");
+  const lowCount = lowProducts().length;
+  const billsToday = todaySales().length;
+  const tile = (o) => `
+    <button type="button" class="menu2-tile accent-${o.accent}" onclick="${o.on}" aria-label="${escapeHtml(o.title)}">
+      <span class="menu2-icon">${o.icon}</span>
+      <span class="menu2-text">
+        <span class="menu2-title">${o.title}</span>
+        ${o.hint ? `<span class="menu2-hint">${o.hint}</span>` : ""}
+      </span>
+      ${o.badge ? `<span class="menu2-badge ${o.badgeWarn ? "warn" : ""}">${o.badge}</span>` : ""}
+    </button>`;
+  const group = (title, items) => `
+    <section class="menu2-group">
+      <h3 class="menu2-group-title">${title}</h3>
+      <div class="menu2-grid">${items.map(tile).join("")}</div>
     </section>`;
+
+  el("content").innerHTML = `
+    ${connectionNotice()}
+    <div class="menu2">
+      ${group("ขาย", [
+        { icon: "🛒", title: "ขายสินค้า", hint: "เปิดบิลหน้าร้าน", on: "go('sale')", accent: "green" },
+        { icon: "📱", title: "มือถือสแกนคิดเงิน", hint: "ใช้มือถือเป็นเครื่องคิดเงิน", on: "startRemoteScan()", accent: "green" },
+        { icon: "🧾", title: "ประวัติการขาย", hint: billsToday ? `วันนี้ ${billsToday} บิล • ดูย้อนหลัง` : "ดูบิลย้อนหลัง", on: "go('salesHistory')", accent: "green" },
+        { icon: "🏢", title: "ศูนย์กลาง", hint: "ยอดทุกเครื่อง • รับเงินสด", on: "go('hub')", accent: "green" },
+        { icon: "💸", title: "ค่าใช้จ่าย & กำไร", hint: "บันทึกรายจ่าย", on: "go('expenses')", accent: "green" }
+      ])}
+      ${group("สินค้าและสต็อก", [
+        { icon: "📦", title: "สต็อกสินค้า", hint: "รายการ • แก้ไข • รับเข้า", on: "go('stock')", accent: "blue" },
+        { icon: "➕", title: "เพิ่มสินค้าใหม่", hint: "", on: "openNewProductFromHome()", accent: "blue" },
+        { icon: "📥", title: "รับสินค้าเข้า", hint: "เพิ่มจำนวนในสต็อก", on: "goMovement('IN')", accent: "blue" },
+        { icon: "📤", title: "เบิกสินค้าออก", hint: "ตัดจำนวนออกจากสต็อก", on: "goMovement('OUT')", accent: "blue" },
+        { icon: "📋", title: "ใบเบิก & ใกล้หมด", hint: "ส่งใบเบิกเป็นรูปเข้า LINE", on: "go('lowStock')", accent: "blue", badge: lowCount ? String(lowCount) : "", badgeWarn: true },
+        { icon: "🔍", title: "ตรวจนับสต็อก", hint: "นับของจริงแล้วปรับยอด", on: "go('audit')", accent: "blue" },
+        { icon: "🖨️", title: "พิมพ์บาร์โค้ด", hint: "สติกเกอร์ 4.2×3 ซม. / A4", on: "openBarcodePrintModal()", accent: "blue" },
+        { icon: "📷", title: "สแกนบาร์โค้ด", hint: "ใช้กล้องค้นหาสินค้า", on: "startScanner()", accent: "blue" }
+      ])}
+      ${group("รายงาน", [
+        { icon: "📊", title: "ภาพรวมวันนี้", hint: "", on: "go('dashboardToday')", accent: "purple" },
+        { icon: "📈", title: "ภาพรวมทั้งงาน", hint: "", on: "go('dashboardAll')", accent: "purple" },
+        { icon: "📄", title: "รายงาน & ส่งออก", hint: "Excel / PDF", on: "go('report')", accent: "purple" }
+      ])}
+      ${group("ตั้งค่า", [
+        { icon: "🎨", title: "ธีม สี & ฟอนต์", hint: "โหมดมืด/สว่าง", on: "openThemePickerModal()", accent: "slate" },
+        { icon: "⚙️", title: "ตั้งค่าร้าน", hint: "ชื่อร้าน • พร้อมเพย์ • ใบเสร็จ", on: "go('settings')", accent: "slate" }
+      ])}
+    </div>`;
 }
 
 function goMovement(type){
@@ -6195,13 +6206,15 @@ function renderStockForecastCardsSection(isDashboardCompact = false) {
 }
 
 function renderLowStock(){
-  setHeader("AUTO-REPLENISHMENT & LOW STOCK", "ระบบเติมสต็อกสินค้าอัตโนมัติ และแจ้งเตือนสต็อกต่ำ");
+  setHeader("เบิกสินค้า & สินค้าใกล้หมด", "ใบเบิกสินค้าประจำวัน (ส่ง LINE) และรายการที่ต้องเติม");
   const rows = lowProducts();
   const outCount = rows.filter(p => Number(p.stock_qty) <= 0).length;
   const severeCount = rows.filter(p => Number(p.stock_qty) > 0 && Number(p.stock_qty) <= Math.max(1, Math.ceil(Number(p.min_stock) / 2))).length;
   const lowCount = rows.length - outCount - severeCount;
   const notifInfo = getNotificationPermissionStatus();
-  const currentTab = state.lowStockTab || "auto_replenish";
+  // งานแฟร์ใช้แค่ใบเบิก + รายการใกล้หมด • เครื่องมือสั่งซื้อซัพพลายเออร์ (PO) ซ่อนไว้ในโหมดขั้นสูง
+  const advanced = !!state.lowStockAdvanced;
+  const currentTab = advanced ? (state.lowStockTab || "auto_replenish") : "low_cards";
 
   let tabContentHtml = "";
   if (currentTab === "auto_replenish") {
@@ -6335,6 +6348,9 @@ function renderLowStock(){
   el("content").innerHTML = `
     ${connectionNotice()}
 
+    <!-- ใบเบิกสินค้าวันนี้ (แก้จำนวนได้ / ส่งเป็นรูปเข้า LINE) -->
+    <div class="lowstock-restock-wrap hub">${typeof window.renderHubRestockPanel === "function" ? window.renderHubRestockPanel() : ""}</div>
+
     <div style="background:rgba(15,23,42,0.85); border:1px solid #334155; border-radius:12px; padding:12px 16px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
       <div style="display:flex; align-items:center; gap:10px;">
         <span style="font-size:20px;">🔔</span>
@@ -6369,6 +6385,11 @@ function renderLowStock(){
       </div>
     </div>
 
+    ${advanced ? `
+    <div class="lowstock-advanced-head">
+      <span>⚙️ เครื่องมือขั้นสูง — สั่งซื้อจากซัพพลายเออร์ (ไม่จำเป็นสำหรับงานแฟร์)</span>
+      <button type="button" class="btn btn-light" onclick="toggleLowStockAdvanced(false)">✕ ซ่อน กลับหน้าปกติ</button>
+    </div>
     <div class="replenish-tab-bar" style="margin-bottom:16px;">
       <button type="button" class="replenish-tab-btn ${currentTab === 'auto_replenish' ? 'active' : ''}" onclick="setLowStockSubTab('auto_replenish')">
         🤖 คำนวณสั่งเติมสต็อก (Smart PO)
@@ -6386,9 +6407,23 @@ function renderLowStock(){
         🚨 สินค้าใกล้หมด (${rows.length})
       </button>
     </div>
+    ` : `<h3 class="lowstock-simple-title">🚨 สินค้าใกล้หมด / หมดแล้ว (${rows.length})</h3>`}
 
     ${tabContentHtml}
+
+    ${advanced ? '' : `
+    <div class="lowstock-advanced-toggle">
+      <button type="button" class="btn btn-light" onclick="toggleLowStockAdvanced(true)">⚙️ เครื่องมือขั้นสูง (สั่งซื้อจากซัพพลายเออร์ / PO)</button>
+      <span>ไม่จำเป็นสำหรับงานแฟร์ — ใช้ "ใบเบิกสินค้า" ด้านบนแทน</span>
+    </div>`}
   `;
+}
+
+function toggleLowStockAdvanced(on){
+  state.lowStockAdvanced = !!on;
+  if(on && (!state.lowStockTab || state.lowStockTab === "low_cards")) state.lowStockTab = "auto_replenish";
+  renderLowStock();
+  window.scrollTo({ top: 0 });
 }
 
 function setPosMode(m){state.posMode=m;renderSale()}
@@ -6675,10 +6710,10 @@ function renderCartTotalBox(){
   }
 
   return `
-    <div class="line">
-      <span>ยอดรวมสินค้า (Subtotal)</span>
+    ${totalDiscAmt > 0 ? `<div class="line">
+      <span>ราคารวมก่อนลด</span>
       <strong>฿${money(subtotalOrig)}</strong>
-    </div>
+    </div>` : ''}
     ${itemsDiscAmt > 0 ? `
       <div class="line" style="color:#fbbf24; font-size:12.5px;">
         <span>🏷️ ส่วนลดเฉพาะรายการ</span>
@@ -6698,16 +6733,16 @@ function renderCartTotalBox(){
     ` : ''}
     <div class="pos-total-banner">
       <div class="pos-total-banner-label">
-        <span>ยอดสุทธิที่ต้องชำระ</span>
+        <span>ยอดชำระ</span>
         <small>${cartCount()} รายการ • ${state.cart.reduce((s,i)=>s+Number(i.qty),0)} ชิ้น</small>
       </div>
       <div class="pos-total-banner-amount">฿${money(total)}</div>
     </div>
     ${paymentHtml}
     <button class="btn btn-primary checkout-btn" onclick="checkoutCart()" ${state.cart.length?"":"disabled"}>
-      ${G_ICONS.check} ยืนยันการขาย & ชำระเงิน (฿${money(total)})
+      ${G_ICONS.check} ชำระเงิน ฿${money(total)}
     </button>
-    ${state.cart.length ? `<button class="btn btn-light cart-clear-btn" onclick="clearCart()">${G_ICONS.trash} ล้างตะกร้าสินค้า</button>` : ""}
+    ${state.cart.length ? `<button class="btn btn-light cart-clear-btn" onclick="clearCart()">${G_ICONS.trash} ล้างตะกร้า</button>` : ""}
   `;
 }
 
@@ -7013,7 +7048,7 @@ function handleCartLiveScannedBarcode(code){
 }
 
 function renderSale(){
-  setHeader("POS ขายสินค้า",`จุดขาย ${state.terminal} • แตะหรือสแกนสินค้าเพื่อเพิ่มลงตะกร้า`);
+  setHeader("ขายสินค้า",`จุดขาย ${state.terminal}`);
   
   const activeProds = state.products.filter(p => p.is_active && Number(p.stock_qty) > 0);
   const modeTabs = `
@@ -7028,6 +7063,8 @@ function renderSale(){
   `;
 
   let leftContent = "";
+  // หน้าขายใช้แบบเดียว: ค้นหา/สแกนในช่องเดียว + กล้อง (ไม่ต้องสลับแท็บ)
+  if(state.posMode !== "grid") state.posMode = "grid";
   if(state.posMode === "grid"){
     const q = String(state.posSearch || "").trim().toLowerCase();
     const filterMode = state.posFilter || "all";
@@ -7049,15 +7086,14 @@ function renderSale(){
     leftContent = `
       <div class="pos-search-wrapper">
         <span class="pos-search-icon">${G_ICONS.searchIcon}</span>
-        <input type="search" class="pos-search-input" id="posSearchInput" placeholder="ค้นหาชื่อ, รหัส, หรือสแกนบาร์โค้ดแล้วกด Enter..." value="${escapeHtml(state.posSearch)}" oninput="onPosSearchInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();handlePosSearchEnter(this.value);}" style="padding-right:${state.posSearch ? '110px' : '90px'};">
+        <input type="search" class="pos-search-input" id="posSearchInput" placeholder="ค้นหา หรือสแกนบาร์โค้ด" value="${escapeHtml(state.posSearch)}" oninput="onPosSearchInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();handlePosSearchEnter(this.value);}" style="padding-right:${state.posSearch ? '110px' : '90px'};">
         ${state.posSearch ? `<button class="pos-search-clear" style="right:86px;" onclick="clearPosSearch()">✕</button>` : ""}
-        <button type="button" class="pos-search-camera-btn" onclick="toggleCartLiveScanner()" title="เปิดกล้องสแกนด่วน">📷 สแกนกล้อง</button>
+        <button type="button" class="pos-search-camera-btn" onclick="toggleCartLiveScanner()" title="เปิดกล้องสแกน">📷 กล้อง</button>
       </div>
       <div class="pos-filter-chips">
         <button type="button" class="pos-chip ${filterMode==='all'?'active':''}" onclick="setPosFilter('all')">ทั้งหมด (${activeProds.length})</button>
-        <button type="button" class="pos-chip ${filterMode==='instock'?'active':''}" onclick="setPosFilter('instock')">🟢 พร้อมขาย (${inStockCount})</button>
-        <button type="button" class="pos-chip ${filterMode==='low'?'active':''}" onclick="setPosFilter('low')">⚠️ ใกล้หมด (${lowStockCount})</button>
-        <button type="button" class="pos-chip" style="margin-left:auto; background:rgba(2,132,199,0.18); border-color:#0284c7; color:#38bdf8;" onclick="openBarcodePrintModal()" title="พิมพ์ฉลากบาร์โค้ดสินค้า">🖨️ พิมพ์บาร์โค้ด</button>
+        <button type="button" class="pos-chip ${filterMode==='instock'?'active':''}" onclick="setPosFilter('instock')">พร้อมขาย (${inStockCount})</button>
+        <button type="button" class="pos-chip ${filterMode==='low'?'active':''}" onclick="setPosFilter('low')">ใกล้หมด (${lowStockCount})</button>
       </div>
       <div class="pos-product-grid">
         ${filtered.length ? filtered.map(p => {
@@ -7070,7 +7106,6 @@ function renderSale(){
           return `
             <div class="pos-product-card ${isOut ? "out-of-stock" : ""}" onclick="${isOut ? `toast('สินค้าหมดสต็อก')` : `addProductToCartById('${p.id}')`}" title="${escapeHtml(p.product_name)}">
               <div>
-                <div class="pos-card-code">${escapeHtml(p.product_code || "-")}</div>
                 <div class="pos-card-name">${escapeHtml(p.product_name)}</div>
               </div>
               <div class="pos-card-foot">
@@ -7110,24 +7145,10 @@ function renderSale(){
     <div id="posNetworkSyncBanner" class="pos-net-banner" style="display:none;"></div>
     <div class="pos-layout">
       <div class="pos-panel">
-        ${card("เลือก / สแกนสินค้า", `
-          ${modeTabs}
+        ${card("สินค้า", `
           ${leftContent}
-        `, `<span class="pos-terminal">${state.terminal}</span>`)}
-
-        ${card("สินค้าใกล้หมด", `
-          <div class="list">
-            ${lowProducts().slice(0,5).map(p=>`
-              <div class="list-item">
-                <div>
-                  <strong>${escapeHtml(p.product_name)}</strong>
-                  <small>${p.stock_qty} ${escapeHtml(p.unit || 'ชิ้น')} คงเหลือ • ขั้นต่ำ ${p.min_stock} ${escapeHtml(p.unit || 'ชิ้น')}</small>
-                </div>
-                ${statusForProduct(p)}
-              </div>
-            `).join("") || `<div class="empty">ไม่มีสินค้าใกล้หมด</div>`}
-          </div>
         `)}
+
       </div>
 
       <div class="pos-panel">
@@ -7144,7 +7165,7 @@ function renderSale(){
           </div>
         `, `
           <button type="button" class="cart-scanner-toggle-btn ${state.cartScannerActive ? 'active' : ''}" onclick="toggleCartLiveScanner()" title="เปิด/ปิดกล้องสแกนบาร์โค้ดด่วนลงตะกร้า">
-            ${state.cartScannerActive ? '🔴 ปิดกล้อง' : '📷 สแกนด่วน (Rapid Scan)'}
+            ${state.cartScannerActive ? '🔴 ปิดกล้อง' : '📷 สแกน'}
           </button>
         `)}
       </div>
@@ -11889,9 +11910,8 @@ function renderStockCardItem(p){
   const qtyNum = Number(p.stock_qty);
   const minNum = Number(p.min_stock);
   const qtyColor = qtyNum <= 0 ? '#f87171' : qtyNum <= minNum ? '#fbbf24' : '#34d399';
-  const qtyLabel = qtyNum <= 0 ? 'หมดสต็อก' : qtyNum <= minNum ? 'ใกล้หมด' : 'คงเหลือ';
+  const qtyLabel = 'คงเหลือ';
   const unitStr = p.unit || "ชิ้น";
-  const refill = calculateAutoSuggestRefill(p, { targetDays: 14 });
 
   return `
     <div class="stock-item-card">
@@ -11921,12 +11941,6 @@ function renderStockCardItem(p){
           </div>
         </div>
         <div class="stock-item-actions">
-          <button class="mini-btn" style="background:linear-gradient(135deg, #0f766e 0%, #115e59 100%); color:#ffffff; border:1px solid #2dd4bf; font-weight:800;" onclick="openBarcodePrintModal('${p.id}')" title="พิมพ์ฉลากบาร์โค้ดสำหรับสินค้านี้ (${p.stock_qty || 0} ชิ้น)">
-            🖨️ บาร์โค้ด (${p.stock_qty || 0})
-          </button>
-          <button class="mini-btn info" style="background:#0284c7; color:#ffffff; font-weight:700; border-color:#38bdf8;" onclick="openStockDetailModal('${p.id}')" title="ดูรายละเอียดสต็อกและความเร็วการขาย พร้อมระบบแนะนำสั่งเติมอัตโนมัติ">
-            💡 แนะนำเติม ${refill && refill.suggestedQty > 0 ? `(+${refill.suggestedQty})` : ''}
-          </button>
           <button class="mini-btn receive" onclick="quickReceive('${p.id}')">+ รับเข้า</button>
           <button class="mini-btn edit" onclick="editProduct('${p.id}')">แก้ไข</button>
         </div>
@@ -11940,7 +11954,6 @@ function renderStockTableRow(p){
   const minNum = Number(p.min_stock);
   const qtyColor = qtyNum <= 0 ? '#f87171' : qtyNum <= minNum ? '#fbbf24' : '#34d399';
   const unitStr = p.unit || "ชิ้น";
-  const refill = calculateAutoSuggestRefill(p, { targetDays: 14 });
 
   return `
     <tr>
@@ -11959,12 +11972,6 @@ function renderStockTableRow(p){
       <td class="col-qty"><strong style="font-size:15px; color:${qtyColor}; font-weight:900;">${p.stock_qty}</strong> <span style="font-size:12px; color:#cbd5e1; font-weight:600; margin-left:3px;">${escapeHtml(unitStr)}</span></td>
       <td class="col-status">${statusForProduct(p)}</td>
       <td class="col-actions">
-        <button class="mini-btn" style="background:linear-gradient(135deg, #0f766e 0%, #115e59 100%); color:#ffffff; border:1px solid #2dd4bf; font-weight:800;" onclick="openBarcodePrintModal('${p.id}')" title="พิมพ์ฉลากบาร์โค้ดสำหรับสินค้านี้ (${p.stock_qty || 0} ชิ้น)">
-          🖨️ บาร์โค้ด
-        </button>
-        <button class="mini-btn info" style="background:#0284c7; color:#ffffff; font-weight:700; border-color:#38bdf8;" onclick="openStockDetailModal('${p.id}')" title="ดูรายละเอียดสต็อกและคำนวณสั่งเติมอัตโนมัติ">
-          💡 แนะนำเติม ${refill && refill.suggestedQty > 0 ? `(+${refill.suggestedQty})` : ''}
-        </button>
         <button class="mini-btn receive" onclick="quickReceive('${p.id}')">+ รับเข้า</button>
         <button class="mini-btn edit" onclick="editProduct('${p.id}')">แก้ไข</button>
       </td>
@@ -12178,18 +12185,11 @@ function renderStock(){
     ${connectionNotice()}
     ${topControls}
     <div id="stockDataViewContainer">
-      ${card(`รายการสินค้า (${totalItems} รายการ)`, listHtml, `
+      ${card(`สินค้า ${totalItems} รายการ`, listHtml, `
         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-          <button type="button" class="btn" onclick="openBarcodePrintModal(null, 'batch')" style="display:inline-flex; align-items:center; gap:6px; background:linear-gradient(135deg, #0f766e 0%, #115e59 100%); color:#ffffff; border:1.5px solid #2dd4bf; font-weight:800;" title="พิมพ์ฉลากบาร์โค้ดสินค้าในสต็อกทั้งหมด (ตามจำนวนคงเหลือจริงหรือ 1 ดวง/รายการ)">
-            🖨️ พิมพ์บาร์โค้ดสต็อก (Batch & คลัง)
-          </button>
-          <button type="button" class="btn" onclick="openBarcodePrintModal()" style="display:inline-flex; align-items:center; gap:6px; background:#1e293b; color:#e2e8f0; border:1px solid #475569; font-weight:700;" title="เลือกสินค้าและพิมพ์บาร์โค้ดรายชิ้น">
-            🏷️ พิมพ์บาร์โค้ดเดี่ยว
-          </button>
-          <button type="button" class="btn btn-info" onclick="openStockAuditModal()" style="display:inline-flex; align-items:center; gap:6px; background:linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color:#fff; border-color:#38bdf8; font-weight:700;" title="เปิดระบบตรวจนับสต็อกจริงและปรับปรุงยอดคงเหลืออัตโนมัติ">
-            🔍 ตรวจนับสต็อก (Stock Audit)
-          </button>
-          ${(lowCount + outCount) > 0 ? `<button type="button" class="btn btn-warning" onclick="go('lowStock')" title="มีสินค้าต่ำกว่าเกณฑ์ขั้นต่ำ ${(lowCount + outCount)} รายการ">📋 ใบสั่งเติมสต็อก (${lowCount + outCount})</button>` : ''}
+          <button type="button" class="btn btn-light stock-tool-btn" onclick="openBarcodePrintModal()" title="พิมพ์บาร์โค้ด (เลือกสินค้าเดี่ยว หรือพิมพ์ทั้งหมดตามสต็อก)">🖨️ พิมพ์บาร์โค้ด</button>
+          <button type="button" class="btn btn-light stock-tool-btn" onclick="openStockAuditModal()" title="ตรวจนับสต็อกจริงและปรับยอด">🔍 ตรวจนับ</button>
+          ${(lowCount + outCount) > 0 ? `<button type="button" class="btn btn-light stock-tool-btn" onclick="go('lowStock')" title="สินค้าต่ำกว่าเกณฑ์ ${(lowCount + outCount)} รายการ • ทำใบเบิก">📦 ใบเบิก <span class="stock-tool-count">${lowCount + outCount}</span></button>` : ''}
           <button type="button" class="btn btn-primary" onclick="openProductModal()">${G_ICONS.plus} เพิ่มสินค้า</button>
         </div>
       `)}
@@ -12201,22 +12201,99 @@ function closeProductModal(){
   if(m?.open) m.close();
 }
 
+// หน้าต่างเพิ่ม/แก้ไขสินค้าแสดงเต็มหน้าจอ (ปิดแล้วคืนเป็นป๊อปอัปปกติสำหรับหน้าต่างอื่น)
+function setModalFullPage(on){
+  const m = el("modal");
+  if(!m) return;
+  m.classList.toggle("modal-fullpage", !!on);
+  if(!m.__fullPageHooked){
+    m.__fullPageHooked = true;
+    m.addEventListener("close", () => m.classList.remove("modal-fullpage"));
+  }
+}
+
 // -------------------------------------------------------------
 // Auto-Suggest Refill & Stock Details Analytics
 // -------------------------------------------------------------
+/* ---------- ช่วงวันงานแฟร์ (เช่น 10 วัน) ใช้คำนวณสั่งเติม ---------- */
+function eaDateISO(d){ const x = new Date(d); x.setMinutes(x.getMinutes() - x.getTimezoneOffset()); return x.toISOString().slice(0, 10); }
+function eaDaysBetween(aISO, bISO){ return Math.round((new Date(bISO + "T00:00:00") - new Date(aISO + "T00:00:00")) / 86400000); }
+function eaAddDays(iso, n){ const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return eaDateISO(d); }
+function getEventPeriod(){
+  const today = todayISO();
+  let start = state.settings?.eventStartDate || "";
+  let end = state.settings?.eventEndDate || "";
+  if(!start || !end){
+    try {
+      const saved = JSON.parse(localStorage.getItem("ea_event_period") || "null");
+      if(saved && saved.start && saved.end){ start = start || saved.start; end = end || saved.end; }
+    } catch(_) {}
+  }
+  let isDefault = false;
+  if(!start || !end || end < start){
+    // ยังไม่ได้ตั้ง: ถือว่างานยาว 10 วัน เริ่มจากวันแรกที่มีการขายภายใน 10 วันล่าสุด (หรือวันนี้)
+    const from = eaAddDays(today, -9);
+    const saleDays = (state.sales || []).map(s => s.sale_date || (s.created_at || "").slice(0, 10)).filter(d => d && d >= from && d <= today).sort();
+    start = saleDays[0] || today;
+    end = eaAddDays(start, 9);
+    isDefault = true;
+  }
+  const totalDays = eaDaysBetween(start, end) + 1;
+  const dayNo = eaDaysBetween(start, today) + 1;
+  const daysLeftAfterToday = Math.max(0, eaDaysBetween(today, end));
+  return { start, end, totalDays, dayNo, daysLeftAfterToday, isDefault, started: today >= start, ended: today > end };
+}
+function getDefaultRefillDays(){
+  const ev = getEventPeriod();
+  return ev.ended ? 0 : ev.daysLeftAfterToday;
+}
+async function saveEventPeriod(start, end){
+  if(!start || !end || end < start){ toast("❌ วันจบงานต้องไม่ก่อนวันเริ่มงาน"); return false; }
+  state.settings.eventStartDate = start;
+  state.settings.eventEndDate = end;
+  try { localStorage.setItem("ea_event_period", JSON.stringify({ start, end })); } catch(_) {}
+  saveLocalState();
+  if(sb && !state.isOffline){
+    const r = await saveSettingsRemote({ event_start_date: start, event_end_date: end });
+    if(!r.ok) console.warn("Save event period remote failed:", r.error);
+  }
+  return true;
+}
+async function onEventPeriodChange(productId){
+  const s = el("eventStartInput")?.value, e = el("eventEndInput")?.value;
+  if(await saveEventPeriod(s, e)){
+    toast(`📅 ตั้งช่วงงาน ${s} ถึง ${e} แล้ว`);
+    if(productId) openStockDetailModal(productId);
+    else render();
+  }
+}
+async function setEventLengthDays(productId, days){
+  const ev = getEventPeriod();
+  if(await saveEventPeriod(ev.start, eaAddDays(ev.start, days - 1))){
+    toast(`📅 ตั้งงาน ${days} วัน (${ev.start} ถึง ${eaAddDays(ev.start, days - 1)})`);
+    openStockDetailModal(productId);
+  }
+}
+
 function calculateAutoSuggestRefill(productOrId, options = {}) {
   const p = typeof productOrId === "object" && productOrId !== null ? productOrId : productById(productOrId);
   if (!p) return null;
 
   const currentStock = Math.max(0, Number(p.stock_qty || 0));
   const minStock = Math.max(1, Number(p.min_stock || state.settings.lowStockDefault || 5));
-  const targetDays = Number(options.targetDays || 14);
-  const leadTimeDays = Number(options.leadTimeDays || 3);
+  const ev = getEventPeriod();
+  const targetDays = Math.max(0, Number(options.targetDays ?? getDefaultRefillDays()));
+  // ของที่สั่งตอนบ่ายมาถึงพรุ่งนี้เช้า → ระหว่างรอของ สต็อกเดิมต้องขายวันนี้ไปอีก 1 วัน
+  const leadTimeDays = Number(options.leadTimeDays ?? 1);
   const unitStr = p.unit || "ชิ้น";
   const unitPrice = Number(p.sale_price || 0);
 
   const velocity = calculate30DaySalesVelocity(p.id, currentStock);
-  const dailyRate = velocity.dailyBurnRate || 0;
+  // อัตราขายช่วงงาน = ขายได้ตั้งแต่วันเริ่มงาน ÷ จำนวนวันที่ผ่านมา (แม่นกว่าเฉลี่ย 30 วันสำหรับงานสั้นๆ)
+  const eventSold = ev.started ? sumProductSoldSince(p.id, ev.start) : 0;
+  const eventDaysElapsed = ev.started ? Math.max(1, Math.min(ev.dayNo, ev.totalDays)) : 0;
+  const useEventRate = ev.started && eventSold > 0;
+  const dailyRate = useEventRate ? (eventSold / eventDaysElapsed) : (velocity.dailyBurnRate || 0);
   const totalSold30D = velocity.totalSold30D || 0;
 
   // Demand calculations based on sales velocity
@@ -12225,10 +12302,12 @@ function calculateAutoSuggestRefill(productOrId, options = {}) {
   const safetyStock = minStock;
 
   // Total target stock needed to cover (Cycle + Lead Time + Safety Stock)
-  const targetMaxStock = Math.max(minStock * 2, Math.ceil(cycleDemand + leadTimeDemand + safetyStock));
+  const targetMaxStock = Math.ceil(cycleDemand + leadTimeDemand + safetyStock);
   
   let suggestedQty = 0;
-  if (dailyRate > 0) {
+  if (targetDays <= 0) {
+    suggestedQty = 0; // วันสุดท้าย/จบงานแล้ว ไม่ต้องสั่งเพิ่ม
+  } else if (dailyRate > 0) {
     suggestedQty = Math.max(0, Math.ceil(targetMaxStock - currentStock));
     if (currentStock <= minStock && suggestedQty === 0) {
       suggestedQty = Math.max(1, minStock - currentStock + 5);
@@ -12236,7 +12315,7 @@ function calculateAutoSuggestRefill(productOrId, options = {}) {
   } else {
     // If no recent sales in 30 days, base suggestion on minimum threshold
     if (currentStock <= minStock) {
-      suggestedQty = Math.max(1, (minStock * 2) - currentStock, 5);
+      suggestedQty = Math.max(1, minStock - currentStock);
     } else {
       suggestedQty = 0;
     }
@@ -12269,20 +12348,27 @@ function calculateAutoSuggestRefill(productOrId, options = {}) {
       color: "#fbbf24",
       desc: "สต็อกต่ำกว่าจุดสั่งซื้อขั้นต่ำ ควรเร่งสั่งซื้อเติมสต็อกโดยเร็ว"
     };
-  } else if (roundedDays !== null && roundedDays <= 7) {
+  } else if (roundedDays !== null && targetDays > 0 && roundedDays <= targetDays) {
     urgency = {
       level: "moderate",
-      label: `⚡ เตือนสั่งซื้อล่วงหน้า (${roundedDays} วัน)`,
+      label: `⚡ ไม่พอถึงจบงาน (อยู่ได้ ${roundedDays} วัน)`,
       badgeClass: "badge-low",
       color: "#38bdf8",
-      desc: "สต็อกคาดว่าจะหมดในอีกไม่เกิน 7 วัน ควรวางแผนสั่งซื้อล่วงหน้า"
+      desc: `สต็อกคาดว่าจะหมดก่อนจบงาน (งานเหลืออีก ${targetDays} วัน) ควรสั่งเติม`
     };
+  } else if (currentStock > 0) {
+    urgency.label = "พอถึงจบงาน ✅";
+    urgency.desc = targetDays > 0 ? `สต็อกพอขายถึงวันจบงาน (เหลืออีก ${targetDays} วัน)` : "วันสุดท้ายของงาน ไม่ต้องสั่งเติมเพิ่ม";
   }
 
   const estimatedValue = suggestedQty * unitPrice;
 
   return {
     product: p,
+    event: ev,
+    useEventRate,
+    eventSold,
+    eventDaysElapsed,
     currentStock,
     minStock,
     unitStr,
@@ -12304,7 +12390,8 @@ function calculateAutoSuggestRefill(productOrId, options = {}) {
   };
 }
 
-function openStockDetailModal(productId, targetDays = 14, leadTimeDays = 3){
+function openStockDetailModal(productId, targetDays = null, leadTimeDays = 1){
+  if(targetDays === null || targetDays === undefined) targetDays = getDefaultRefillDays();
   const prod = productById(productId);
   if(!prod){
     toast("ไม่พบข้อมูลสินค้า");
@@ -12337,7 +12424,7 @@ function openStockDetailModal(productId, targetDays = 14, leadTimeDays = 3){
   const contentHtml = `
     <div class="stock-detail-prod-banner">
       <div class="stock-detail-prod-info">
-        <h4>${escapeHtml(prod.product_name)}</h4>
+        <h4 data-keep-text>${escapeHtml(prod.product_name)}</h4>
         <div class="stock-detail-tags">
           <span class="stock-tag-chip">รหัส: ${escapeHtml(prod.product_code || '-')}</span>
           ${prod.barcode ? `<span class="stock-tag-chip" style="cursor:pointer; background:rgba(45,212,191,0.15); color:#2dd4bf; border-color:#2dd4bf;" onclick="closeStockDetailModal(); openBarcodePrintModal('${prod.id}')" title="คลิกเพื่อเปิดพิมพ์บาร์โค้ดสินค้านี้">Barcode: ${escapeHtml(prod.barcode)} 🖨️</span>` : ''}
@@ -12366,11 +12453,11 @@ function openStockDetailModal(productId, targetDays = 14, leadTimeDays = 3){
       </div>
 
       <div class="stock-detail-kpi-card">
-        <div class="kpi-lbl">⚡ อัตราขายเฉลี่ย (30 วัน)</div>
+        <div class="kpi-lbl">⚡ อัตราขายเฉลี่ย (${refill.useEventRate ? 'ช่วงงาน' : '30 วัน'})</div>
         <div class="kpi-val" style="color:#38bdf8;">
           ${refill.dailyRate.toFixed(2)} <small style="font-size:12px; font-weight:normal; color:#94a3b8;">${escapeHtml(refill.unitStr)}/วัน</small>
         </div>
-        <div class="kpi-sub">ยอดขาย 30 วัน: ${refill.totalSold30D} ${escapeHtml(refill.unitStr)}</div>
+        <div class="kpi-sub">${refill.useEventRate ? `ขายช่วงงาน: ${refill.eventSold} ${escapeHtml(refill.unitStr)} ใน ${refill.eventDaysElapsed} วัน` : `ยอดขาย 30 วัน: ${refill.totalSold30D} ${escapeHtml(refill.unitStr)}`}</div>
       </div>
 
       <div class="stock-detail-kpi-card">
@@ -12397,21 +12484,45 @@ function openStockDetailModal(productId, targetDays = 14, leadTimeDays = 3){
           <span>🧠</span>
           <span>ระบบคำนวณสั่งเติมอัตโนมัติ (Auto-Suggest Refill Engine)</span>
         </div>
-        <span style="font-size:11.5px; color:#94a3b8;">คำนวณตาม Velocity + Lead Time + Safety Stock</span>
+        <span style="font-size:11.5px; color:#94a3b8;">คำนวณตามยอดขายช่วงงาน + วันที่เหลือ</span>
+      </div>
+
+      <div class="event-period-box">
+        <div class="event-period-row">
+          <span class="event-period-label">📅 ช่วงงาน</span>
+          <input type="date" id="eventStartInput" value="${refill.event.start}" onchange="onEventPeriodChange('${prod.id}')" aria-label="วันเริ่มงาน">
+          <span>ถึง</span>
+          <input type="date" id="eventEndInput" value="${refill.event.end}" onchange="onEventPeriodChange('${prod.id}')" aria-label="วันจบงาน">
+          <span class="event-period-chips">
+            ${[7, 10, 14].map(d => `<button type="button" class="refill-period-btn ${refill.event.totalDays === d ? 'active' : ''}" onclick="setEventLengthDays('${prod.id}', ${d})">${d} วัน</button>`).join('')}
+          </span>
+        </div>
+        <div class="event-period-status">
+          ${refill.event.ended ? `งานจบแล้ว (${refill.event.totalDays} วัน)` :
+            !refill.event.started ? `งานยังไม่เริ่ม • ทั้งหมด ${refill.event.totalDays} วัน` :
+            `วันนี้วันที่ <b>${refill.event.dayNo}</b> จาก ${refill.event.totalDays} วัน • หลังวันนี้เหลืออีก <b>${refill.event.daysLeftAfterToday}</b> วัน`}
+          ${refill.event.isDefault ? ` <span class="event-period-hint">(ค่าเริ่มต้น 10 วัน — ตั้งวันงานจริงได้ด้านบน)</span>` : ''}
+        </div>
       </div>
 
       <div class="refill-formula-box">
-        <strong>สูตรคำนวณ:</strong> (ยอดขายเฉลี่ย <b>${refill.dailyRate.toFixed(2)}</b> ${escapeHtml(refill.unitStr)}/วัน × เป้าหมาย <b>${refill.targetDays}</b> วัน) + สำรองจัดส่ง <b>${refill.leadTimeDemand}</b> + Safety Stock <b>${refill.minStock}</b> - สต็อกปัจจุบัน <b>${refill.currentStock}</b> = <strong style="color:#38bdf8;">แนะนำเติม +${refill.suggestedQty} ${escapeHtml(refill.unitStr)}</strong>
+        <strong>สูตรคำนวณ:</strong> ขายเฉลี่ย <b>${refill.dailyRate.toFixed(2)}</b> ${escapeHtml(refill.unitStr)}/วัน
+        <span style="opacity:.8;">(${refill.useEventRate ? `ช่วงงาน: ขาย ${refill.eventSold} ใน ${refill.eventDaysElapsed} วัน` : 'เฉลี่ย 30 วัน — ยังไม่มียอดขายช่วงงาน'})</span>
+        × <b>${refill.targetDays}</b> วัน + ขายวันนี้ระหว่างรอของ <b>${refill.leadTimeDemand}</b> + สำรองขั้นต่ำ <b>${refill.minStock}</b> − สต็อกปัจจุบัน <b>${refill.currentStock}</b>
+        = <strong style="color:#38bdf8;">แนะนำเติม +${refill.suggestedQty} ${escapeHtml(refill.unitStr)}</strong>
+        ${refill.targetDays <= 0 ? '<div style="margin-top:4px; color:#f59e0b; font-weight:700;">วันสุดท้ายของงาน — ไม่ต้องสั่งเติม</div>' : ''}
       </div>
 
       <div style="font-size:12px; font-weight:700; color:#cbd5e1; margin-bottom:6px;">
-        🎯 เลือกระยะเวลาสต็อกที่ต้องการสำรอง (Target Coverage Days):
+        🎯 สั่งเติมให้พอขายอีกกี่วัน:
       </div>
       <div class="refill-period-selector">
-        <button type="button" class="refill-period-btn ${refill.targetDays === 7 ? 'active' : ''}" onclick="setStockDetailTargetDays('${prod.id}', 7)">⚡ 7 วัน (รอบด่วน)</button>
-        <button type="button" class="refill-period-btn ${refill.targetDays === 14 ? 'active' : ''}" onclick="setStockDetailTargetDays('${prod.id}', 14)">⭐ 14 วัน (แนะนำมาตรฐาน)</button>
-        <button type="button" class="refill-period-btn ${refill.targetDays === 21 ? 'active' : ''}" onclick="setStockDetailTargetDays('${prod.id}', 21)">📅 21 วัน (3 สัปดาห์)</button>
-        <button type="button" class="refill-period-btn ${refill.targetDays === 30 ? 'active' : ''}" onclick="setStockDetailTargetDays('${prod.id}', 30)">📦 30 วัน (1 เดือน)</button>
+        ${(() => {
+          const left = refill.event.ended ? 0 : refill.event.daysLeftAfterToday;
+          const opts = [{ d: left, label: `⭐ ถึงจบงาน (${left} วัน)` }];
+          [1, 2, 3].forEach(d => { if(d < left) opts.push({ d, label: d === 1 ? '⚡ พรุ่งนี้ 1 วัน' : `${d} วัน` }); });
+          return opts.map(o => `<button type="button" class="refill-period-btn ${refill.targetDays === o.d ? 'active' : ''}" onclick="setStockDetailTargetDays('${prod.id}', ${o.d})">${o.label}</button>`).join('');
+        })()}
       </div>
 
       <!-- Instant Refill Execution -->
@@ -12464,14 +12575,17 @@ function openStockDetailModal(productId, targetDays = 14, leadTimeDays = 3){
           </thead>
           <tbody>
             ${movements.map(m => {
-              const isPlus = m.movement_type === "IN" || m.movement_type === "in" || Number(m.quantity || 0) > 0;
-              const typeLabel = m.movement_type === "IN" ? "📥 รับเข้า" : m.movement_type === "OUT" ? "📤 เบิกออก" : m.movement_type === "SALE" ? "🛒 ขาย" : "🔧 ปรับยอด";
-              const qtyDisplay = Number(m.quantity || m.qty || 0);
+              const mt = String(m.movement_type || "").toUpperCase();
+              const rawQty = Number(m.qty_change ?? m.quantity ?? m.qty ?? 0);
+              const signedQty = (mt === "SALE" || mt === "OUT") ? -Math.abs(rawQty) : (mt === "IN" ? Math.abs(rawQty) : rawQty);
+              const isPlus = signedQty > 0;
+              const typeLabel = mt === "IN" ? "📥 รับเข้า" : mt === "OUT" ? "📤 เบิกออก" : mt === "SALE" ? "🛒 ขาย" : "🔧 ปรับยอด";
+              const qtyDisplay = signedQty;
               return `
                 <tr>
                   <td style="color:#94a3b8;">${(m.created_at || m.movement_date || "").slice(0, 16).replace("T", " ")}</td>
                   <td><span style="font-weight:700; color:${isPlus ? '#34d399' : '#f87171'};">${typeLabel}</span></td>
-                  <td><strong style="color:${isPlus ? '#34d399' : '#f87171'};">${isPlus ? '+' : ''}${qtyDisplay} ${escapeHtml(refill.unitStr)}</strong></td>
+                  <td><strong style="color:${isPlus ? '#34d399' : (qtyDisplay < 0 ? '#f87171' : '#94a3b8')};">${isPlus ? '+' : ''}${qtyDisplay} ${escapeHtml(refill.unitStr)}</strong></td>
                   <td style="color:#cbd5e1;">${escapeHtml(m.note || m.doc_no || "-")}</td>
                 </tr>
               `;
@@ -12510,7 +12624,7 @@ function openStockDetailModal(productId, targetDays = 14, leadTimeDays = 3){
               📦
             </div>
             <div>
-              <h3 id="stockDetailTitle" style="margin:0; font-size:17px; font-weight:800;">รายละเอียดสต็อก: ${escapeHtml(prod.product_name)}</h3>
+              <h3 id="stockDetailTitle" data-keep-text style="margin:0; font-size:17px; font-weight:800;">รายละเอียดสต็อก: ${escapeHtml(prod.product_name)}</h3>
               <p id="stockDetailSubtitle" style="margin:2px 0 0; color:var(--muted); font-size:12px;">รหัส ${escapeHtml(prod.product_code || '-')} • Barcode: ${escapeHtml(prod.barcode || '-')}</p>
             </div>
           </div>
@@ -12595,9 +12709,10 @@ function openProductModal(id=null){
   const currentUnit = (p?.unit || "ชิ้น").trim() || "ชิ้น";
   const standardUnits = ["ชิ้น", "กิโล", "ใบ", "ม้วน", "ผืน", "ขวด", "กล่อง", "แพ็ค", "ซอง", "ถุง", "กระป๋อง", "แผ่น", "มัด", "หลอด", "คู่", "เมตร", "ลิตร", "ชุด", "โหล", "กิโลกรัม", "กรัม"];
   const quickUnits = ["ชิ้น", "กิโล", "ใบ", "ม้วน", "ผืน", "ขวด", "กล่อง", "แพ็ค", "ซอง", "ถุง", "เมตร"];
-  const refill = p ? calculateAutoSuggestRefill(p, { targetDays: 14 }) : null;
+  const refill = p ? calculateAutoSuggestRefill(p) : null;
 
   el("modalTitle").textContent=p?"แก้ไขสินค้า":"เพิ่มสินค้าใหม่";
+  setModalFullPage(true);
   el("modalBody").innerHTML=`
     <div class="form-grid">
       <div class="field">
@@ -12702,8 +12817,11 @@ function openProductModal(id=null){
       ` : ''}
     </div>
     <div class="actions" style="display:flex; gap:10px; justify-content:space-between; align-items:center; margin-top:16px; flex-wrap:wrap;">
-      <div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
         ${p ? `
+          <button type="button" class="btn btn-delete-product" onclick="deleteProduct('${p.id}')" title="ลบสินค้านี้ออกจากรายการขาย (ประวัติการขายยังอยู่)">
+            🗑️ ลบสินค้า
+          </button>
           <button type="button" class="btn" style="background:linear-gradient(135deg, #0f766e 0%, #115e59 100%); color:#ffffff; border:1.5px solid #2dd4bf; font-weight:800;" onclick="printCurrentModalBarcode('${p.id}')">
             🖨️ พิมพ์บาร์โค้ดสินค้านี้ (${p.stock_qty || 0} ชิ้น)
           </button>
@@ -12824,7 +12942,156 @@ function updateModalUnitLabels(unit){
   });
 }
 
+/* ---------- เขียนข้อมูลสินค้าไป Supabase แบบทนต่อคอลัมน์ที่ยังไม่มี ----------
+   - ถ้าฐานข้อมูลยังไม่มีคอลัมน์ (เช่น unit ก่อนรัน V13) จะตัดช่องนั้นออกแล้วบันทึกที่เหลือ
+   - ตรวจว่ามีแถวถูกแก้จริง (กันกรณีสิทธิ์ RLS ไม่ให้แก้ แล้วเงียบ)
+   - แยก "เน็ตหลุด" (บันทึกในเครื่องได้) ออกจาก "เซิร์ฟเวอร์ปฏิเสธ" (ต้องแจ้งผู้ใช้) */
+const PRODUCT_COL_LABELS = { unit: "หน่วย", promotions: "ราคาโปร", track_weight: "ลงน้ำหนักรายชิ้น", barcode: "บาร์โค้ด" };
+function getMissingProductCols(){
+  try { return JSON.parse(localStorage.getItem("ea_missing_product_cols") || "[]"); } catch(_) { return []; }
+}
+function setMissingProductCols(list){
+  try { localStorage.setItem("ea_missing_product_cols", JSON.stringify([...new Set(list)])); } catch(_) {}
+}
+function isNetworkError(err){
+  const msg = String(err?.message || err || "");
+  return /Failed to fetch|NetworkError|Load failed|network|ERR_|timeout|offline/i.test(msg) || err?.offline === true || err?.status === 503;
+}
+async function eaProductWrite(payload, id = null){
+  const dropped = [];
+  let data = { ...payload };
+  // ลองคอลัมน์ที่เคยหายไปอีกครั้งเสมอ (เผื่อเพิ่งรัน migration) — ถ้ายังไม่มีจะตัดออกอัตโนมัติ
+  for(let attempt = 0; attempt < 6; attempt++){
+    let r;
+    try {
+      r = id
+        ? await sb.from("ea_products").update(data).eq("id", id).select("id")
+        : await sb.from("ea_products").insert(data).select("id");
+    } catch(ex) {
+      return { ok: false, network: isNetworkError(ex) || true, error: ex, dropped };
+    }
+    if(!r.error){
+      if(id && Array.isArray(r.data) && r.data.length === 0){
+        return { ok: false, network: false, dropped, error: { message: "ไม่มีสิทธิ์แก้ไขสินค้านี้ในฐานข้อมูล (RLS) หรือไม่พบสินค้า", code: "NO_ROWS" } };
+      }
+      const prevMissing = getMissingProductCols();
+      setMissingProductCols(prevMissing.filter(c => !(c in payload) || dropped.includes(c)).concat(dropped));
+      return { ok: true, dropped, data: r.data };
+    }
+    const m = /Could not find the '([^']+)' column/i.exec(r.error.message || "");
+    if((r.error.code === "PGRST204" || m) && m && (m[1] in data)){
+      dropped.push(m[1]);
+      delete data[m[1]];
+      continue;
+    }
+    return { ok: false, network: isNetworkError(r.error), error: r.error, dropped };
+  }
+  return { ok: false, network: false, error: { message: "บันทึกไม่สำเร็จ (คอลัมน์ในฐานข้อมูลไม่ครบ)" }, dropped };
+}
+function warnDroppedProductCols(dropped){
+  if(!dropped || !dropped.length) return;
+  const names = dropped.map(c => PRODUCT_COL_LABELS[c] || c).join(", ");
+  setTimeout(() => toast(`⚠️ บันทึกแล้ว แต่ฐานข้อมูลยังไม่มีช่อง "${names}" — รัน Migration V13 ใน Supabase เพื่อเก็บค่านี้`, 7000), 400);
+}
+// ค่าที่ฐานข้อมูลยังเก็บไม่ได้ (ก่อนรัน V13) เก็บไว้ในเครื่องชั่วคราว เพื่อไม่ให้หายหลังโหลดใหม่
+function rememberLocalProductExtras(id, payload, dropped){
+  if(!id || !dropped || !dropped.length) return;
+  let all = {};
+  try { all = JSON.parse(localStorage.getItem("ea_product_local_extras") || "{}"); } catch(_) {}
+  all[id] = Object.assign(all[id] || {}, Object.fromEntries(dropped.map(c => [c, payload[c]])));
+  try { localStorage.setItem("ea_product_local_extras", JSON.stringify(all)); } catch(_) {}
+}
+function applyLocalProductExtras(products){
+  let all = {};
+  try { all = JSON.parse(localStorage.getItem("ea_product_local_extras") || "{}"); } catch(_) { return; }
+  if(!all || !Object.keys(all).length) return;
+  let changed = false;
+  for(const p of products || []){
+    const ex = all[p.id];
+    if(!ex) continue;
+    for(const k of Object.keys(ex)){
+      if(p[k] === undefined || p[k] === null){ p[k] = ex[k]; }
+      else { delete ex[k]; changed = true; } // ฐานข้อมูลเก็บได้แล้ว → ใช้ค่าจากเซิร์ฟเวอร์
+    }
+    if(!Object.keys(ex).length){ delete all[p.id]; changed = true; }
+  }
+  if(changed){ try { localStorage.setItem("ea_product_local_extras", JSON.stringify(all)); } catch(_) {} }
+}
+
 function editProduct(id){openProductModal(id)}
+
+// รหัส/บาร์โค้ดซ้ำ (409): บอกให้ชัดว่าซ้ำกับสินค้าไหน
+// ถ้าซ้ำกับสินค้าที่ "ลบไปแล้ว" ให้ปล่อยรหัสนั้นคืนแล้วบันทึกต่อได้
+async function handleProductDuplicate(error, editingId){
+  const text = `${error?.details || ""} ${error?.message || ""}`;
+  const m = /Key \(([^)]+)\)=\(([^)]*)\)/i.exec(text);
+  let col = m ? m[1].trim() : (/barcode/i.test(text) ? "barcode" : (/product_code|code/i.test(text) ? "product_code" : ""));
+  let val = m ? m[2] : (col === "barcode" ? (el("pBarcode")?.value || "").trim() : (el("pCode")?.value || "").trim());
+  const label = col === "barcode" ? "บาร์โค้ด" : "รหัสสินค้า";
+  if(!col || !val){
+    toast("❌ รหัสสินค้าหรือบาร์โค้ดนี้ซ้ำกับสินค้าอื่นในระบบ", 7000);
+    return false;
+  }
+  let other = null;
+  try {
+    const r = await sb.from("ea_products").select("id,product_name,product_code,is_active").eq(col, val).limit(2);
+    other = (r.data || []).find(x => x.id !== editingId) || null;
+  } catch(_) {}
+  if(other && other.is_active === false){
+    const ok = window.confirm(`${label} "${val}" ยังเป็นของสินค้าที่ลบไปแล้ว:\n"${other.product_name}"\n\nกด OK เพื่อปล่อย${label}นี้คืน แล้วบันทึกสินค้านี้ต่อ`);
+    if(!ok) return false;
+    const freed = col === "barcode" ? { barcode: null } : { product_code: `${other.product_code || val}~ลบ-${Date.now().toString(36)}` };
+    const res = await eaProductWrite(freed, other.id);
+    if(!res.ok){ toast(`❌ ปล่อย${label}ไม่สำเร็จ: ${res.error?.message || ""}`, 7000); return false; }
+    return true;
+  }
+  toast(`❌ ${label} "${val}" ซ้ำกับสินค้า${other ? ` "${other.product_name}"` : "อื่นในระบบ"} — กรุณาเปลี่ยน${label}`, 8000);
+  const inp = el(col === "barcode" ? "pBarcode" : "pCode");
+  if(inp){ inp.focus(); inp.select?.(); }
+  return false;
+}
+
+// ลบสินค้า = ซ่อนจากรายการ (is_active = false) ไม่ลบแถวจริง เพื่อให้ประวัติบิล/รายงานย้อนหลังยังครบ
+async function deleteProduct(id){
+  const p = productById(id);
+  if(!p) return;
+  const qty = Number(p.stock_qty || 0);
+  const msg = `ลบสินค้า "${p.product_name}" ?` +
+    (qty > 0 ? `\n\n⚠️ ยังมีสต็อกคงเหลือ ${qty} ${p.unit || "ชิ้น"}` : "") +
+    `\n\nสินค้าจะหายจากหน้าขายและหน้าสต็อก แต่ประวัติการขายและรายงานย้อนหลังยังอยู่ครบ`;
+  if(!window.confirm(msg)) return;
+
+  if(sb && !state.isOffline){
+    const btn = document.querySelector(".btn-delete-product");
+    if(btn) btn.disabled = true;
+    // ปล่อยรหัส/บาร์โค้ดคืน เพื่อให้สร้างสินค้าใหม่ด้วยรหัสเดิมได้ (ไม่ชน 409)
+    const res = await eaProductWrite({
+      is_active: false,
+      product_code: `${p.product_code || "P"}~ลบ-${Date.now().toString(36)}`,
+      barcode: null
+    }, id);
+    if(btn) btn.disabled = false;
+    if(!res.ok && !res.network){
+      toast(`❌ ลบสินค้าไม่สำเร็จ: ${res.error?.message || "เซิร์ฟเวอร์ปฏิเสธ"}`, 7000);
+      return;
+    }
+    if(!res.ok){
+      toast("📴 ออฟไลน์อยู่ ลบสินค้าไม่ได้ กรุณาลองใหม่เมื่อมีอินเทอร์เน็ต", 5000);
+      return;
+    }
+  } else if(!String(id).startsWith("off-p-")){
+    toast("📴 ออฟไลน์อยู่ ลบสินค้าไม่ได้ กรุณาลองใหม่เมื่อมีอินเทอร์เน็ต", 5000);
+    return;
+  }
+
+  state.products = (state.products || []).filter(x => x.id !== id);
+  if(Array.isArray(state.cart)) state.cart = state.cart.filter(c => c.product_id !== id);
+  saveLocalState();
+  el("modal")?.close();
+  toast(`🗑️ ลบสินค้า "${p.product_name}" แล้ว`);
+  if(sb && !state.isOffline) await loadAll();
+  render();
+}
 async function saveProduct(id){
   const unitVal = (el("pUnit")?.value || "ชิ้น").trim() || "ชิ้น";
   const payload={
@@ -12842,32 +13109,36 @@ async function saveProduct(id){
   }
   if(!payload.product_code||!payload.product_name){toast("กรุณากรอกรหัสและชื่อสินค้า");return}
 
-  let remoteSuccess = false;
-  if (sb && !state.isOffline) {
-    try {
-      let r;
-      if(id) r = await sb.from("ea_products").update(payload).eq("id",id);
-      else { payload.stock_qty = Number(el("pQty").value||0); r = await sb.from("ea_products").insert(payload); }
-      if (!r.error) {
-        remoteSuccess = true;
-      } else {
-        if (r.error.code === "23505") {
-          toast("Barcode หรือรหัสสินค้านี้มีอยู่แล้ว");
-          return;
-        }
-        console.warn("Remote product save failed, falling back to local:", r.error.message);
-      }
-    } catch (ex) {
-      console.warn("Remote product save exception, proceeding locally:", ex);
-    }
-  }
+  if (!id) payload.stock_qty = Number(el("pQty").value || 0);
 
-  if (remoteSuccess) {
-    el("modal").close();
-    toast("บันทึกสินค้าแล้ว");
-    await loadAll();
-    go("stock");
-    return;
+  if (sb && !state.isOffline) {
+    const saveBtn = document.querySelector('#modal button[onclick^="saveProduct"]');
+    if (saveBtn) saveBtn.disabled = true;
+    const res = await eaProductWrite(payload, id);
+    if (saveBtn) saveBtn.disabled = false;
+
+    if (res.ok) {
+      const newId = id || res.data?.[0]?.id;
+      rememberLocalProductExtras(newId, payload, res.dropped);
+      el("modal").close();
+      toast("✅ บันทึกสินค้าแล้ว");
+      warnDroppedProductCols(res.dropped);
+      await loadAll();
+      go("stock");
+      return;
+    }
+    if (res.error?.code === "23505") {
+      const retry = await handleProductDuplicate(res.error, id);
+      if (retry) return saveProduct(id);
+      return;
+    }
+    if (!res.network) {
+      // เซิร์ฟเวอร์ปฏิเสธ: แจ้งตรงๆ และไม่ปิดหน้าต่าง (เดิมบันทึกในเครื่องเงียบๆ แล้วถูกข้อมูลจากเซิร์ฟเวอร์ทับ)
+      console.warn("Product save rejected by server:", res.error);
+      toast(`❌ บันทึกสินค้าไม่สำเร็จ: ${res.error?.message || "เซิร์ฟเวอร์ปฏิเสธ"}`, 7000);
+      return;
+    }
+    console.warn("Product save network error, saving locally:", res.error);
   }
 
   // Local fallback
@@ -12885,7 +13156,7 @@ async function saveProduct(id){
 
   saveLocalState();
   el("modal").close();
-  toast("บันทึกสินค้าแล้ว (บันทึกในเครื่อง)");
+  toast("📴 ออฟไลน์: บันทึกสินค้าไว้ในเครื่องนี้ก่อน (ยังไม่ขึ้นเซิร์ฟเวอร์)", 5000);
   checkAndNotifyLowStock();
   render();
   if (state.page === "stock") renderStock();
@@ -13823,6 +14094,16 @@ function renderPhysicalAuditPage(){
 }
 
 function renderStockAuditModalContent(){
+  // หน้าตรวจนับแสดงแบบเต็มหน้าเท่านั้น (ไม่ใช้ป๊อปอัปแล้ว)
+  if(state.page !== "audit"){
+    const m = el("modal");
+    if(m?.open && /Stock Audit|ตรวจนับสต็อก/.test(el("modalTitle")?.textContent || "")){ try{ m.close(); }catch(_){} }
+    go("audit");
+    enterAuditFullscreen();
+    return;
+  }
+  renderPhysicalAuditPage();
+  return;
   const body = el("modalBody");
   if(!body) return;
 
@@ -16047,7 +16328,7 @@ function buildReportOverviewTab(data){
           ${data.topProductsGlobal.length ? data.topProductsGlobal.slice(0, 5).map((x, i) => {
             const pct = Math.round((x.revenue / maxTopProductRevenue) * 100);
             const rankClass = i === 0 ? "rank-1" : i === 1 ? "rank-2" : i === 2 ? "rank-3" : "rank-other";
-            const rankEmoji = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i + 1);
+            const rankEmoji = i + 1;
             return `
               <div class="report-rank-item">
                 <div class="report-rank-badge ${rankClass}">${rankEmoji}</div>
@@ -20297,7 +20578,9 @@ function assignGeneratedBarcode(productId) {
   p.barcode = newCode;
   saveLocalState();
   if (sb && !state.isOffline) {
-    sb.from("ea_products").update({ barcode: newCode }).eq("id", productId).catch(console.warn);
+    eaProductWrite({ barcode: newCode }, productId).then(res => {
+      if (!res.ok && !res.network) toast(`❌ บันทึกบาร์โค้ดขึ้นเซิร์ฟเวอร์ไม่สำเร็จ: ${res.error?.message || ""}`, 6000);
+    });
   }
   toast(`✨ สร้างบาร์โค้ดใหม่: ${newCode} สำเร็จ`);
   renderBarcodePrintModalContent();
@@ -20317,7 +20600,10 @@ function promptEditBarcode(productId) {
     p.barcode = trimmed;
     saveLocalState();
     if (sb && !state.isOffline) {
-      sb.from("ea_products").update({ barcode: trimmed }).eq("id", productId).catch(console.warn);
+      eaProductWrite({ barcode: trimmed }, productId).then(res => {
+        if (!res.ok && res.error?.code === "23505") toast("❌ บาร์โค้ดนี้มีสินค้าอื่นใช้อยู่แล้ว", 6000);
+        else if (!res.ok && !res.network) toast(`❌ บันทึกบาร์โค้ดขึ้นเซิร์ฟเวอร์ไม่สำเร็จ: ${res.error?.message || ""}`, 6000);
+      });
     }
     toast(`✅ อัปเดตบาร์โค้ดเป็น: ${trimmed}`);
     renderBarcodePrintModalContent();
@@ -21181,22 +21467,9 @@ function renderSettings(){
   setHeader("ตั้งค่า","เลือกจุดขาย การตั้งค่าใบเสร็จรับเงิน การแจ้งเตือน และฐานข้อมูล");
   const cfg = getSupabaseConfig();
   const notifInfo = getNotificationPermissionStatus();
-  const emailCfg = emailNotificationConfigCache || {
-    managerEmail: "workforcehub26@gmail.com",
-    enabled: true,
-    dailyAlertTime: "09:00",
-    notifyOnEveryDip: true
-  };
-
-  // Fetch updated settings in background if needed
-  if (!emailNotificationConfigCache) {
-    fetchEmailNotificationSettings().then(() => {
-      if (state.page === "settings") renderSettings();
-    });
-  }
 
   el("content").innerHTML=`${connectionNotice()}<div class="panel-grid">
-    ${card("🎨 สีธีม & โหมดสว่าง/มืด (Theme & Dark/Light Mode)", renderThemeSelectorHTML())}
+    ${card("🎨 สีธีม & โหมดสว่าง/มืด", renderThemeSelectorHTML())}
 
     ${card("จุดขายของเครื่องนี้",`<p style="margin-top:0;color:var(--muted);font-size:12px">ตั้งคนละ POS ในแต่ละแท็บเล็ต เช่น เครื่องแรก POS-01 เครื่องสอง POS-02</p><div class="terminal-options">${["POS-01","POS-02","POS-03","POS-04"].map(c=>`<button class="terminal-btn ${state.terminal===c?"active":""}" onclick="setTerminal('${c}')">${c}</button>`).join("")}</div>`)}
 
@@ -21206,25 +21479,25 @@ function renderSettings(){
         <label class="toggle-switch"><input type="checkbox" ${window.isRemoteInboxEnabled?.() ? "checked" : ""} onchange="toggleRemoteInbox(this.checked)"><span class="toggle-slider"></span></label>
       </label>`)}
     
-    ${card("🎨 ปรับแต่งใบเสร็จรับเงิน & สลิป (Receipt Customization)", `
+    ${card("🎨 ปรับแต่งใบเสร็จรับเงิน & สลิป", `
       <p style="margin-top:0;color:var(--muted);font-size:12px">
-        ตั้งค่าหัวสลิป ข้อมูลร้านค้า เบอร์โทร เลขประจำตัวผู้เสียภาษี (Tax ID) และข้อความขอบคุณท้ายสลิป
+        ตั้งค่าหัวสลิป ข้อมูลร้านค้า เบอร์โทร เลขประจำตัวผู้เสียภาษี และข้อความขอบคุณท้ายสลิป
       </p>
       <div class="form-grid">
         <div class="field">
-          <label>ชื่อร้านค้า / กิจการ (Shop Name)</label>
+          <label>ชื่อร้านค้า / กิจการ</label>
           <input id="shopName" value="${escapeHtml(state.settings?.shopName || 'EA Fair Sale')}" oninput="updateLiveReceiptPreview()">
         </div>
         <div class="field">
-          <label>ชื่อสาขา / จุดขาย (Branch / Event Name)</label>
+          <label>ชื่อสาขา / จุดขาย</label>
           <input id="shopBranch" placeholder="เช่น บูธ A12 งาน Fair 2026" value="${escapeHtml(state.settings?.shopBranch || '')}" oninput="updateLiveReceiptPreview()">
         </div>
         <div class="field" style="grid-column: span 2;">
-          <label>ที่อยู่ร้านค้า (Shop Address)</label>
+          <label>ที่อยู่ร้านค้า</label>
           <input id="shopAddress" placeholder="เช่น 123 อาคารแสดงสินค้า ถ.สุขุมวิท กรุงเทพฯ" value="${escapeHtml(state.settings?.shopAddress || '')}" oninput="updateLiveReceiptPreview()">
         </div>
         <div class="field">
-          <label>เบอร์โทรศัพท์ (Phone)</label>
+          <label>เบอร์โทรศัพท์</label>
           <input id="shopPhone" placeholder="081-234-5678" value="${escapeHtml(state.settings?.shopPhone || '')}" oninput="updateLiveReceiptPreview()">
         </div>
         <div class="field">
@@ -21236,17 +21509,17 @@ function renderSettings(){
           <input id="shopLine" placeholder="@eafairsale" value="${escapeHtml(state.settings?.shopLine || '')}" oninput="updateLiveReceiptPreview()">
         </div>
         <div class="field" style="grid-column: span 2;">
-          <label>เลขประจำตัวผู้เสียภาษี (Tax ID)</label>
+          <label>เลขประจำตัวผู้เสียภาษี</label>
           <input id="shopTaxId" placeholder="1234567890123" value="${escapeHtml(state.settings?.shopTaxId || '')}" oninput="updateLiveReceiptPreview()">
         </div>
         <div class="field" style="grid-column: span 2;">
-          <label>ข้อความขอบคุณท้ายสลิป (Receipt Footer Note)</label>
+          <label>ข้อความขอบคุณท้ายสลิป</label>
           <textarea id="receiptFooterNote" rows="2" style="background:#0f172a; color:#f8fafc; border:1px solid #334155; border-radius:8px; padding:8px 12px; font-size:13px; font-family:inherit;" oninput="updateLiveReceiptPreview()">${escapeHtml(state.settings?.receiptFooterNote || 'ขอบคุณที่อุดหนุนสินค้า สามารถเปลี่ยนคืนสินค้าได้ภายใน 7 วัน')}</textarea>
         </div>
         <div class="field">
           <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:700; color:#f8fafc; margin-top:8px;">
             <input id="enableVatInput" type="checkbox" ${state.settings?.enableVat ? 'checked' : ''} style="width:18px; height:18px; accent-color:#0284c7;" onchange="updateLiveReceiptPreview()">
-            เปิดภาษีมูลค่าเพิ่ม (VAT Included)
+            เปิดภาษีมูลค่าเพิ่ม
           </label>
         </div>
         <div class="field">
@@ -21267,7 +21540,7 @@ function renderSettings(){
       </div>
     `)}
 
-    ${card("👁️ ตัวอย่างสลิปใบเสร็จจำลอง (Live Receipt Preview)", `
+    ${card("👁️ ตัวอย่างสลิปใบเสร็จจำลอง", `
       <p style="margin-top:0;color:var(--muted);font-size:12px">
         ตัวอย่างสลิปความร้อนที่จะพิมพ์เมื่อปิดการขาย (อัปเดตสดตามช่องด้านข้าง)
       </p>
@@ -21276,50 +21549,12 @@ function renderSettings(){
       </div>
     `)}
 
-    ${card("📧 บริการแจ้งเตือนสต็อกต่ำทางอีเมลผู้จัดการ (Daily Email Alerts)", `
+    ${card("การแจ้งเตือนสต็อกบนเบราว์เซอร์", `
       <p style="margin-top:0;color:var(--muted);font-size:12px">
-        ระบบจะส่งอีเมลแจ้งเตือนอัตโนมัติในเบื้องหลัง (Background Service) ไปยังอีเมลของผู้จัดการทันทีเมื่อสินค้าแตะเกณฑ์ขั้นต่ำ (Minimum Stock Threshold) หรือสรุปแจ้งเตือนประจำวัน
-      </p>
-      <div class="form-grid">
-        <div class="field" style="grid-column: span 2;">
-          <label>อีเมลผู้จัดการที่รับการแจ้งเตือน (Manager's Email)</label>
-          <input id="managerEmailInput" type="email" placeholder="manager@example.com" value="${escapeHtml(emailCfg.managerEmail || 'workforcehub26@gmail.com')}">
-        </div>
-        <div class="field">
-          <label>เวลาสรุปแจ้งเตือนประจำวัน (Daily Schedule)</label>
-          <input id="emailAlertTime" type="time" value="${emailCfg.dailyAlertTime || '09:00'}">
-        </div>
-        <div class="field" style="display:flex; flex-direction:column; justify-content:center;">
-          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:700; color:#f8fafc; margin-top:14px;">
-            <input id="emailAlertEnabled" type="checkbox" ${emailCfg.enabled ? 'checked' : ''} style="width:18px; height:18px; accent-color:#0284c7;">
-            เปิดใช้งานบริการแจ้งเตือนทางอีเมล (Active)
-          </label>
-        </div>
-        <div class="field" style="grid-column: span 2;">
-          <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:700; color:#cbd5e1;">
-            <input id="emailAlertOnDip" type="checkbox" ${emailCfg.notifyOnEveryDip ? 'checked' : ''} style="width:18px; height:18px; accent-color:#0284c7;">
-            ส่งอีเมลแจ้งเตือนทันทีที่สินค้าชิ้นใดแตะเกณฑ์ขั้นต่ำ (Real-time Dip Alert)
-          </label>
-        </div>
-      </div>
-      <div class="actions" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap;">
-        <button type="button" class="btn btn-primary" onclick="saveEmailNotificationSettings()">
-          💾 บันทึกการตั้งค่าอีเมล
-        </button>
-        <button type="button" class="btn btn-light" onclick="testLowStockEmail()">
-          🧪 ส่งอีเมลทดสอบ (Test Email)
-        </button>
-        <button type="button" class="btn warning" onclick="triggerLowStockEmail(true)">
-          🚀 ส่งสรุปแจ้งเตือนสต็อกปัจจุบันทันที
-        </button>
-      </div>
-    `)}
-    ${card("การแจ้งเตือนสต็อกบนเบราว์เซอร์ (Push Notifications)", `
-      <p style="margin-top:0;color:var(--muted);font-size:12px">
-        ระบบจะส่ง Web Push Notification แจ้งเตือนไปยังหน้าจอทันทีเมื่อสินค้าใดๆ มีสต็อกคงเหลือต่ำกว่าเกณฑ์ขั้นต่ำ (Minimum Stock Threshold) หรือหมดสต็อก
+        ระบบจะส่ง Web Push Notification แจ้งเตือนไปยังหน้าจอทันทีเมื่อสินค้าใดๆ มีสต็อกคงเหลือต่ำกว่าเกณฑ์ขั้นต่ำ หรือหมดสต็อก
       </p>
       <div style="display:flex; align-items:center; justify-content:space-between; background:rgba(30,41,59,0.7); border:1px solid #334155; border-radius:10px; padding:12px 16px; margin-bottom:14px;">
-        <span style="font-size:13px; font-weight:700; color:#e2e8f0;">สถานะการอนุญาต (Permission):</span>
+        <span style="font-size:13px; font-weight:700; color:#e2e8f0;">สถานะการอนุญาต:</span>
         <span class="badge ${notifInfo.badgeClass}" style="padding:4px 10px; font-size:12px; font-weight:700;">
           ${notifInfo.icon} ${notifInfo.label}
         </span>
@@ -21329,7 +21564,7 @@ function renderSettings(){
           🔔 ขอสิทธิ์ / เปิดการแจ้งเตือน
         </button>
         <button type="button" class="btn btn-light" onclick="testBrowserPushNotification()">
-          🧪 ทดสอบส่งการแจ้งเตือน (Test Push)
+          🧪 ทดสอบส่งการแจ้งเตือน
         </button>
       </div>
     `)}
@@ -21566,7 +21801,7 @@ Object.assign(window,{
   setPosMode,onPosSearchInput,clearPosSearch,addProductToCartById,setPaymentMethod,
   setQuickCash,addQuickCash,clearQuickCash,generateQuickPayAmounts,calculateChangeBreakdown,onReceivedCashInput,setStockFilter,setStockViewMode,onStockSearch,clearStockSearch,
   setStockPage,setStockPageSize,setStockSort,toggleStockTableSort,
-  openStockAuditModal,toggleAuditFullscreen,enterAuditFullscreen,exitAuditFullscreen,toggleAuditBulkMode,setAuditBulkQty,stepAuditBulkQty,onAuditBulkQtyInput,setAuditFilter,setAuditScanStep,onAuditSearch,handleAuditBarcodeInput,handleAuditScannedBarcode,undoAuditRecentScan,startAuditCameraScan,updateAuditCount,stepAuditCount,resetAuditProductToSystem,setAllAuditToSystem,setAllAuditToZero,openDiscrepancyReportModal,printDiscrepancyReport,applyStockAuditAdjustments,exportStockAuditExcel,exportStockAuditCSV,renderPhysicalAuditPage,
+  deleteProduct,toggleLowStockAdvanced,selectAppFont,getAppFontStack,onEventPeriodChange,setEventLengthDays,openStockAuditModal,toggleAuditFullscreen,enterAuditFullscreen,exitAuditFullscreen,toggleAuditBulkMode,setAuditBulkQty,stepAuditBulkQty,onAuditBulkQtyInput,setAuditFilter,setAuditScanStep,onAuditSearch,handleAuditBarcodeInput,handleAuditScannedBarcode,undoAuditRecentScan,startAuditCameraScan,updateAuditCount,stepAuditCount,resetAuditProductToSystem,setAllAuditToSystem,setAllAuditToZero,openDiscrepancyReportModal,printDiscrepancyReport,applyStockAuditAdjustments,exportStockAuditExcel,exportStockAuditCSV,renderPhysicalAuditPage,
   setAuditSubTab,setAuditHistoryFilterStatus,onAuditHistorySearchInput,openAuditBatchDetailModal,switchAuditDetailModalTab,exportAuditBatchHistoryExcel,exportAuditBatchHistoryPDF,renderAuditBatchHistoryTab,
   initDashboardAllFilter,getDashboardAllDateRange,setDashboardAllPeriod,onDashboardAllDateInputChange,applyDashboardAllCustomDate,getDashboardAllFilteredSales,setAllDaysChartMetric,mountAllDaysSalesChart,renderAllDaysSalesChart,
   initSalesHistoryFilter,getFilteredSalesHistory,getSalesHistoryKPIs,setSalesHistoryPeriod,

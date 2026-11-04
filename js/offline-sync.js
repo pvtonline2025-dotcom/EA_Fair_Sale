@@ -473,14 +473,10 @@
         `;
         posBanner.style.display = 'flex';
       } else {
+        // ปกติ (ออนไลน์ ไม่มีค้าง) ไม่ต้องแสดงแถบ — ลดสิ่งรบกวนหน้าขาย
         posBanner.className = 'pos-net-banner online';
-        posBanner.innerHTML = `
-          <div class="pos-net-info">
-            <span class="pos-net-dot green"></span>
-            <span><strong>ออนไลน์:</strong> เชื่อมต่อฐานข้อมูล Supabase เรียบร้อย ข้อมูลเป็นปัจจุบัน</span>
-          </div>
-        `;
-        posBanner.style.display = 'flex';
+        posBanner.innerHTML = '';
+        posBanner.style.display = 'none';
       }
     }
   }
@@ -509,8 +505,26 @@
     // 1. Register Service Worker
     if ('serviceWorker' in navigator) {
       try {
-        const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+        const hadController = !!navigator.serviceWorker.controller;
+        const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
         console.log('✅ Service Worker registered successfully with scope:', registration.scope);
+        try { registration.update(); } catch (_) {}
+
+        // เมื่อมีเวอร์ชันใหม่เข้ามาแทน: โหลดหน้าใหม่อัตโนมัติ 1 ครั้ง (ถ้าไม่ได้กำลังขาย/เปิดหน้าต่างอยู่)
+        if (hadController) {
+          let reloaded = false;
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (reloaded) return;
+            const st = (typeof window.getEaAppState === 'function') ? window.getEaAppState() : null;
+            const busy = (st && Array.isArray(st.cart) && st.cart.length > 0) || !!document.querySelector('dialog[open]');
+            if (busy) {
+              if (typeof window.toast === 'function') window.toast('🔄 มีแอปเวอร์ชันใหม่ — ปิดบิล/หน้าต่างแล้วกดรีเฟรชเพื่ออัปเดต', 6000);
+              return;
+            }
+            reloaded = true;
+            window.location.reload();
+          });
+        }
 
         // Listen for messages from Service Worker
         navigator.serviceWorker.addEventListener('message', (event) => {

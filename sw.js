@@ -1,5 +1,5 @@
 // EA Fair Sale - Service Worker with Background Sync & Offline Support
-const CACHE_NAME = 'ea-fair-sale-v33';
+const CACHE_NAME = 'ea-fair-sale-v50';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -8,10 +8,12 @@ const STATIC_ASSETS = [
   '/js/supabase-config.js',
   '/js/fetch-wrapper.js',
   '/js/icons.js',
+  '/js/clean-text.js',
   '/js/contrast-guard.js',
   '/css/icons.css',
   '/css/pages/pos-theme.css',
   '/css/pages/stock-theme.css',
+  '/css/clean.css',
   '/manifest.json',
   '/js/offline-sync.js',
   '/js/install-app.js',
@@ -141,7 +143,29 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Stale-While-Revalidate for app assets
+  // Network-first (with timeout) for the app's own JS/CSS so a new deploy takes
+  // effect on the very next load; fall back to cache when offline / slow.
+  if (url.origin === self.location.origin && (url.pathname.endsWith('.js') || url.pathname.endsWith('.css'))) {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE_NAME);
+      try {
+        const net = await Promise.race([
+          fetch(req, { cache: 'no-cache' }),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000))
+        ]);
+        const ct = net.headers.get('content-type') || '';
+        if (net && net.status === 200 && !ct.includes('text/html')) cache.put(req, net.clone());
+        return net;
+      } catch (_) {
+        const cached = await cache.match(req) || await caches.match(req);
+        if (cached) return cached;
+        return fetch(req);
+      }
+    })());
+    return;
+  }
+
+  // Stale-While-Revalidate for other assets (versioned CDN libs, images, fonts)
   event.respondWith(
     caches.match(req).then((cachedResponse) => {
       const fetchPromise = fetch(req).then((networkResponse) => {

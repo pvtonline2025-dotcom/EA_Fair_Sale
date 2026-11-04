@@ -734,7 +734,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 14px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
   font-weight: 900;
   flex-shrink: 0;
   background: #334155;
@@ -2189,4 +2191,47 @@
   background: rgba(56, 189, 248, 0.15);
   border-color: #38bdf8;
   color: #38bdf8;
+}
+
+/* ===== สินค้าขายดี: ปุ่มเลือกจัดอันดับ จำนวนเงิน / จำนวนสินค้า ===== */
+.tdd-hotsale-panel .tdd-panel-head{ flex-wrap:wrap; gap:8px 10px; }
+.tdd-hotsale-panel .tdd-panel-title{ flex:1 1 auto; min-width:0; }
+.tdd-hot-sort{
+  display:inline-flex; padding:3px; gap:2px; border-radius:10px;
+  background:rgba(148,163,184,.14); border:1px solid var(--card-border, #334155);
+}
+.tdd-hot-sort button{
+  border:0; background:transparent; color:var(--text-sub, #cbd5e1);
+  font:inherit; font-size:12px; font-weight:800; line-height:1;
+  padding:7px 11px; min-height:30px; border-radius:7px; cursor:pointer; white-space:nowrap;
+}
+.tdd-hot-sort button.active{
+  background:var(--primary, #0284c7); color:#fff;
+  box-shadow:0 1px 4px rgba(0,0,0,.18);
+}
+.tdd-hot-sort button:not(.active):hover{ background:rgba(148,163,184,.18); }
+[data-color-mode="light"] .tdd-hot-sort{ background:#f1f5f9; border-color:#e2e8f0; }
+[data-color-mode="light"] .tdd-hot-sort button{ color:#475569; }
+[data-color-mode="light"] .tdd-hot-sort button.active{ color:#fff; }
+.tdd-hot-amount-qty small{ font-size:11px; font-weight:700; opacity:.85; }
+.tdd-hotsale-panel .tdd-panel-head{ flex-wrap:nowrap; }
+.tdd-hotsale-panel .tdd-panel-title{ flex:0 1 auto; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.tdd-hotsale-panel .tdd-hot-sort{ order:2; flex:0 0 auto; }
+.tdd-hotsale-panel .tdd-panel-head .tdd-panel-action{ order:3; margin-left:auto; flex:0 0 auto; }
+/* จอแคบ: ให้ปุ่มขึ้นบรรทัดใหม่ได้ แทนการตัดหัวข้อ */
+@media (max-width: 520px){
+  .tdd-hotsale-panel .tdd-panel-head{ flex-wrap:wrap; }
+}
+/* การ์ดแคบ (เช่น iPad 11" แนวนอน): ย่อชื่อปุ่ม ให้หัวข้อแสดงครบ */
+.tdd-hotsale-panel{ container-type:inline-size; container-name:hotsale; }
+.tdd-hot-sort .lbl-short{ display:none; }
+@container hotsale (max-width: 450px){
+  .tdd-hot-sort .lbl-long{ display:none; }
+  .tdd-hot-sort .lbl-short{ display:inline; }
+  .tdd-hot-sort button{ padding:7px 9px; }
+  .tdd-hotsale-panel .tdd-panel-title{ font-size:14px; }
+  .tdd-hotsale-panel .tdd-panel-head{ gap:6px; }
+}
+@container hotsale (max-width: 360px){
+  .tdd-hotsale-panel .tdd-panel-head .tdd-panel-action span{ display:none; }
 }

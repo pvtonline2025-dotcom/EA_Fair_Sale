@@ -196,7 +196,12 @@
             <button type="button" class="hub-btn-ghost" onclick="copyRestockText()">📋 คัดลอกข้อความ</button>
             <button type="button" class="hub-btn-ghost" onclick="printRestock()">🖨️ พิมพ์</button>
           </div>
-        ` : '<div class="hub-empty">ยังไม่มีสินค้าที่ต้องเบิก ✓</div>'}
+        ` : (resvLines().length ? `
+          <div class="hub-actions">
+            <button type="button" class="hub-btn hub-btn-img" onclick="openRestockImage()">📷 ใบเบิกเป็นรูป (ส่ง LINE)</button>
+            <button type="button" class="hub-btn-ghost" onclick="copyRestockText()">📋 คัดลอกข้อความ</button>
+          </div>` : '<div class="hub-empty">ยังไม่มีสินค้าที่ต้องเบิก ✓</div>')}
+        ${resvLines().length ? `<div class="hub-resv-note">📌 มีของสั่งจองที่ต้องเบิก ${new Set(resvLines().map(x => x.resId)).size} ใบ (${resvLines().length} รายการ) • รวมอยู่ในใบเบิกแล้ว</div>` : ''}
       </div>`;
   }
 
@@ -223,8 +228,13 @@
   function restockText() {
     const list = restockList();
     let t = `📦 ใบเบิกสินค้า ${shopName()}\n${dateTh()} ${timeTh()} น.\n\n`;
-    if (!list.length) return t + 'ไม่มีรายการที่ต้องเบิก';
+    const resv = resvLines();
+    if (!list.length && !resv.length) return t + 'ไม่มีรายการที่ต้องเบิก';
     list.forEach((r, i) => { t += `${i + 1}. ${r.name} — เบิก ${r.qty} ${r.unit}\n`; });
+    if (resv.length) {
+      t += `\n📌 ของสั่งจอง:\n`;
+      resv.forEach(x => { t += `- ${x.name} — ${x.qty} ${x.unit} (${x.customer} ${x.res_no} รับ ${thShort(x.pickup_date)})\n`; });
+    }
     const note = getRestockNote().trim();
     if (note) t += `\n📝 หมายเหตุ / สั่งพิเศษ:\n${note}`;
     return t.trim();
@@ -279,7 +289,16 @@
   function getRestockNote() { try { return localStorage.getItem(noteKey()) || ''; } catch (_) { return ''; } }
   function setRestockNote(v) { try { localStorage.setItem(noteKey(), String(v || '')); } catch (_) {} }
 
-  function drawRestockImage(list, note = getRestockNote()) {
+  // ของสั่งจองที่ต้องเบิก (จากหน้าใบจอง)
+  function resvLines() {
+    const rs = window.eaReservationRequisitions?.() || [];
+    const out = [];
+    for (const r of rs) for (const i of (r.items || [])) out.push({ resId: r.id, res_no: r.res_no, customer: r.customer_name, pickup_date: r.pickup_date, name: i.name, qty: Number(i.qty), unit: i.unit || '' });
+    return out;
+  }
+  function thShort(iso) { return iso ? new Date(String(iso).slice(0, 10) + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }) : ''; }
+
+  function drawRestockImage(list, note = getRestockNote(), resv = resvLines()) {
     const W = 1080, PAD = 48;
     const FONT = (window.getAppFontStack && window.getAppFontStack()) || '"Sarabun","Noto Sans Thai","Thonburi",-apple-system,"Segoe UI",sans-serif';
     const cv = document.createElement('canvas');
@@ -304,8 +323,11 @@
     }
     const noteH = noteLines.length ? 84 + noteLines.slice(0, 14).length * 44 : 0;
 
-    const headH = 250, tableHead = 70, footH = 70;
-    const H = headH + tableHead + rowH.reduce((a, b) => a + b, 0) + (noteH ? noteH + 30 : 0) + footH;
+    const headH = 250, tableHead = list.length ? 70 : 0, footH = 70;
+    ctx.font = `600 32px ${FONT}`;
+    const resvDraw = resv.map(x => ({ ...x, lines: wrapLines(ctx, x.name, nameW, 2) }));
+    const resvH = resvDraw.length ? 30 + 64 + resvDraw.reduce((a, x) => a + (x.lines.length > 1 ? 128 : 92), 0) : 0;
+    const H = headH + tableHead + rowH.reduce((a, b) => a + b, 0) + resvH + (noteH ? noteH + 30 : 0) + footH;
     cv.width = W; cv.height = H;
 
     // พื้นหลัง + หัว
@@ -321,6 +343,7 @@
 
     // หัวตาราง
     let y = headH;
+    if (list.length) {
     ctx.fillStyle = '#f1f5f9'; ctx.fillRect(PAD - 16, y, W - 2 * PAD + 32, tableHead);
     ctx.fillStyle = '#475569'; ctx.font = `700 26px ${FONT}`;
     ctx.fillText('#', colNo, y + 45); ctx.fillText('สินค้า', colName, y + 45);
@@ -345,6 +368,30 @@
       ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(PAD - 16, y + h); ctx.lineTo(W - PAD + 16, y + h); ctx.stroke();
       y += h;
     });
+    }
+
+    // ของสั่งจอง (แยกหัวข้อ)
+    if (resvDraw.length) {
+      y += 30;
+      ctx.fillStyle = '#f5f3ff'; ctx.fillRect(PAD - 16, y, W - 2 * PAD + 32, 64);
+      ctx.textAlign = 'left'; ctx.fillStyle = '#5b21b6'; ctx.font = `800 30px ${FONT}`;
+      ctx.fillText(`📌 ของสั่งจอง (${new Set(resvDraw.map(x => x.resId)).size} ใบ) — เตรียมให้ลูกค้า`, PAD, y + 43);
+      y += 64;
+      resvDraw.forEach((x, i) => {
+        const h = x.lines.length > 1 ? 128 : 92;
+        const top = y + 40;
+        ctx.textAlign = 'left'; ctx.fillStyle = '#0f172a'; ctx.font = `600 32px ${FONT}`;
+        x.lines.forEach((ln, k) => ctx.fillText(ln, colName, top + k * 38));
+        ctx.fillStyle = '#6d28d9'; ctx.font = `600 24px ${FONT}`;
+        ctx.fillText(`${x.customer} • ${x.res_no} • นัดรับ ${thShort(x.pickup_date)}`, colName, top + x.lines.length * 38 + 4);
+        ctx.fillStyle = '#a78bfa'; ctx.font = `800 30px ${FONT}`; ctx.fillText('📌', colNo, top);
+        ctx.textAlign = 'right'; ctx.font = `800 46px ${FONT}`; ctx.fillStyle = '#6d28d9'; ctx.fillText(fmtQty(x.qty), colQtyR, top + 8);
+        ctx.textAlign = 'left'; ctx.font = `600 30px ${FONT}`; ctx.fillStyle = '#334155';
+        const u = wrapLines(ctx, x.unit, W - PAD - colUnit, 1); ctx.fillText(u[0] || '', colUnit, top + 4);
+        ctx.strokeStyle = '#ede9fe'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(PAD - 16, y + h); ctx.lineTo(W - PAD + 16, y + h); ctx.stroke();
+        y += h;
+      });
+    }
 
     // หมายเหตุ / สั่งพิเศษ
     if (noteH) {
@@ -382,12 +429,13 @@
     } catch (_) {}
   }
   async function buildRestockImage(list) {
-    const cv = drawRestockImage(list, getRestockNote());
+    const resv = resvLines();
+    const cv = drawRestockImage(list, getRestockNote(), resv);
     const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
     if (!blob) return null;
     if (restockImg?.url) URL.revokeObjectURL(restockImg.url);
     const file = new File([blob], restockFileName(), { type: 'image/png' });
-    restockImg = { blob, url: URL.createObjectURL(blob), file, list };
+    restockImg = { blob, url: URL.createObjectURL(blob), file, list, resIds: [...new Set(resv.map(x => x.resId))] };
     return restockImg;
   }
   let noteTimer = null;
@@ -403,7 +451,8 @@
   }
   async function openRestockImage() {
     const list = restockList();
-    if (!list.length) { toast('ยังไม่มีรายการที่ต้องเบิก (จำนวนเบิกเป็น 0 ทั้งหมด)'); return; }
+    const resvCount = resvLines().length;
+    if (!list.length && !resvCount) { toast('ยังไม่มีรายการที่ต้องเบิก (จำนวนเบิกเป็น 0 ทั้งหมด)'); return; }
     await loadImageFonts();
     const img = await buildRestockImage(list);
     if (!img) { toast('สร้างรูปไม่สำเร็จ'); return; }
@@ -419,7 +468,7 @@
     const canCopy = !!(window.ClipboardItem && navigator.clipboard?.write);
     dlg.innerHTML = `
       <div class="rid-head">
-        <strong>📷 ใบเบิกสินค้า (${list.length} รายการ)</strong>
+        <strong>📷 ใบเบิกสินค้า (${list.length} รายการ${img.resIds.length ? ` + ของจอง ${img.resIds.length} ใบ` : ''})</strong>
         <button type="button" class="rid-close" onclick="document.getElementById('restockImgDialog').close()" aria-label="ปิด">✕</button>
       </div>
       <div class="rid-body"><img src="${img.url}" alt="ใบเบิกสินค้า"></div>
@@ -446,11 +495,20 @@
       if (img && el) el.src = img.url;
     }
   }
+  // ส่ง/บันทึกใบเบิกแล้ว → ทำเครื่องหมายว่าของจองเบิกแล้ว (ไม่ขึ้นซ้ำวันถัดไป)
+  function markResvSent() {
+    const ids = restockImg?.resIds || [];
+    if (!ids.length || restockImg.resMarked) return;
+    restockImg.resMarked = true;
+    window.eaMarkReservationsRequisitioned?.(ids, true);
+    toast(`บันทึกว่าเบิกของจองแล้ว ${ids.length} ใบ`, 3000);
+  }
   async function shareRestockImage() {
     if (!restockImg) return;
     await ensureLatestImage();
     try {
       await navigator.share({ files: [restockImg.file], title: 'ใบเบิกสินค้า', text: `ใบเบิกสินค้า ${shopName()} ${dateTh()}` });
+      markResvSent();
     } catch (e) {
       if (e?.name !== 'AbortError') { toast('แชร์ไม่สำเร็จ — ลองกด "บันทึกรูป" แทน'); }
     }
@@ -462,6 +520,7 @@
     a.href = restockImg.url; a.download = restockImg.file.name;
     document.body.appendChild(a); a.click(); a.remove();
     toast('💾 บันทึกรูปใบเบิกแล้ว');
+    markResvSent();
   }
   async function copyRestockImage() {
     if (!restockImg) return;
@@ -469,6 +528,7 @@
     try {
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': restockImg.blob })]);
       toast('📋 คัดลอกรูปแล้ว • วางในแชท LINE ได้เลย');
+      markResvSent();
     } catch (e) { toast('คัดลอกรูปไม่สำเร็จ — ใช้ "บันทึกรูป" แทน'); }
   }
 
@@ -565,6 +625,7 @@
       <table>
         <thead><tr><th>#</th><th>สินค้า</th><th class="r">เบิก</th><th>หน่วย</th><th>ได้รับจริง</th></tr></thead>
         <tbody>${list.map((r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.name)}</td><td class="r b">${r.qty}</td><td>${escapeHtml(r.unit)}</td><td></td></tr>`).join('')}
+        ${resvLines().map(x => `<tr><td>📌</td><td>${escapeHtml(x.name)}<br><small>ของจอง ${escapeHtml(x.customer)} ${escapeHtml(x.res_no)} • รับ ${escapeHtml(thShort(x.pickup_date))}</small></td><td class="r b">${fmtQty(x.qty)}</td><td>${escapeHtml(x.unit)}</td><td></td></tr>`).join('')}
         </tbody>
       </table>
       ${getRestockNote().trim() ? `<div style="margin-top:12px;padding:10px 12px;border:1px solid #fcd34d;background:#fffbeb;border-radius:8px;white-space:pre-wrap;"><b>📝 หมายเหตุ / สั่งพิเศษ:</b>\n${escapeHtml(getRestockNote().trim())}</div>` : ''}
@@ -583,16 +644,20 @@
     const cash = sales.filter(s => !isQr(s.payment_method));
     const qr = sales.filter(s => isQr(s.payment_method));
     const received = sum(devices, d => d.received);
+    // บิลส่งของใบจอง: ส่วนลดท้ายบิล = หักมัดจำ (ไม่ใช่ส่วนลดจริง)
+    const depDeduct = sum(sales.filter(s => /หักมัดจำ/.test(String(s.note || ''))), s => s.discount_amount);
+    const rm = window.eaReservationMoney?.() || null;
     return {
-      sales, sold, devices, products,
+      sales, sold, devices, products, rm, depDeduct,
       bills: sales.length,
       total: sum(sales, s => s.total_amount),
-      discount: sum(sales, s => s.discount_amount),
+      discount: sum(sales, s => s.discount_amount) - depDeduct,
       cashTotal: sum(cash, s => s.total_amount), cashBills: cash.length,
       qrTotal: sum(qr, s => s.total_amount), qrBills: qr.length,
       units: sum(sold, r => r.qty),
       received,
-      pending: sales.filter(s => s.is_pending_sync).length
+      pending: sales.filter(s => s.is_pending_sync).length,
+      resvSales: rm ? rm.sales : 0, resvCash: rm ? rm.todayCash : 0, resvQr: rm ? rm.todayQr : 0
     };
   }
 
@@ -618,9 +683,50 @@
         </tbody>
       </table>
       <div class="grand"><span>รวมทั้งหมด</span><strong>${money(d.sold.reduce((a, r) => a + r.amount, 0))}</strong></div>
-      ${d.discount > 0 ? `<div class="sub">ส่วนลดท้ายบิล −${money(d.discount)} • ยอดขายสุทธิ ${money(d.total)}</div>` : ''}`;
+      ${d.discount > 0 ? `<div class="sub">ส่วนลดท้ายบิล −${money(d.discount)}</div>` : ''}
+      ${d.depDeduct > 0 ? `<div class="sub">หักมัดจำใบจองในบิล −${money(d.depDeduct)} (นับรวมในยอดใบจองด้านล่าง)</div>` : ''}
+      ${d.discount > 0 || d.depDeduct > 0 ? `<div class="sub">ยอดเก็บเงินจากบิลขายวันนี้ ${money(d.total)}</div>` : ''}
+      ${resvSectionHtml(d)}
+      ${d.resvSales ? `<div class="grand"><span>ยอดขายวันนี้ (บิลขาย + ใบจองที่ส่งของ)</span><strong>${money(d.total + d.resvSales)}</strong></div>` : ''}`;
 
     printHtml('ยอดขายรายวัน', salesTable);
+  }
+
+  // ใบจอง: มัดจำแยกเก็บ → นับเป็นยอดของ "วันที่ส่งของ"
+  function resvClosedRows(m) {
+    const rows = [];
+    for (const r of m.picked) {
+      const amt = Number(r.deposit_amount || 0) + (r.sale_no ? 0 : Number(r.final_amount || 0));
+      rows.push({ r, label: `ส่งของ ${r.res_no} ${r.customer_name}`, items: (r.items || []).map(i => `${i.name} ${fmtQty(Number(i.qty))} ${i.unit || ''}`).join(', '),
+        detail: r.sale_no ? `มัดจำ ${money(r.deposit_amount)} (ส่วนที่เหลืออยู่ในบิล ${r.sale_no})` : `มัดจำ ${money(r.deposit_amount)} + รับวันนี้ ${money(r.final_amount)}${r.final_method === 'shop' ? ' (จ่ายที่ร้าน)' : isQr(r.final_method) ? ' (โอน)' : ' (สด)'}`, amt });
+    }
+    for (const r of m.cancelled) {
+      const f = Math.max(0, Number(r.deposit_amount || 0) - Number(r.refund_amount || 0));
+      if (f > 0) rows.push({ r, label: `ยกเลิก ${r.res_no} ${r.customer_name}`, items: '', detail: `ริบมัดจำ (คืน ${money(r.refund_amount)})`, amt: f });
+    }
+    return rows;
+  }
+  function resvSectionHtml(d, opts) {
+    const m = d.rm; if (!m || !m.any) return '';
+    const rows = resvClosedRows(m);
+    return `<h2>ใบสั่งจอง (มัดจำแยกยอด • นับเป็นยอดขายวันที่ส่งของ)</h2>
+      <table>
+        ${rows.map(x => `<tr><td>${escapeHtml(x.label)}${x.items ? `<br><small>${escapeHtml(x.items)}</small>` : ''}<br><small>${escapeHtml(x.detail)}</small></td><td class="r b">฿${money(x.amt)}</td></tr>`).join('')}
+        ${rows.length ? `<tr class="tot"><td>รวมยอดใบจองที่นับเป็นยอดวันนี้</td><td class="r">฿${money(m.sales)}</td></tr>` : ''}
+        ${m.deposits.length ? `<tr><td>รับมัดจำใหม่ ${m.deposits.length} ใบ — <b>แยกเก็บ ไม่รวมยอดวันนี้</b></td><td class="r">สด ฿${money(m.depositCash)} • โอน ฿${money(m.depositQr)}</td></tr>` : ''}
+        ${m.refunds.length ? `<tr><td>คืนมัดจำ ${m.refunds.length} ใบ (จ่ายจากซองมัดจำ)</td><td class="r">สด ฿${money(m.refundCash)} • โอน ฿${money(m.refundQr)}</td></tr>` : ''}
+        <tr><td>มัดจำคงค้าง ใบจองรอรับ ${m.held.length} ใบ</td><td class="r">สด ฿${money(m.heldCash)} • โอน ฿${money(m.heldQr)}</td></tr>
+      </table>`;
+  }
+  function resvText(d) {
+    const m = d.rm; if (!m || !m.any) return '';
+    let t = `\n— ใบจอง (มัดจำแยกยอด) —\n`;
+    resvClosedRows(m).forEach(x => { t += `${x.label}: ฿${money(x.amt)} (${x.detail})\n`; });
+    if (m.sales) t += `รวมยอดใบจองวันนี้ ฿${money(m.sales)}\n`;
+    if (m.deposits.length) t += `รับมัดจำใหม่ ${m.deposits.length} ใบ: สด ฿${money(m.depositCash)} / โอน ฿${money(m.depositQr)} (แยกเก็บ ไม่รวมยอดวันนี้)\n`;
+    if (m.refunds.length) t += `คืนมัดจำ ${m.refunds.length} ใบ: สด ฿${money(m.refundCash)} / โอน ฿${money(m.refundQr)}\n`;
+    t += `มัดจำคงค้าง ${m.held.length} ใบ: สด ฿${money(m.heldCash)} / โอน ฿${money(m.heldQr)}\n`;
+    return t;
   }
 
   // สรุปเงินสดประจำวัน (แยกจากรายงานยอดขาย)
@@ -632,12 +738,13 @@
       <h1>สรุปเงินสดประจำวัน – ${escapeHtml(shopName())}</h1>
       <div class="sub">${escapeHtml(dateTh())} • พิมพ์เวลา ${escapeHtml(timeTh())} น.${d.pending ? ` • <span class="warn">มี ${d.pending} บิลยังไม่ซิงค์</span>` : ''}</div>
       <div class="kpis">
-        <div class="kpi"><span>ยอดขายรวม</span><b>฿${money(d.total)}</b></div>
+        <div class="kpi"><span>ยอดขายรวม${d.resvSales ? ' (รวมใบจองที่ส่งของ)' : ''}</span><b>฿${money(d.total + d.resvSales)}</b></div>
         <div class="kpi"><span>จำนวนบิล / ชิ้น</span><b>${d.bills} / ${d.units}</b></div>
         <div class="kpi"><span>เงินสด (${d.cashBills} บิล)</span><b>฿${money(d.cashTotal)}</b></div>
         <div class="kpi"><span>โอน/QR (${d.qrBills} บิล)</span><b>฿${money(d.qrTotal)}</b></div>
       </div>
       ${d.discount > 0 ? `<div class="sub" style="margin-top:6px">ส่วนลดท้ายบิลรวม ฿${money(d.discount)}</div>` : ''}
+      ${resvSectionHtml(d)}
 
       <h2>เงินสดแยกตามเครื่อง</h2>
       <table>
@@ -659,7 +766,12 @@
 
       <h2>นำส่งเงินสด</h2>
       <table>
-        <tr><td>เงินสดจากการขาย</td><td class="r b">฿${money(d.cashTotal)}</td></tr>
+        <tr><td>เงินสดจากบิลขาย</td><td class="r b">฿${money(d.cashTotal)}</td></tr>
+        ${d.rm && d.rm.finalCash ? `<tr><td>+ รับเงินคงค้างใบจอง (สด)</td><td class="r">฿${money(d.rm.finalCash)}</td></tr>` : ''}
+        ${d.rm && d.rm.inCash ? `<tr><td>+ มัดจำสดของใบจองที่ส่งของ/ยกเลิกวันนี้ (นำออกจากซองมัดจำ)</td><td class="r">฿${money(d.rm.inCash)}</td></tr>` : ''}
+        ${d.resvCash ? `<tr><td>รวมเงินสดนำส่งวันนี้</td><td class="r b">฿${money(d.cashTotal + d.resvCash)}</td></tr>` : ''}
+        ${d.rm && d.rm.depositCash ? `<tr><td>มัดจำสดที่รับวันนี้ ฿${money(d.rm.depositCash)} — เก็บในซองมัดจำ <b>ไม่นำส่ง</b></td><td class="r"></td></tr>` : ''}
+        ${d.rm && d.rm.held.length ? `<tr><td>ซองมัดจำคงเหลือหลังเคลียร์ (${d.rm.held.length} ใบรอรับ)</td><td class="r">฿${money(d.rm.heldCash)}</td></tr>` : ''}
         <tr><td>รับเงินจากเครื่องแล้ว</td><td class="r">฿${money(d.received)}</td></tr>
         <tr><td>ส่วนต่าง</td><td class="r ${Math.abs(outstanding) < 0.01 ? 'ok' : 'bad'}">${Math.abs(outstanding) < 0.01 ? 'ครบถ้วน' : (outstanding > 0 ? 'ค้างรับ ฿' : 'รับเกิน ฿') + money(Math.abs(outstanding))}</td></tr>
         <tr><td>เงินสดนำส่ง (นับจริง)</td><td class="r">฿ ......................</td></tr>
@@ -675,7 +787,11 @@
       if (r.weights.length) t += `   ⚖️ ${r.weights.map(w => fmtQty(w)).join(', ')}\n`;
     });
     t += `\nรวมทั้งหมด ${money(d.sold.reduce((a, r) => a + r.amount, 0))}`;
-    if (d.discount > 0) t += `\nส่วนลดท้ายบิล −${money(d.discount)} • ยอดขายสุทธิ ${money(d.total)}`;
+    if (d.discount > 0) t += `\nส่วนลดท้ายบิล −${money(d.discount)}`;
+    if (d.depDeduct > 0) t += `\nหักมัดจำใบจองในบิล −${money(d.depDeduct)}`;
+    if (d.discount > 0 || d.depDeduct > 0) t += `\nยอดเก็บเงินจากบิลขาย ${money(d.total)}`;
+    t += resvText(d);
+    if (d.resvSales) t += `\n✅ ยอดขายวันนี้ (บิล + ใบจองที่ส่งของ) ${money(d.total + d.resvSales)}`;
     if (d.pending) t += `\n⚠️ มี ${d.pending} บิลยังไม่ซิงค์`;
     return t;
   }
@@ -685,15 +801,18 @@
     const d = reportData();
     const outstanding = d.cashTotal - d.received;
     let t = `💵 สรุปเงินสดประจำวัน ${shopName()}\n${dateTh()} (ณ ${timeTh()} น.)\n\n`;
-    t += `ยอดขายรวม ฿${money(d.total)} • ${d.bills} บิล • ${d.units} ชิ้น\n`;
+    t += `ยอดขายรวม ฿${money(d.total + d.resvSales)}${d.resvSales ? ` (รวมใบจองที่ส่งของ ฿${money(d.resvSales)})` : ''} • ${d.bills} บิล • ${d.units} ชิ้น\n`;
     t += `💵 เงินสด ฿${money(d.cashTotal)} (${d.cashBills} บิล)\n📱 โอน/QR ฿${money(d.qrTotal)} (${d.qrBills} บิล)\n`;
     if (d.discount > 0) t += `ส่วนลดท้ายบิล ฿${money(d.discount)}\n`;
+    t += resvText(d);
     t += `\n— แยกเครื่อง —\n`;
     d.devices.forEach(x => {
       const diff = x.received - x.cash;
       t += `${x.code}${x.staffSet && x.staffSet.size ? ` (${[...x.staffSet].join(', ')})` : ''}: ${x.bills} บิล ฿${money(x.total)} (สด ${money(x.cash)} / QR ${money(x.qr)}) รับเงินแล้ว ${money(x.received)}${Math.abs(diff) < 0.01 ? ' ✓ครบ' : diff < 0 ? ` ❗ค้าง ${money(-diff)}` : ` เกิน ${money(diff)}`}\n`;
     });
-    t += `\nเงินสดนำส่ง ฿${money(d.cashTotal)}${Math.abs(outstanding) < 0.01 ? ' (รับครบแล้ว)' : outstanding > 0 ? ` (ยังค้างรับจากเครื่อง ฿${money(outstanding)})` : ` (รับเกิน ฿${money(-outstanding)})`}`;
+    if (d.resvCash) t += `\nเงินสดใบจองนำส่ง ฿${money(d.resvCash)} (คงค้างสด + มัดจำของที่ส่งแล้ว)`;
+    if (d.rm && d.rm.depositCash) t += `\nมัดจำสดรับวันนี้ ฿${money(d.rm.depositCash)} เก็บในซอง ไม่นำส่ง`;
+    t += `\nเงินสดนำส่ง ฿${money(d.cashTotal + d.resvCash)}${Math.abs(outstanding) < 0.01 ? ' (รับครบแล้ว)' : outstanding > 0 ? ` (ยังค้างรับจากเครื่อง ฿${money(outstanding)})` : ` (รับเกิน ฿${money(-outstanding)})`}`;
     if (d.pending) t += `\n⚠️ มี ${d.pending} บิลยังไม่ซิงค์`;
     return t;
   }

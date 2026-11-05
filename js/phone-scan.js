@@ -182,6 +182,14 @@
     if (now - lastAcceptAt < ANY_CODE_MS) return;
     lastCode = code; lastCodeAt = now; lastAcceptAt = now;
 
+    // QR ใบจอง → แสดงรายการที่ต้องส่ง + ยอดคงค้าง
+    if (window.eaReservationScan?.(code)) {
+      paused = true; vibrate(40);
+      const resume = () => { window.removeEventListener('ea:rsv-scan-closed', resume); lastCode = ''; resumeIfIdle(); };
+      window.addEventListener('ea:rsv-scan-closed', resume);
+      return;
+    }
+
     const p = productByBarcode(code) || products().find(x => String(x.product_code || '').trim() === code);
     if (!p) {
       sound('beepError');
@@ -1124,6 +1132,7 @@
       big: `฿${money(pay.method === 'cash' ? bill.change : bill.total)}`,
       meta: `บิล ${bill.saleNo} · ยอด ฿${money(bill.total)}${pay.method === 'cash' ? ` · รับมา ฿${money(bill.received)}` : ''}`,
       offline: /^S\d/.test(String(bill.saleNo || '')),
+      canPrint: true,
       canCancel: false
     });
     renderTally();
@@ -1176,6 +1185,7 @@
       <div class="ps-done-meta">${escapeHtml(o.meta)}</div>
       ${o.offline ? '<div class="ps-notice is-warn">ออฟไลน์อยู่ • บิลเก็บในเครื่องแล้ว จะซิงค์เองเมื่อมีเน็ต</div>' : ''}
       <button type="button" class="ps-done-next" onclick="newPhoneScanBill()">เริ่มบิลถัดไป</button>
+      ${o.canPrint && window.eaMiniPrintBill ? '<button type="button" class="ps-done-cancel ps-done-print" onclick="eaMiniPrintBill()">🧾 พิมพ์ใบเสร็จ (เครื่องเล็ก)</button>' : ''}
       ${o.canCancel ? '<button type="button" class="ps-done-cancel" onclick="cancelLastPhoneScanBill()">ยกเลิกบิลที่ส่ง</button>' : ''}
     `;
     showSheet('psDone');

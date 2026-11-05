@@ -70,8 +70,14 @@
     const qrTotal = r2(qr.reduce((a, x) => a + Number(x.total_amount || 0), 0));
     const adjIn = r2(b.adjust.filter(a => a.amount > 0).reduce((s, a) => s + a.amount, 0));
     const adjOut = r2(b.adjust.filter(a => a.amount < 0).reduce((s, a) => s - a.amount, 0));
-    const expected = r2(b.float + cashTotal + adjIn - adjOut);
-    return { b, cash, qr, cashTotal, qrTotal, adjIn, adjOut, expected, bills: sales.length };
+    const rm = window.eaReservationMoney?.() || null;
+    const devOk = code => { const sel = selectedDevices(); return !sel || sel.includes(norm(code)); };
+    // มัดจำแยกเก็บในซองมัดจำ (ไม่อยู่ในกล่องเงินทอน) • คืนมัดจำจ่ายจากซอง
+    const depCash = rm ? rm.depositCash : 0;
+    const refCash = 0;
+    const finCash = rm ? r2((rm.finals || []).filter(r => r.final_method === 'cash' && devOk(r.final_terminal)).reduce((a, r) => a + Number(r.final_amount), 0)) : 0;
+    const expected = r2(b.float + cashTotal + finCash + adjIn - adjOut);
+    return { b, cash, qr, cashTotal, qrTotal, adjIn, adjOut, depCash, finCash, refCash, rm, expected, bills: sales.length };
   }
 
   // ---------- หน้าจอ ----------
@@ -104,7 +110,12 @@
             </div>
           </div>
           <div class="cbx-list">
-            ${list.length ? list.slice(0, 60).map(billCard).join('') : '<div class="cbx-empty">ยังไม่มีบิลวันนี้ • บิลใหม่จะขึ้นที่นี่ทันที</div>'}
+            ${(() => {
+              const dep = filter === 'all' || filter === (filter === 'qr' ? 'qr' : 'cash') ? (sum.rm?.deposits || []).filter(r => filter === 'all' || (filter === 'qr') === isQr(r.deposit_method)) : [];
+              const fin = (sum.rm?.finals || []).filter(r => r.final_method !== 'shop' && (filter === 'all' || (filter === 'qr') === isQr(r.final_method)));
+              const feed = [...list.map(x => ({ t: saleTs(x), html: () => billCard(x) })), ...dep.map(r => ({ t: new Date(r.created_at).getTime(), html: () => depositCard(r) })), ...fin.map(r => ({ t: new Date(r.picked_up_at).getTime(), html: () => finalCard(r) }))].sort((a, b) => b.t - a.t);
+              return feed.length ? feed.slice(0, 60).map(f => f.html()).join('') : '<div class="cbx-empty">ยังไม่มีบิลวันนี้ • บิลใหม่จะขึ้นที่นี่ทันที</div>';
+            })()}
           </div>
         </section>
 
@@ -114,6 +125,7 @@
             <div class="cbx-line"><span>เงินทอนตั้งต้น</span>
               <button type="button" class="cbx-link" onclick="cashboxEditFloat()">฿${money(sum.b.float)} ✏️</button></div>
             <div class="cbx-line"><span>+ ขายเงินสด <small>${sum.cash.length} บิล</small></span><b>฿${money(sum.cashTotal)}</b></div>
+            ${sum.finCash ? `<div class="cbx-line"><span>+ รับเงินคงค้างใบจอง (สด)</span><b>฿${money(sum.finCash)}</b></div>` : ''}
             ${sum.adjIn ? `<div class="cbx-line"><span>+ เติมเงินเข้า</span><b>฿${money(sum.adjIn)}</b></div>` : ''}
             ${sum.adjOut ? `<div class="cbx-line"><span>− นำเงินออก</span><b>฿${money(sum.adjOut)}</b></div>` : ''}
             <div class="cbx-expected"><span>ควรมีในกล่อง</span><strong>฿${money(sum.expected)}</strong></div>
@@ -124,6 +136,8 @@
               <button type="button" class="cbx-btn" onclick="cashboxAdjust(1)">เติมเงินทอน</button>
             </div>
           </div>
+
+          ${envelopeHtml(sum.rm)}
 
           <div class="cbx-panel">
             <h3>ผลการนับวันนี้</h3>
@@ -150,6 +164,22 @@
       </div>`;
   }
 
+  // ซองเงินมัดจำ: แยกจากกล่องเงินทอน ไม่ส่งรวมยอดรายวัน จนกว่าจะส่งของ
+  function envelopeHtml(m) {
+    if (!m || !m.any) return '';
+    return `
+      <div class="cbx-panel cbx-env">
+        <h3>ซองเงินมัดจำ (แยกเก็บ)</h3>
+        <div class="cbx-line"><span>ใบจองรอรับ <small>${m.held.length} ใบ</small></span><b>฿${money(m.heldCash)}</b></div>
+        ${m.depositCash ? `<div class="cbx-line cbx-muted"><span>• รวมมัดจำสดที่รับวันนี้</span><span>฿${money(m.depositCash)}</span></div>` : ''}
+        ${m.inCash ? `<div class="cbx-line"><span>+ ใบจองที่ส่งของ/ยกเลิกวันนี้</span><b>฿${money(m.inCash)}</b></div>` : ''}
+        <div class="cbx-expected"><span>ในซองควรมีตอนนี้</span><strong>฿${money(m.envelopeNow)}</strong></div>
+        ${m.inCash ? `<div class="cbx-env-move">ปิดยอดวันนี้: นำออกจากซอง <b>฿${money(m.inCash)}</b> ไปรวมเงินนำส่งวันนี้ • เหลือในซอง ฿${money(m.heldCash)}</div>` : ''}
+        ${m.refundCash ? `<div class="cbx-line cbx-muted"><span>คืนมัดจำเงินสดจากซองแล้ว</span><span>฿${money(m.refundCash)}</span></div>` : ''}
+        ${m.heldQr ? `<div class="cbx-line cbx-muted"><span>มัดจำโอน (อยู่ในบัญชี)</span><span>฿${money(m.heldQr)}</span></div>` : ''}
+      </div>`;
+  }
+
   function diffBadge(d) {
     d = r2(d);
     if (Math.abs(d) < 0.01) return '<span class="cbx-badge ok">ตรง ✓</span>';
@@ -164,6 +194,38 @@
         ${Math.abs(expectedNow - c.expected) >= 0.01 ? `<div class="cbx-hint">หลังนับ เงินในกล่อง${expectedNow > c.expected ? 'เพิ่มขึ้น' : 'ลดลง'} ฿${money(Math.abs(expectedNow - c.expected))}</div>` : ''}
         ${c.note ? `<div class="cbx-hint">หมายเหตุ: ${escapeHtml(c.note)}</div>` : ''}
       </div>`;
+  }
+
+  function depositCard(r) {
+    const qr = isQr(r.deposit_method);
+    return `
+      <article class="cbx-bill cbx-dep ${qr ? 'is-qr' : 'is-cash'}">
+        <header>
+          <span class="cbx-time">${new Date(r.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+          <span class="cbx-dev">${escapeHtml(norm(r.deposit_terminal))}${r.staff_name ? ` <span class="cbx-staff">👤 ${escapeHtml(r.staff_name)}</span>` : ''}</span>
+          <span class="cbx-no">${escapeHtml(r.res_no)}</span>
+          <span class="cbx-tag dep">มัดจำ → ${qr ? 'แยกยอด' : 'ซองมัดจำ'}</span>
+          <span class="cbx-pay ${qr ? 'qr' : 'cash'}">${qr ? 'โอน/QR' : 'เงินสด'}</span>
+        </header>
+        <div class="cbx-items"><div class="cbx-item"><span class="cbx-iname">${escapeHtml(r.customer_name)} • นัดรับ ${new Date(r.pickup_date + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}</span><span class="cbx-iqty">ยอดเต็ม ${money(r.total_amount)}</span><span class="cbx-isum"></span></div></div>
+        <footer><div class="cbx-f"><span>รับมัดจำ</span><b class="total">฿${money(r.deposit_amount)}</b></div></footer>
+      </article>`;
+  }
+
+  function finalCard(r) {
+    const qr = isQr(r.final_method);
+    return `
+      <article class="cbx-bill cbx-dep ${qr ? 'is-qr' : 'is-cash'}">
+        <header>
+          <span class="cbx-time">${new Date(r.picked_up_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+          <span class="cbx-dev">${escapeHtml(norm(r.final_terminal))}</span>
+          <span class="cbx-no">${escapeHtml(r.res_no)}</span>
+          <span class="cbx-tag dep">รับของใบจอง</span>
+          <span class="cbx-pay ${qr ? 'qr' : 'cash'}">${qr ? 'โอน/QR' : 'เงินสด'}</span>
+        </header>
+        <div class="cbx-items"><div class="cbx-item"><span class="cbx-iname">${escapeHtml(r.customer_name)} • ${(r.items || []).map(i => escapeHtml(i.name)).join(', ')}</span><span class="cbx-iqty">มัดจำแล้ว ${money(r.deposit_amount)}</span><span class="cbx-isum"></span></div></div>
+        <footer><div class="cbx-f"><span>รับเงินคงค้าง</span><b class="total">฿${money(r.final_amount)}</b></div></footer>
+      </article>`;
   }
 
   function billCard(x) {
@@ -322,6 +384,7 @@
     return document.getElementById('cashCountDialog')?.open || (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.closest('.cbx'));
   }
   window.addEventListener('ea:data-refreshed', () => { if (onPage() && !busyTyping()) renderCashbox(); });
+  window.addEventListener('ea:reservations-changed', () => { if (onPage() && !busyTyping()) renderCashbox(); });
   setInterval(() => {
     if (!onPage() || document.hidden) return;
     window.eaQuietRefresh?.();                         // ดึงบิลใหม่ทุก 15 วินาที (Realtime จะเร็วกว่านี้ถ้าเปิดไว้)

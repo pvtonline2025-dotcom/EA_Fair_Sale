@@ -4443,6 +4443,7 @@ function renderMenu(){
         { icon: "🛒", title: "ขายสินค้า", hint: "เปิดบิลหน้าร้าน", on: "go('sale')", accent: "green" },
         { icon: "📱", title: "มือถือสแกนคิดเงิน", hint: "ใช้มือถือเป็นเครื่องคิดเงิน", on: "startRemoteScan()", accent: "green" },
         { icon: "🧾", title: "ประวัติการขาย", hint: billsToday ? `วันนี้ ${billsToday} บิล • ดูย้อนหลัง` : "ดูบิลย้อนหลัง", on: "go('salesHistory')", accent: "green" },
+        { icon: "📌", title: "ใบสั่งจอง / มัดจำ", hint: "จองของ นัดวันรับ หักมัดจำ", on: "openReservations()", accent: "green", badge: (() => { const t = todayISO(); const n = (window.eaReservations?.() || []).filter(r => r.status === "booked" && r.pickup_date <= t).length; return n ? `${n} รับวันนี้` : ""; })(), badgeWarn: true },
         { icon: "💰", title: "กล่องเงิน (เรียลไทม์)", hint: "ดูบิล รับมา/ทอน • นับเงินตรวจ", on: "openCashbox()", accent: "green" },
         { icon: "🏢", title: "ศูนย์กลาง", hint: "ยอดทุกเครื่อง • รับเงินสด", on: "go('hub')", accent: "green" },
         { icon: "📲", title: "QR จุดขาย", hint: "ให้เจ้าหน้าที่สแกนด้วยมือถือตัวเอง", on: "go('qrStations')", accent: "green" },
@@ -6563,6 +6564,7 @@ function productByCode(code){
 function handlePosSearchEnter(val){
   const clean = String(val || "").trim();
   if(!clean) return;
+  if(window.eaReservationScan?.(clean)){ clearPosSearch(); return; }   // QR ใบจอง
   const p = productByBarcode(clean) || productByCode(clean);
   if(p){
     addProductToCart(p);
@@ -6990,6 +6992,7 @@ function triggerScanSuccessFeedback(p, currentCount = 1){
 function handleCartLiveScannedBarcode(code){
   const clean = String(code || "").trim();
   if(!clean) return;
+  if(window.eaReservationScan?.(clean)) return;   // QR ใบจอง
   const p = productByBarcode(clean) || productByCode(clean);
   const pill = el("cartLiveFeedbackPill");
 
@@ -7165,6 +7168,7 @@ function renderSale(){
 
   el("content").innerHTML = `
     ${connectionNotice()}
+    ${window.eaReservationPosBanner ? window.eaReservationPosBanner() : ""}
     <div id="posNetworkSyncBanner" class="pos-net-banner" style="display:none;"></div>
     <div class="pos-layout">
       <div class="pos-panel">
@@ -7813,6 +7817,7 @@ function addProductToCart(p){
 function addBarcode(code){
   const clean=String(code||"").trim();
   if(!clean) return;
+  if(window.eaReservationScan?.(clean)) return;   // QR ใบจอง
   const p=productByBarcode(clean);
   if(!p){toast(`ไม่พบบาร์โค้ด ${clean}`);return}
   addProductToCart(p);
@@ -7863,6 +7868,7 @@ function clearCart(){
   }
   state.cart=[];
   state.receivedCash=0;
+  if(state.pendingReservation){ state.pendingReservation=null; state.billDiscount={ type:"none", value:0, note:"" }; }
   saveCartLocal();
   updateBottomNav();
   toast("ล้างตะกร้าสินค้าเรียบร้อยแล้ว");
@@ -9514,6 +9520,7 @@ function handleScannedBarcode(code){
   if(!clean) return;
   const status = el("scannerStatus");
   if(status) status.textContent = `พบ: ${clean}`;
+  if(window.eaReservationScan?.(clean)){ try{ if(typeof stopScanner === "function") stopScanner(); }catch(e){} return; }   // QR ใบจอง
 
   const p = productByBarcode(clean);
   if(!p){
@@ -21897,6 +21904,7 @@ function render(){
   else if(state.page==="hub" && typeof window.renderHub==="function")window.renderHub();
   else if(state.page==="cashbox" && typeof window.renderCashbox==="function")window.renderCashbox();
   else if(state.page==="qrStations" && typeof window.renderQrStations==="function")window.renderQrStations();
+  else if(state.page==="reservations" && typeof window.renderReservations==="function")window.renderReservations();
   else renderSettings();
 }
 loadAll();

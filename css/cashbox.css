@@ -145,3 +145,5 @@ dialog.qrz-dialog::backdrop { background: rgba(2, 6, 23, .85); }
 .qrz-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 64px; height: 96px; border: 1px solid #e2e8f0; border-radius: 4px;
   background: rgba(255, 255, 255, .92); color: #0f172a; font-size: 48px; font-weight: 700; cursor: pointer; line-height: 1; }
 .qrz-nav.prev { left: 10px; } .qrz-nav.next { right: 10px; }
+.cbx-bill.cbx-dep { border-left-color: #8b5cf6; }
+.cbx-tag.dep { padding: 1px 8px; border-radius: 4px; background: #8b5cf6; color: #fff; font-weight: 800; }

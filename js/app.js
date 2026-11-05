@@ -4422,6 +4422,7 @@ function renderMenu(){
         { icon: "🛒", title: "ขายสินค้า", hint: "เปิดบิลหน้าร้าน", on: "go('sale')", accent: "green" },
         { icon: "📱", title: "มือถือสแกนคิดเงิน", hint: "ใช้มือถือเป็นเครื่องคิดเงิน", on: "startRemoteScan()", accent: "green" },
         { icon: "🧾", title: "ประวัติการขาย", hint: billsToday ? `วันนี้ ${billsToday} บิล • ดูย้อนหลัง` : "ดูบิลย้อนหลัง", on: "go('salesHistory')", accent: "green" },
+        { icon: "💰", title: "กล่องเงิน (เรียลไทม์)", hint: "ดูบิล รับมา/ทอน • นับเงินตรวจ", on: "openCashbox()", accent: "green" },
         { icon: "🏢", title: "ศูนย์กลาง", hint: "ยอดทุกเครื่อง • รับเงินสด", on: "go('hub')", accent: "green" },
         { icon: "💸", title: "ค่าใช้จ่าย & กำไร", hint: "บันทึกรายจ่าย", on: "go('expenses')", accent: "green" }
       ])}
@@ -21866,6 +21867,7 @@ function render(){
   else if(state.page==="audit")renderPhysicalAuditPage();
   else if(state.page==="report")renderReport();
   else if(state.page==="hub" && typeof window.renderHub==="function")window.renderHub();
+  else if(state.page==="cashbox" && typeof window.renderCashbox==="function")window.renderCashbox();
   else renderSettings();
 }
 loadAll();

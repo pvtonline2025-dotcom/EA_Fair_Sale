@@ -1,0 +1,92 @@
+/* EA Fair Sale - โหมดสว่างแบบเรียบ สบายตา (โหลดหลังสุด)
+ * พื้นเทาอ่อน • การ์ดขาว เส้นขอบบาง ไม่มีเงา • สีใช้เฉพาะตัวเลข/สถานะ • ปุ่มรองเป็นขาวขอบเทา */
+html[data-color-mode="light"] { --lc-bg: #f3f5f8; --lc-card: #ffffff; --lc-line: #e3e8ef; --lc-line2: #cfd6e0; --lc-text: #0f172a; --lc-sub: #526075; }
+html[data-color-mode="light"] body, html[data-color-mode="light"] .app-shell { background: var(--lc-bg) !important; }
+
+/* ---------- หน้าตรวจนับ ---------- */
+html[data-color-mode="light"]:not(#_a) .audit-subtab-navigation,
+html[data-color-mode="light"]:not(#_a) .audit-scan-station,
+html[data-color-mode="light"]:not(#_a) .audit-toolbar,
+html[data-color-mode="light"]:not(#_a) .audit-table-wrap,
+html[data-color-mode="light"]:not(#_a) .audit-footer-actions,
+html[data-color-mode="light"]:not(#_a) .audit-kpi-card,
+html[data-color-mode="light"]:not(#_a) .audit-summary-ribbon > div {
+  background: var(--lc-card) !important; background-image: none !important; border: 1px solid var(--lc-line) !important; box-shadow: none !important;
+}
+html[data-color-mode="light"]:not(#_a) .audit-scan-station { border-top: 3px solid #0284c7 !important; }
+html[data-color-mode="light"]:not(#_a) .audit-subtab-navigation { padding: 8px 10px !important; border-radius: 6px !important; }
+
+/* KPI: พื้นขาว แถบสีด้านซ้าย ตัวเลขมีสี */
+html[data-color-mode="light"]:not(#_a) .audit-kpi-card { border-left-width: 4px !important; border-left-color: #94a3b8 !important; }
+html[data-color-mode="light"]:not(#_a) .audit-kpi-card.matched { border-left-color: #0ea5e9 !important; }
+html[data-color-mode="light"]:not(#_a) .audit-kpi-card.surplus { border-left-color: #10b981 !important; }
+html[data-color-mode="light"]:not(#_a) .audit-kpi-card.shortage { border-left-color: #ef4444 !important; }
+html[data-color-mode="light"]:not(#_a) .audit-kpi-card .kpi-label { color: var(--lc-sub) !important; font-weight: 700 !important; }
+html[data-color-mode="light"]:not(#_a) .audit-kpi-card .kpi-val { color: var(--lc-text) !important; }
+html[data-color-mode="light"]:not(#_a) .audit-kpi-card.matched .kpi-val { color: #0369a1 !important; }
+html[data-color-mode="light"]:not(#_a) .audit-kpi-card.surplus .kpi-val { color: #047857 !important; }
+html[data-color-mode="light"]:not(#_a) .audit-kpi-card.shortage .kpi-val { color: #b91c1c !important; }
+html[data-color-mode="light"]:not(#_a) .audit-kpi-card * { background: transparent !important; }
+
+/* ปุ่มรอง: ขาว ขอบเทา ตัวเข้ม (ไม่มีไล่สี/เงา) */
+html[data-color-mode="light"]:not(#_a) #content .btn-light,
+html[data-color-mode="light"]:not(#_a) #content .btn-info,
+html[data-color-mode="light"]:not(#_a) #content .btn-file-csv,
+html[data-color-mode="light"]:not(#_a) #content .audit-pill-btn,
+html[data-color-mode="light"]:not(#_a) #content .audit-step-chip,
+html[data-color-mode="light"]:not(#_a) #content .audit-mode-btn,
+html[data-color-mode="light"]:not(#_a) #content .audit-qty-btn,
+html[data-color-mode="light"]:not(#_a) #content .audit-step-btn,
+html[data-color-mode="light"]:not(#_a) #content .mini-btn:not(.receive):not(.edit),
+html[data-color-mode="light"]:not(#_a) #content .replenish-tab-btn {
+  background: #fff !important; background-image: none !important; color: var(--lc-text) !important; border: 1px solid var(--lc-line2) !important; box-shadow: none !important; text-shadow: none !important;
+}
+html[data-color-mode="light"]:not(#_a) #content .btn-light *, html[data-color-mode="light"]:not(#_a) #content .btn-info *,
+html[data-color-mode="light"]:not(#_a) #content .audit-pill-btn *, html[data-color-mode="light"]:not(#_a) #content .replenish-tab-btn * { color: inherit !important; }
+/* ปุ่ม/แท็บที่เลือกอยู่ */
+html[data-color-mode="light"]:not(#_a) #content .audit-pill-btn.active,
+html[data-color-mode="light"]:not(#_a) #content .audit-step-chip.active,
+html[data-color-mode="light"]:not(#_a) #content .audit-mode-btn.active,
+html[data-color-mode="light"]:not(#_a) #content .audit-mode-btn.bulk-active,
+html[data-color-mode="light"]:not(#_a) #content .replenish-tab-btn.active {
+  background: #0369a1 !important; color: #fff !important; border-color: #0369a1 !important;
+}
+html[data-color-mode="light"]:not(#_a) #content .replenish-tab-bar { background: transparent !important; box-shadow: none !important; border: 0 !important; }
+/* ปุ่มหลัก: สีทึบเรียบ */
+html[data-color-mode="light"]:not(#_a) #content .btn-primary { background: #2563eb !important; background-image: none !important; border-color: #2563eb !important; color: #fff !important; box-shadow: none !important; }
+html[data-color-mode="light"]:not(#_a) #content .btn-primary * { color: #fff !important; }
+html[data-color-mode="light"]:not(#_a) #content .btn-primary:disabled { background: #93c5fd !important; border-color: #93c5fd !important; opacity: 1 !important; }
+html[data-color-mode="light"]:not(#_a) #content .audit-barcode-input-wrap { border: 1px solid var(--lc-line2) !important; border-radius: 6px !important; }
+html[data-color-mode="light"]:not(#_a) #content .btn-export-excel { background: #fff !important; color: #047857 !important; border: 1px solid #10b981 !important; box-shadow: none !important; }
+
+/* ช่องกรอก */
+html[data-color-mode="light"]:not(#_a) #content .audit-barcode-input-wrap,
+html[data-color-mode="light"]:not(#_a) #content .audit-search-wrap,
+html[data-color-mode="light"]:not(#_a) #content input[type="text"],
+html[data-color-mode="light"]:not(#_a) #content input[type="search"],
+html[data-color-mode="light"]:not(#_a) #content input[type="number"],
+html[data-color-mode="light"]:not(#_a) #content .audit-note-input {
+  background: #fff !important; color: var(--lc-text) !important; border-color: var(--lc-line2) !important; box-shadow: none !important;
+}
+html[data-color-mode="light"]:not(#_a) #content .audit-barcode-input-wrap input, html[data-color-mode="light"]:not(#_a) #content .audit-search-wrap input { border: 0 !important; }
+
+/* ตาราง: หัวเทาอ่อน แถวขาว เส้นแบ่งบาง ตัวอักษรเข้ม */
+html[data-color-mode="light"]:not(#_a) .audit-table thead th { background: #f6f8fb !important; color: var(--lc-sub) !important; border-bottom: 1px solid var(--lc-line) !important; font-weight: 700 !important; }
+html[data-color-mode="light"]:not(#_a) .audit-table tbody tr, html[data-color-mode="light"]:not(#_a) .audit-table tbody td { background: #fff !important; border-color: #edf1f5 !important; box-shadow: none !important; }
+html[data-color-mode="light"]:not(#_a) .audit-table tbody tr td { border-bottom: 1px solid #edf1f5 !important; border-top: 0 !important; }
+html[data-color-mode="light"]:not(#_a) .audit-table tbody tr.row-surplus td:first-child { box-shadow: inset 3px 0 0 #10b981 !important; }
+html[data-color-mode="light"]:not(#_a) .audit-table tbody tr.row-shortage td:first-child { box-shadow: inset 3px 0 0 #ef4444 !important; }
+html[data-color-mode="light"]:not(#_a) .audit-table tbody td > div:first-child { color: var(--lc-text) !important; }
+html[data-color-mode="light"]:not(#_a) .audit-table code, html[data-color-mode="light"]:not(#_a) .audit-table td small { color: var(--lc-sub) !important; }
+html[data-color-mode="light"]:not(#_a) .aud-sys { background: #eef2ff !important; border-color: #c7d2fe !important; color: #3730a3 !important; }
+html[data-color-mode="light"]:not(#_a) .aud-diff.plus { color: #047857 !important; background: #d1fae5 !important; }
+html[data-color-mode="light"]:not(#_a) .aud-diff.minus { color: #b91c1c !important; background: #fee2e2 !important; }
+html[data-color-mode="light"]:not(#_a) .aud-st.ok { color: #0369a1 !important; background: #e0f2fe !important; border-color: #7dd3fc !important; }
+html[data-color-mode="light"]:not(#_a) .aud-st.plus { color: #047857 !important; background: #d1fae5 !important; border-color: #6ee7b7 !important; }
+html[data-color-mode="light"]:not(#_a) .aud-st.minus { color: #b91c1c !important; background: #fee2e2 !important; border-color: #fca5a5 !important; }
+html[data-color-mode="light"]:not(#_a) .aud-st.none { color: #64748b !important; background: #f1f5f9 !important; }
+html[data-color-mode="light"]:not(#_a) .aud-ctl .audit-count-input { border: 1px solid var(--lc-line2) !important; font-weight: 800 !important; }
+
+/* ---------- ทั่วไป (ทุกหน้า) โหมดสว่าง: ลดเงา/ไล่สีที่ทำให้ลายตา ---------- */
+html[data-color-mode="light"]:not(#_a) #content .card,
+html[data-color-mode="light"]:not(#_a) #content .panel { box-shadow: none !important; border-color: var(--lc-line) !important; }

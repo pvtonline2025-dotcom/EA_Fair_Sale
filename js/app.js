@@ -14135,28 +14135,27 @@ function renderPhysicalAuditPage(){
                     </div>
                   </td>
                   <td style="text-align:right; font-weight:700; color:#cbd5e1;">฿${money(auditUnitPrice(p))}</td>
-                  <td style="text-align:center; font-weight:800; color:#94a3b8; font-size:14px;">
-                    ${item.sysQty} <small style="font-size:11px; font-weight:normal;">${escapeHtml(p.unit||"ชิ้น")}</small>
+                  <td style="text-align:center;">
+                    <span class="aud-sys">${item.sysQty} <small>${escapeHtml(p.unit||"ชิ้น")}</small></span>
                   </td>
                   <td style="text-align:center;">
-                    <div class="audit-count-control">
+                    <div class="audit-count-control aud-ctl"><span class="aud-dot ${state.auditTouched[p.id] ? 'on' : ''}" title="${state.auditTouched[p.id] ? 'นับแล้ว' : 'ยังไม่นับ (ใช้ยอดระบบ)'}"></span>
                       <button type="button" class="audit-step-btn" onclick="stepAuditCount('${p.id}', -1)" title="ลด 1">−</button>
                       <input type="text" class="audit-count-input" value="${item.countQty}" inputmode="tel" title="พิมพ์สูตรได้ เช่น 10+10+6" onfocus="this.select()" oninput="updateAuditCount('${p.id}', this.value, false)" onchange="updateAuditCount('${p.id}', this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
                       <button type="button" class="audit-step-btn" onclick="stepAuditCount('${p.id}', 1)" title="เพิ่ม 1">+</button>
                       <button type="button" class="audit-step-btn" style="width:auto; padding:0 6px; font-size:11px;" onclick="stepAuditCount('${p.id}', 5)" title="เพิ่ม 5">+5</button>
                     </div>
-                    ${state.auditTouched[p.id] ? '' : '<div class="audit-untouched-hint">ยังไม่นับ • ใช้ยอดระบบ</div>'}
                   </td>
                   <td style="text-align:center;">
-                    <span class="audit-diff-badge ${diffClass}" style="font-size:12px; padding:4px 9px;">${diffText} ${escapeHtml(p.unit||"ชิ้น")}</span>
+                    <span class="aud-diff ${!state.auditTouched[p.id] ? 'none' : diffClass}">${!state.auditTouched[p.id] ? '–' : item.diff > 0 ? `+${item.diff}` : item.diff < 0 ? `${item.diff}` : '0'} ${state.auditTouched[p.id] ? escapeHtml(p.unit||"ชิ้น") : ''}</span>
                   </td>
                   <td style="text-align:right; font-weight:800; color:${item.diffVal === 0 ? '#34d399' : (item.diffVal > 0 ? '#38bdf8' : '#fb7185')};">
                     ${item.diffVal > 0 ? '+' : ''}฿${money(item.diffVal)}
                   </td>
                   <td style="text-align:center;">
-                    ${item.diff === 0 ? '<span class="badge" style="background:rgba(16,185,129,0.2); color:#34d399; font-size:11px;">✓ ตรงกัน</span>' : 
-                      (item.diff > 0 ? '<span class="badge" style="background:rgba(2,132,199,0.2); color:#38bdf8; font-size:11px;">📈 เกินระบบ</span>' : 
-                      '<span class="badge" style="background:rgba(225,29,72,0.2); color:#fb7185; font-size:11px;">🚨 ขาดจากระบบ</span>')}
+                    ${!state.auditTouched[p.id] ? '<span class="aud-st none">ยังไม่นับ</span>' :
+                      item.diff === 0 ? '<span class="aud-st ok">✓ ตรงกัน</span>' :
+                      (item.diff > 0 ? '<span class="aud-st plus">เกินสต็อก</span>' : '<span class="aud-st minus">ขาดสต็อก</span>')}
                   </td>
                   <td style="text-align:center;">
                     ${isDiff ? `<button type="button" class="mini-btn" onclick="resetAuditProductToSystem('${p.id}')" title="คืนค่ายอดนับให้ตรงระบบ">คืนค่า</button>` : `<span style="color:#64748b; font-size:11px;">-</span>`}

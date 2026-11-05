@@ -244,6 +244,8 @@
     if (scheduled) return;
     scheduled = true;
     const go = () => { run(); clearTimeout(followUp); followUp = setTimeout(run, 700); };
+    // โหมดสว่าง: แก้ทันทีก่อนจอวาด (กันกะพริบเป็นกล่องสีดำตอนหน้าโหลดข้อมูลใหม่)
+    if (isLightMode()) { go(); return; }
     setTimeout(() => (window.requestIdleCallback ? requestIdleCallback(go, { timeout: 250 }) : requestAnimationFrame(go)), 80);
   }
 
@@ -253,8 +255,12 @@
   }
 
   // Theme / mode change: restore originals, then check again
-  new MutationObserver(() => { resetAll(); bgCache = new Map(); schedule(); })
-    .observe(document.documentElement, { attributes: true, attributeFilter: ['data-color-mode', 'data-theme', 'style'] });
+  // (เดิมรีเซ็ตทุกครั้งที่ style ของหน้าเปลี่ยน → ตอนโหลดข้อมูลใหม่จะกะพริบดำ) • รีเซ็ตเฉพาะตอนเปลี่ยนธีม/โหมดจริง
+  let lastKey = '';
+  const modeKey = () => `${document.documentElement.getAttribute('data-color-mode')}|${document.documentElement.getAttribute('data-theme')}`;
+  lastKey = modeKey();
+  new MutationObserver(() => { const k = modeKey(); if (k === lastKey) return; lastKey = k; resetAll(); bgCache = new Map(); scheduled = false; schedule(); })
+    .observe(document.documentElement, { attributes: true, attributeFilter: ['data-color-mode', 'data-theme'] });
 
   window.EaContrastGuard = { run, resetAll };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { observe(); schedule(); });

@@ -162,7 +162,9 @@ try { window.__eaCountMode = /[?&]count=/.test(location.search); } catch (_) {}
     const fresh = pending.filter(e => !seenToast.has(e.id) && !ignored().has(e.id));
     fresh.forEach(e => seenToast.add(e.id));
     if (s.page === 'audit') {
+      const before = JSON.stringify([s.auditCounts, Object.keys(s.auditRemoteMerged || {})]);
       window.initPhysicalAuditState?.(false);
+      if (JSON.stringify([s.auditCounts, Object.keys(s.auditRemoteMerged || {})]) === before) return;
       const a = document.activeElement;
       const typing = a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && !(a.id === 'auditBarcodeInput' && !a.value);
       if (!typing) window.rerenderAuditView?.();

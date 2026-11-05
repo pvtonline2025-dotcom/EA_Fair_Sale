@@ -363,8 +363,12 @@ function applyTheme(themeId, mode) {
     state.settings.colorMode = currentMode;
   }
 
-  document.documentElement.setAttribute("data-theme", t.id);
-  document.documentElement.setAttribute("data-color-mode", currentMode);
+  // ธีม/โหมดเดิม → ไม่ต้องตั้งค่าใหม่ (กันหน้าจอกะพริบตอนโหลดข้อมูล)
+  const _themeKey = `${t.id}|${currentMode}`;
+  if (applyTheme._last === _themeKey && document.documentElement.getAttribute("data-color-mode") === currentMode && document.body?.getAttribute("data-color-mode") === currentMode) return;
+  applyTheme._last = _themeKey;
+  if (document.documentElement.getAttribute("data-theme") !== t.id) document.documentElement.setAttribute("data-theme", t.id);
+  if (document.documentElement.getAttribute("data-color-mode") !== currentMode) document.documentElement.setAttribute("data-color-mode", currentMode);
   if (document.body) {
     document.body.setAttribute("data-theme", t.id);
     document.body.setAttribute("data-color-mode", currentMode);
@@ -13488,7 +13492,10 @@ window.addEventListener("ea:data-refreshed", () => {
   if(state.page !== "audit" || !state.auditCounts) return;
   const a = document.activeElement;
   const scanBox = a && a.id === "auditBarcodeInput" && !a.value;
-  if(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && !scanBox) { syncAuditWithLiveStock(); return; }
+  const before = JSON.stringify(state.auditCounts);
+  syncAuditWithLiveStock();
+  if(JSON.stringify(state.auditCounts) === before) return;          // ไม่มีอะไรเปลี่ยน → ไม่ต้องวาดใหม่
+  if(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && !scanBox) return;
   rerenderAuditView();
   if(scanBox) setTimeout(() => el("auditBarcodeInput")?.focus(), 0);
 });

@@ -807,7 +807,7 @@
   function openQrFull() {
     const box = $('psQrFull');
     if (!box) return;
-    const total = totals().amount;
+    const total = netTotal();
     const pp = promptPayTarget();
     const svg = pp.clean ? promptPayQrSvg(pp.clean, total) : '';
     box.innerHTML = `
@@ -846,7 +846,7 @@
     if (!items.length || busy) return;
     syncPrices();
     renderList();
-    pay = { method: 'cash', received: '' };
+    pay = { method: 'cash', received: '', disc: 0, discNote: '', discOpen: false };
     renderPay();
     showSheet('psPay');
   }
@@ -866,11 +866,56 @@
     renderPay(true);
   }
 
-  function renderPay(keepInput) {
+  // ---------- ส่วนลดท้ายบิล (ซื้อเยอะ / ต่อรองราคา) ----------
+  function r2(n) { return Math.round(Number(n || 0) * 100) / 100; }
+  function billDisc(sub) { return Math.min(Math.max(0, r2(pay.disc)), sub); }
+  function netTotal() { const sub = totals().amount; return r2(sub - billDisc(sub)); }
+  function togglePhoneBillDisc() {
+    pay.discOpen = !pay.discOpen;
+    renderPay();
+    if (pay.discOpen) setTimeout(() => $('psDiscNet')?.focus(), 50);
+  }
+  // พิมพ์ "ราคาที่ตกลง" (ยอดสุทธิ) → คำนวณส่วนลดให้
+  function setPhoneDealTotal(v) {
+    const sub = totals().amount;
+    if (v === '' || v === null) { pay.disc = 0; }
+    else pay.disc = r2(Math.min(sub, Math.max(0, sub - Number(v))));
+    pay.received = '';
+    if (pay.method === 'promptpay') return rerenderKeepFocus('psDiscNet');
+    renderPay(true, 'net');
+  }
+  function rerenderKeepFocus(id) {
+    const el = $(id); const pos = el?.selectionStart;
+    renderPay();
+    const n = $(id); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (_) {} }
+  }
+  // พิมพ์ "ลดกี่บาท"
+  function setPhoneDiscAmount(v) {
+    const sub = totals().amount;
+    pay.disc = v === '' ? 0 : r2(Math.min(sub, Math.max(0, Number(v))));
+    pay.received = '';
+    if (pay.method === 'promptpay') return rerenderKeepFocus('psDiscAmt');
+    renderPay(true, 'amt');
+  }
+  function phoneDiscPreset(kind) {
+    const sub = totals().amount;
+    if (kind === 'clear') { pay.disc = 0; pay.discNote = ''; }
+    else if (kind === 'p5') pay.disc = r2(sub * 0.05);
+    else if (kind === 'p10') pay.disc = r2(sub * 0.10);
+    else if (kind === 'r10') pay.disc = r2(sub - Math.floor(sub / 10) * 10);    // ปัดเศษลงหลักสิบ
+    else if (kind === 'r100') pay.disc = r2(sub - Math.floor(sub / 100) * 100); // ปัดเศษลงหลักร้อย
+    pay.received = '';
+    renderPay();
+  }
+  function setPhoneDiscNote(v) { pay.discNote = String(v || '').slice(0, 60); renderPay(); }
+
+  function renderPay(keepInput, editing) {
     const body = $('psPayBody');
     if (!body) return;
     const t = totals();
-    const total = t.amount;
+    const sub = t.amount;
+    const disc = billDisc(sub);
+    const total = r2(sub - disc);
     const rec = Number(pay.received || 0);
     const change = rec >= total ? rec - total : 0;
     const short = pay.method === 'cash' && rec > 0 && rec < total;
@@ -889,7 +934,16 @@
       }
       document.querySelectorAll('.ps-quick-btn').forEach(b => b.classList.toggle('is-active', Number(b.dataset.v) === rec));
       const c = $('psPayConfirm');
-      if (c) c.disabled = blocked || busy;
+      if (c) { c.disabled = blocked || busy; c.textContent = `✅ ยืนยันรับเงิน ฿${money(total)}`; }
+      const tot = $('psPayTotalAmt'); if (tot) tot.textContent = `฿${money(total)}`;
+      const ds = $('psDiscSummary'); if (ds) ds.innerHTML = discSummaryHtml(sub, disc);
+      if (editing === 'net') { const a = $('psDiscAmt'); if (a) a.value = disc ? disc : ''; }
+      if (editing === 'amt') { const n = $('psDiscNet'); if (n) n.value = disc ? total : ''; }
+      if (editing && pay.method === 'cash') {
+        const q = document.querySelector('.ps-quick');
+        if (q) q.innerHTML = quickAmounts(total).map((v, i) => `<button type="button" class="ps-quick-btn" data-v="${v}" onclick="setPhonePayReceived(${v}); document.getElementById('psPayInput').value='${v}'">${i === 0 ? 'พอดี' : '฿' + money(v).replace('.00', '')}</button>`).join('');
+        const inp = $('psPayInput'); if (inp) inp.value = '';
+      }
       return;
     }
 
@@ -900,7 +954,32 @@
     body.innerHTML = `
       <div class="ps-pay-total">
         <span>ยอดที่ต้องรับ · ${t.lines} รายการ ${t.qty} ชิ้น</span>
-        <strong>฿${money(total)}</strong>
+        <strong id="psPayTotalAmt">฿${money(total)}</strong>
+        <div id="psDiscSummary" class="ps-disc-summary">${discSummaryHtml(sub, disc)}</div>
+      </div>
+      <div class="ps-billdisc ${pay.discOpen ? 'is-open' : ''}">
+        <button type="button" class="ps-billdisc-toggle" onclick="togglePhoneBillDisc()">
+          🏷️ ลดราคาทั้งบิล / ต่อรองราคา ${disc > 0 && !pay.discOpen ? `<b>−฿${money(disc)}</b>` : ''}<span>${pay.discOpen ? '▲' : '▼'}</span>
+        </button>
+        ${pay.discOpen ? `
+          <div class="ps-billdisc-body">
+            <div class="ps-billdisc-row">
+              <label><span>ราคาที่ตกลง (สุทธิ)</span>
+                <input id="psDiscNet" type="number" inputmode="decimal" min="0" step="any" placeholder="${money(sub)}" value="${disc ? total : ''}" oninput="setPhoneDealTotal(this.value)"></label>
+              <label><span>หรือ ลดกี่บาท</span>
+                <input id="psDiscAmt" type="number" inputmode="decimal" min="0" step="any" placeholder="0" value="${disc ? disc : ''}" oninput="setPhoneDiscAmount(this.value)"></label>
+            </div>
+            <div class="ps-billdisc-chips">
+              ${sub % 10 ? `<button type="button" onclick="phoneDiscPreset('r10')">ปัดเศษ (−฿${money(r2(sub - Math.floor(sub / 10) * 10)).replace('.00', '')})</button>` : ''}
+              ${sub >= 100 && sub % 100 ? `<button type="button" onclick="phoneDiscPreset('r100')">ปัดลงหลักร้อย</button>` : ''}
+              <button type="button" onclick="phoneDiscPreset('p5')">ลด 5%</button>
+              <button type="button" onclick="phoneDiscPreset('p10')">ลด 10%</button>
+              ${disc ? `<button type="button" class="is-clear" onclick="phoneDiscPreset('clear')">ไม่ลด</button>` : ''}
+            </div>
+            <div class="ps-billdisc-chips is-reason">
+              ${['ซื้อจำนวนมาก', 'ต่อรองราคา', 'ลูกค้าประจำ'].map(r => `<button type="button" class="${pay.discNote === r ? 'is-active' : ''}" onclick="setPhoneDiscNote('${r}')">${r}</button>`).join('')}
+            </div>
+          </div>` : ''}
       </div>
       <div class="ps-seg">
         <button type="button" class="${pay.method === 'cash' ? 'is-active' : ''}" onclick="setPhonePayMethod('cash')">💵 เงินสด</button>
@@ -933,13 +1012,18 @@
     `;
   }
 
+  function discSummaryHtml(sub, disc) {
+    return disc > 0 ? `ราคาเต็ม <s>฿${money(sub)}</s> • ลด <b>฿${money(disc)}</b>${pay.discNote ? ` (${escapeHtml(pay.discNote)})` : ''}` : '';
+  }
+
   async function confirmPhonePay() {
     if (busy || !items.length) return;
     const st = appState();
     if (!st || typeof checkoutCart !== 'function') return;
 
     syncPrices();
-    const total = totals().amount;
+    const total = netTotal();
+    const discBaht = billDisc(totals().amount);
     const rec = Number(pay.received || 0);
     if (pay.method === 'cash' && (pay.received === '' || rec < total)) { renderPay(true); return; }
 
@@ -976,7 +1060,9 @@
     const prevBill = st.lastBill;
     const prevCart = st.cart;
     st.cart = cart;
-    st.billDiscount = { type: 'none', value: 0, note: '' };
+    st.billDiscount = discBaht > 0
+      ? { type: 'baht', value: discBaht, note: pay.discNote || 'ลดท้ายบิล (มือถือ)' }
+      : { type: 'none', value: 0, note: '' };
     st.paymentMethod = pay.method;
     st.receivedCash = pay.method === 'cash' ? (rec || total) : 0;
 
@@ -1163,6 +1249,11 @@
     changePhoneScanQty,
     clearPhoneScan,
     openPhonePay,
+    togglePhoneBillDisc,
+    setPhoneDealTotal,
+    setPhoneDiscAmount,
+    phoneDiscPreset,
+    setPhoneDiscNote,
     openPhoneQrFull: openQrFull,
     closePhoneQrFull: closeQrFull,
     eaPromptPayPayload: promptPayPayload,

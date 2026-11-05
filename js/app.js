@@ -8824,7 +8824,8 @@ async function checkoutCart(){
 
   const recVal = Number(state.receivedCash || 0);
   const changeVal = recVal >= totalAmt ? (recVal - totalAmt) : 0;
-  const saleNote = `ขายจาก ${state.terminal}${billDiscAmt > 0 ? ` (ส่วนลดท้ายบิล ฿${money(billDiscAmt)})` : ''}`;
+  const billDiscReason = String(state.billDiscount?.note || '').trim();
+  const saleNote = `ขายจาก ${state.terminal}${billDiscAmt > 0 ? ` (ส่วนลดท้ายบิล ฿${money(billDiscAmt)}${billDiscReason ? ` - ${billDiscReason}` : ''})` : ''}`;
 
   // One stable id per bill. Used by the idempotent RPC online AND by the offline
   // queue, so an ambiguous network failure can be queued without double charging.
@@ -20639,8 +20640,8 @@ function getBarcodePrintStyles(format) {
   return `
     <style>
       @page {
-        size: ${format === 'a4-grid-24' ? 'A4 portrait' : (format === 'shelf-tag' ? '70mm 40mm' : (format === 'thermal-42x30' ? '42mm 30mm' : '50mm 30mm'))};
-        margin: ${format === 'a4-grid-24' ? '5mm 4mm' : '0'};
+        size: ${String(format).startsWith('a4-grid') ? 'A4 portrait' : (format === 'shelf-tag' ? '70mm 40mm' : (format === 'thermal-42x30' ? '42mm 30mm' : '50mm 30mm'))};
+        margin: ${format === 'a4-grid-36' ? '5.5mm 16.5mm' : (format === 'a4-grid-24' ? '5mm 4mm' : '0')};
       }
       * {
         box-sizing: border-box;
@@ -20840,6 +20841,25 @@ function getBarcodePrintStyles(format) {
         color: #000000;
       }
 
+      /* A4 4 คอลัมน์ × 9 แถว = 36 ดวง • ดวงละ 42×30mm พอดี (ระยะห่าง 3mm × 2mm, จัดกึ่งกลางแผ่น) */
+      .barcode-a4-sheet.a4-4col {
+        width: 177mm; min-height: 0; height: 286mm; padding: 0; margin: 0 auto;
+        grid-template-columns: repeat(4, 42mm);
+        grid-auto-rows: 30mm;
+        gap: 2mm 3mm;
+        align-content: start;
+      }
+      .barcode-a4-sheet.a4-4col .barcode-label-a4-cell {
+        width: 42mm; height: 30mm; max-height: 30mm; padding: 1.4mm 1.8mm 1.2mm; border-radius: 2px;
+        border: 0.3mm dashed #cbd5e1;
+      }
+      .barcode-a4-sheet.a4-4col .lbl-shop { font-size: 5.5pt; }
+      .barcode-a4-sheet.a4-4col .lbl-name { font-size: 7pt; line-height: 1.12; max-height: 2.24em;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+      .barcode-a4-sheet.a4-4col .lbl-svg-wrap svg { max-height: 12mm; width: 100%; }
+      .barcode-a4-sheet.a4-4col .lbl-code { font-size: 6pt; }
+      .barcode-a4-sheet.a4-4col .lbl-price { font-size: 9pt; }
+
       /* Shelf Price Tag 70x40mm */
       .barcode-shelf-tag {
         width: 70mm;
@@ -20991,7 +21011,9 @@ function renderSingleBarcodeLabelHTML(product, format = "thermal-50x30", isPrevi
 
 function buildAllBarcodeLabelsPrintHTML(itemsList, format) {
   // itemsList is an array of { product, qty }
-  if (format === "a4-grid-24") {
+  if (String(format).startsWith("a4-grid")) {
+    const perSheet = format === "a4-grid-36" ? 36 : 24;
+    const sheetCls = format === "a4-grid-36" ? " a4-4col" : "";
     const flatCells = [];
     itemsList.forEach(item => {
       const p = item.product;
@@ -21003,7 +21025,7 @@ function buildAllBarcodeLabelsPrintHTML(itemsList, format) {
             ${barcodePrintState.showShop ? `<span class="lbl-shop">${escapeHtml(state.settings?.shopName || "EA Fair Sale")}</span>` : ''}
             ${barcodePrintState.showName ? `<div class="lbl-name">${escapeHtml(p.product_name)}</div>` : ''}
             <div class="lbl-svg-wrap">
-              ${generateCode128Svg(barcodeValue, { height: 30, width: 1.5, showText: barcodePrintState.showBarcodeText })}
+              ${generateCode128Svg(barcodeValue, { height: format === "a4-grid-36" ? 28 : 30, width: 1.5, showText: barcodePrintState.showBarcodeText })}
             </div>
             <div class="lbl-bottom-row">
               ${barcodePrintState.showCode ? `<span class="lbl-code">${escapeHtml(p.product_code)}</span>` : '<span></span>'}
@@ -21015,9 +21037,9 @@ function buildAllBarcodeLabelsPrintHTML(itemsList, format) {
     });
 
     const sheets = [];
-    for (let i = 0; i < flatCells.length; i += 24) {
-      const slice = flatCells.slice(i, i + 24);
-      sheets.push(`<div class="barcode-a4-sheet">${slice.join("")}</div>`);
+    for (let i = 0; i < flatCells.length; i += perSheet) {
+      const slice = flatCells.slice(i, i + perSheet);
+      sheets.push(`<div class="barcode-a4-sheet${sheetCls}">${slice.join("")}</div>`);
     }
     return sheets.join("");
   }
@@ -21048,7 +21070,7 @@ function renderBarcodePrintModalContent() {
   const barcodeDisplayVal = hasBarcode ? String(currentP.barcode).trim() : String(currentP.product_code || '-');
   const batchList = getBatchPrintList();
   const totalBatchLabels = batchList.reduce((acc, p) => acc + (barcodePrintState.batchType === 'by-stock' ? Math.max(1, Number(p.stock_qty) || 1) : 1), 0);
-  const totalBatchA4Sheets = Math.ceil(totalBatchLabels / 24) || 1;
+  const totalBatchA4Sheets = Math.ceil(totalBatchLabels / (barcodePrintState.format === 'a4-grid-36' ? 36 : 24)) || 1;
 
   body.innerHTML = `
     <!-- Mode Tabs: Single vs Batch -->
@@ -21152,8 +21174,12 @@ function renderBarcodePrintModalContent() {
               <small style="opacity:0.8;">ความร้อน 50×30mm</small>
             </button>
             <button type="button" class="btn ${barcodePrintState.format === 'a4-grid-24' ? 'btn-primary' : 'btn-light'}" style="min-height:42px; font-size:12px; padding:6px 8px; flex-direction:column; gap:2px;" onclick="setBarcodeFormat('a4-grid-24')">
-              <strong>📄 แผ่นสติกเกอร์ A4</strong>
+              <strong>📄 แผ่น A4 3 คอลัมน์</strong>
               <small style="opacity:0.8;">24 ดวง (3×8)</small>
+            </button>
+            <button type="button" class="btn ${barcodePrintState.format === 'a4-grid-36' ? 'btn-primary' : 'btn-light'}" style="min-height:42px; font-size:12px; padding:6px 8px; flex-direction:column; gap:2px;" onclick="setBarcodeFormat('a4-grid-36')">
+              <strong>📄 แผ่น A4 4 คอลัมน์</strong>
+              <small style="opacity:0.8;">36 ดวง (4×9) • ดวงละ 4.2×3 ซม.</small>
             </button>
             <button type="button" class="btn ${barcodePrintState.format === 'shelf-tag' ? 'btn-primary' : 'btn-light'}" style="min-height:42px; font-size:12px; padding:6px 8px; flex-direction:column; gap:2px;" onclick="setBarcodeFormat('shelf-tag')">
               <strong>🗂️ ป้ายราคาชั้นวาง</strong>
@@ -21172,7 +21198,7 @@ function renderBarcodePrintModalContent() {
                 <button type="button" class="barcode-chip-btn ${barcodePrintState.quantity === 1 ? 'active' : ''}" onclick="setBarcodeQty(1)">1 ดวง</button>
                 <button type="button" class="barcode-chip-btn ${barcodePrintState.quantity === 5 ? 'active' : ''}" onclick="setBarcodeQty(5)">5 ดวง</button>
                 <button type="button" class="barcode-chip-btn ${barcodePrintState.quantity === 10 ? 'active' : ''}" onclick="setBarcodeQty(10)">10 ดวง</button>
-                <button type="button" class="barcode-chip-btn ${barcodePrintState.quantity === 24 ? 'active' : ''}" onclick="setBarcodeQty(24)">24 (1 แผ่น A4)</button>
+                <button type="button" class="barcode-chip-btn ${barcodePrintState.quantity === (barcodePrintState.format === 'a4-grid-36' ? 36 : 24) ? 'active' : ''}" onclick="setBarcodeQty(${barcodePrintState.format === 'a4-grid-36' ? 36 : 24})">${barcodePrintState.format === 'a4-grid-36' ? 36 : 24} (1 แผ่น A4)</button>
                 <button type="button" class="barcode-chip-btn ${barcodePrintState.quantity === currentP.stock_qty ? 'active' : ''}" onclick="setBarcodeQty(${currentP.stock_qty || 1})">ตามสต็อก (${currentP.stock_qty})</button>
               </div>
             </div>

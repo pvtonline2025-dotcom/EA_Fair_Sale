@@ -12008,6 +12008,7 @@ function renderStockTableRow(p){
         <button class="mini-btn receive" onclick="quickReceive('${p.id}')">+ รับเข้า</button>
         <button class="mini-btn edit" onclick="editProduct('${p.id}')">แก้ไข</button>
       </td>
+      <td class="col-audit">${window.eaAuditStatusCell ? window.eaAuditStatusCell(p.id) : '-'}</td>
     </tr>
   `;
 }
@@ -12111,7 +12112,7 @@ function renderStock(){
 
   const tableRowsHtml = pageItems.length 
     ? pageItems.map(renderStockTableRow).join("") 
-    : `<tr><td colspan="7" class="empty">ไม่พบสินค้าในหมวดนี้</td></tr>`;
+    : `<tr><td colspan="8" class="empty">ไม่พบสินค้าในหมวดนี้</td></tr>`;
 
   const tableHtml = `
     <div class="table-wrap">
@@ -12125,6 +12126,7 @@ function renderStock(){
             <th class="col-qty sortable" onclick="toggleStockTableSort('stock')" title="คลิกเพื่อเรียงตามสต็อกคงเหลือ">คงเหลือ ${getSortIndicator('stock')}</th>
             <th class="col-status">สถานะ</th>
             <th class="col-actions">จัดการ</th>
+            <th class="col-audit">ตรวจนับ</th>
           </tr>
         </thead>
         <tbody>
@@ -13432,28 +13434,55 @@ function initPhysicalAuditState(force = false){
   if(!state.auditNote) state.auditNote = `ตรวจนับสต็อกจริง & กระทบยอดประจำวัน ${todayISO()}`;
 }
 
-// ขายระหว่างตรวจนับ: สต็อกในระบบลดลงหลังจากนับสินค้านั้นแล้ว
-//  - สินค้าที่นับแล้ว → ของออกจากชั้นหลังนับ จึงหักยอดนับตามจำนวนที่ขาย (ผลต่างยังถูกต้อง ไม่เด้งเป็น "ขาด")
-//  - สินค้าที่ยังไม่นับ → ยอดนับตั้งต้นตามระบบล่าสุด (ไม่ไปปรับสต็อกกลับ)
+// ขายระหว่างตรวจนับ (ดูจาก "เวลาในบิลขาย" เทียบกับ "เวลาที่นับสินค้านั้น")
+//  - สินค้าที่นับแล้ว → บิลที่ขายหลังเวลานับ = ของออกจากชั้นหลังนับ จึงหักยอดนับตามจำนวนนั้น
+//    บิลที่ขายก่อนเวลานับ (แม้แท็บเล็ตเพิ่งได้รับข้อมูลทีหลัง) ไม่หัก เพราะตอนนับของออกไปแล้ว
+//  - สินค้าที่ยังไม่นับ → ยอดนับตั้งต้นตามสต็อกในระบบล่าสุด (ไม่ไปปรับสต็อก)
+function auditSaleTs(x){
+  const t = Date.parse(x?.created_at || "");
+  if(!isNaN(t)) return t;
+  const t2 = Date.parse(`${x?.sale_date || todayISO()}T${String(x?.sale_time || "00:00:00").slice(0,8)}+07:00`);
+  return isNaN(t2) ? 0 : t2;
+}
+function auditSoldAfter(pid, since){
+  if(!since) return 0;
+  const sales = new Map((state.sales || []).filter(x => !x.is_cancelled && x.status !== "cancelled").map(x => [x.id, x]));
+  let n = 0;
+  (state.saleItems || []).forEach(i => {
+    if(i.product_id !== pid) return;
+    const sale = sales.get(i.sale_id); if(!sale) return;
+    if(auditSaleTs(sale) > since) n += Number(i.qty || 0);
+  });
+  return n;
+}
 function syncAuditWithLiveStock(){
   if(!state.auditCounts) return;
-  if(!state.auditSysSeen || typeof state.auditSysSeen !== "object") state.auditSysSeen = {};
   if(!state.auditSoldDuring || typeof state.auditSoldDuring !== "object") state.auditSoldDuring = {};
+  if(!state.auditCountedAt || typeof state.auditCountedAt !== "object") state.auditCountedAt = {};
   (state.products || []).forEach(p => {
-    const now = Number(p.stock_qty || 0);
-    const seen = state.auditSysSeen[p.id];
-    if(seen === undefined){ state.auditSysSeen[p.id] = now; if(!state.auditTouched[p.id]) state.auditCounts[p.id] = now; return; }
-    if(now === seen) return;
-    const delta = now - seen;
-    if(state.auditTouched[p.id]){
-      state.auditCounts[p.id] = Math.max(0, Number(state.auditCounts[p.id] || 0) + delta);
-      state.auditSoldDuring[p.id] = Number(state.auditSoldDuring[p.id] || 0) - delta;
-    } else {
-      state.auditCounts[p.id] = now;
+    if(!state.auditTouched[p.id]){
+      state.auditCounts[p.id] = Number(p.stock_qty || 0);
+      delete state.auditCountedAt[p.id]; delete state.auditSoldDuring[p.id];
+      return;
     }
-    state.auditSysSeen[p.id] = now;
+    if(!state.auditCountedAt[p.id]) state.auditCountedAt[p.id] = Date.now();
+    const sold = auditSoldAfter(p.id, state.auditCountedAt[p.id]);
+    const prev = Number(state.auditSoldDuring[p.id] || 0);
+    if(sold !== prev){
+      state.auditCounts[p.id] = Math.max(0, Number(state.auditCounts[p.id] || 0) - (sold - prev));
+      state.auditSoldDuring[p.id] = sold;
+    }
   });
 }
+// เวลาที่นับสินค้า (ใช้แยกบิลก่อน/หลังนับ) • นับซ้ำ/แก้ยอดเอง = นับใหม่ ณ ตอนนี้
+function markAuditCounted(pid, ts){
+  if(!state.auditCountedAt) state.auditCountedAt = {};
+  if(!state.auditSoldDuring) state.auditSoldDuring = {};
+  state.auditCountedAt[pid] = ts || Date.now();
+  state.auditSoldDuring[pid] = auditSoldAfter(pid, state.auditCountedAt[pid]);
+}
+function markAuditSysSeen(p){ /* (เดิมใช้เทียบสต็อก) ไม่ใช้แล้ว */ }
+
 // หน้าตรวจนับเปิดอยู่ + มีข้อมูลขายใหม่ → อัปเดตยอดนับทันที (ถ้าไม่ได้พิมพ์อยู่)
 window.addEventListener("ea:data-refreshed", () => {
   if(state.page !== "audit" || !state.auditCounts) return;
@@ -13463,7 +13492,6 @@ window.addEventListener("ea:data-refreshed", () => {
   rerenderAuditView();
   if(scanBox) setTimeout(() => el("auditBarcodeInput")?.focus(), 0);
 });
-function markAuditSysSeen(p){ if(p){ if(!state.auditSysSeen) state.auditSysSeen = {}; state.auditSysSeen[p.id] = Number(p.stock_qty || 0); } }
 
 // ปุ่ม "ตรวจนับสต็อก" จากหน้าสต็อก: เปิดหน้าตรวจนับเต็มจอ (แทนหน้าต่างป๊อปอัปเล็กเดิม)
 function openStockAuditModal(){
@@ -13605,6 +13633,7 @@ function handleAuditScannedBarcode(p, customStep = null){
   const newCount = currentCount + step;
   state.auditCounts[p.id] = newCount;
   state.auditTouched[p.id] = true;
+  markAuditCounted(p.id);
 
   const diff = newCount - sysQty;
   const now = new Date();
@@ -13711,9 +13740,13 @@ function startAuditCameraScan(){
 // rerender: false = แค่จำค่าระหว่างพิมพ์ (ไม่วาดหน้าใหม่ เพื่อไม่ให้ช่องหลุดโฟกัส)
 function updateAuditCount(prodId, val, rerender = true){
   initPhysicalAuditState(false);
-  const num = val === "" ? 0 : Math.max(0, parseInt(val, 10) || 0);
+  // พิมพ์สูตรได้: 10+10+6 / 2x10+6 (นับเป็นกระสอบ + เศษ)
+  const ex = window.eaParseCountExpr ? window.eaParseCountExpr(val) : parseInt(val, 10);
+  if(/[+*xX×]$/.test(String(val || "").trim()) || (isNaN(ex) && !rerender)) return;   // ยังพิมพ์สูตรไม่จบ
+  const num = val === "" ? 0 : Math.max(0, isNaN(ex) ? 0 : ex);
   state.auditCounts[prodId] = num;
   state.auditTouched[prodId] = true;
+  markAuditCounted(prodId);
   if(rerender) rerenderAuditView(180);
 }
 
@@ -13723,6 +13756,7 @@ function stepAuditCount(prodId, delta){
   const nextVal = Math.max(0, current + Number(delta));
   state.auditCounts[prodId] = nextVal;
   state.auditTouched[prodId] = true;
+  markAuditCounted(prodId);
   rerenderAuditView();
 }
 
@@ -13753,6 +13787,7 @@ function setAllAuditToZero(){
   (state.products || []).forEach(p => {
     state.auditCounts[p.id] = 0;
     state.auditTouched[p.id] = true;
+    markAuditCounted(p.id);
   });
   toast("ตั้งค่ายอดนับสินค้าทั้งหมดเป็น 0 ชิ้นแล้ว");
   if(state.page === "audit") renderPhysicalAuditPage();
@@ -13834,6 +13869,9 @@ function renderPhysicalAuditPage(){
         <button type="button" class="replenish-tab-btn ${currentSubTab === 'count' ? 'active' : ''}" onclick="setAuditSubTab('count')">
           🔍 ตรวจนับสต็อกจริง (Physical Count)
         </button>
+        ${window.eaRenderAuditReviewTab ? `<button type="button" class="replenish-tab-btn ${currentSubTab === 'review' ? 'active' : ''}" onclick="setAuditSubTab('review')">
+          ⏳ รอตรวจสอบ ${window.eaAuditReviewCount() ? `<span class="audit-review-badge">${window.eaAuditReviewCount()}</span>` : ''}
+        </button>` : ''}
         <button type="button" class="replenish-tab-btn ${currentSubTab === 'history' ? 'active' : ''}" onclick="setAuditSubTab('history')">
           📜 ประวัติการตรวจนับ (Batch History) <span style="margin-left:6px; font-size:11px; padding:2px 7px; border-radius:99px; background:rgba(56,189,248,0.2); color:#38bdf8; font-weight:800;">${(state.auditBatchHistory || []).length}</span>
         </button>
@@ -13863,6 +13901,16 @@ function renderPhysicalAuditPage(){
     </div>
   `;
 
+  if (currentSubTab === "review" && window.eaRenderAuditReviewTab) {
+    el("content").innerHTML = `
+      ${connectionNotice()}
+      <section class="app-home" style="max-width: 1200px; margin: 0 auto;">
+        ${subtabHeaderHtml}
+        ${window.eaRenderAuditReviewTab()}
+      </section>
+    `;
+    return;
+  }
   if (currentSubTab === "history") {
     el("content").innerHTML = `
       ${connectionNotice()}
@@ -14093,7 +14141,7 @@ function renderPhysicalAuditPage(){
                   <td style="text-align:center;">
                     <div class="audit-count-control">
                       <button type="button" class="audit-step-btn" onclick="stepAuditCount('${p.id}', -1)" title="ลด 1">−</button>
-                      <input type="number" min="0" class="audit-count-input" value="${item.countQty}" inputmode="numeric" onfocus="this.select()" oninput="updateAuditCount('${p.id}', this.value, false)" onchange="updateAuditCount('${p.id}', this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+                      <input type="text" class="audit-count-input" value="${item.countQty}" inputmode="tel" title="พิมพ์สูตรได้ เช่น 10+10+6" onfocus="this.select()" oninput="updateAuditCount('${p.id}', this.value, false)" onchange="updateAuditCount('${p.id}', this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
                       <button type="button" class="audit-step-btn" onclick="stepAuditCount('${p.id}', 1)" title="เพิ่ม 1">+</button>
                       <button type="button" class="audit-step-btn" style="width:auto; padding:0 6px; font-size:11px;" onclick="stepAuditCount('${p.id}', 5)" title="เพิ่ม 5">+5</button>
                     </div>
@@ -14137,8 +14185,8 @@ function renderPhysicalAuditPage(){
           <button type="button" class="btn btn-light" onclick="openDiscrepancyReportModal()">
             📋 ดูรายงานสรุปผลต่าง
           </button>
-          <button type="button" class="btn btn-primary" onclick="applyStockAuditAdjustments()" style="font-weight:800; font-size:14px; padding:10px 20px; background:linear-gradient(135deg, #059669 0%, #047857 100%); border-color:#34d399; box-shadow:0 4px 14px rgba(5,150,105,0.4);" ${analytics.changedItemsCount === 0 ? 'disabled' : ''}>
-            🚀 บันทึกกระทบยอด & ปรับสต็อกอัตโนมัติ (${analytics.changedItemsCount} รายการ)
+          <button type="button" class="btn btn-primary" onclick="applyStockAuditAdjustments()" style="font-weight:800; font-size:14px; padding:10px 20px; background:linear-gradient(135deg, #059669 0%, #047857 100%); border-color:#34d399; box-shadow:0 4px 14px rgba(5,150,105,0.4);" ${Object.keys(state.auditTouched || {}).length === 0 ? 'disabled' : ''}>
+            💾 บันทึกผลนับ (${Object.keys(state.auditTouched || {}).length} รายการ • ขาด/เกิน → รอตรวจสอบ)
           </button>
         </div>
       </div>
@@ -14279,7 +14327,7 @@ function renderStockAuditModalContent(){
                   <td style="text-align:center;">
                     <div class="audit-count-control">
                       <button type="button" class="audit-step-btn" onclick="stepAuditCount('${p.id}', -1)" title="ลด 1">−</button>
-                      <input type="number" min="0" class="audit-count-input" value="${item.countQty}" inputmode="numeric" onfocus="this.select()" oninput="updateAuditCount('${p.id}', this.value, false)" onchange="updateAuditCount('${p.id}', this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+                      <input type="text" class="audit-count-input" value="${item.countQty}" inputmode="tel" title="พิมพ์สูตรได้ เช่น 10+10+6" onfocus="this.select()" oninput="updateAuditCount('${p.id}', this.value, false)" onchange="updateAuditCount('${p.id}', this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
                       <button type="button" class="audit-step-btn" onclick="stepAuditCount('${p.id}', 1)" title="เพิ่ม 1">+</button>
                       <button type="button" class="audit-step-btn" style="width:auto; padding:0 6px; font-size:11px;" onclick="stepAuditCount('${p.id}', 5)" title="เพิ่ม 5">+5</button>
                     </div>
@@ -14312,7 +14360,7 @@ function renderStockAuditModalContent(){
 
         <div style="display:flex; align-items:center; gap:8px;">
           <button type="button" class="btn btn-light" onclick="closeProductModal()">ยกเลิก</button>
-          <button type="button" class="btn btn-primary" onclick="applyStockAuditAdjustments()" style="font-weight:800; background:linear-gradient(135deg, #059669 0%, #047857 100%); border-color:#34d399;" ${analytics.changedItemsCount === 0 ? 'disabled' : ''}>
+          <button type="button" class="btn btn-primary" onclick="applyStockAuditAdjustments()" style="font-weight:800; background:linear-gradient(135deg, #059669 0%, #047857 100%); border-color:#34d399;" ${Object.keys(state.auditTouched || {}).length === 0 ? 'disabled' : ''}>
             🚀 บันทึกปรับยอดอัตโนมัติ (${analytics.changedItemsCount} รายการ)
           </button>
         </div>
@@ -14734,7 +14782,7 @@ async function applyStockAuditAdjustments(){
   state.auditRecentScans = [];
   state.auditLastScanned = null;
   (state.products || []).forEach(p => {
-    if(!failedIds.has(p.id)){ state.auditCounts[p.id] = Number(p.stock_qty || 0); delete state.auditTouched[p.id]; markAuditSysSeen(p); if(state.auditSoldDuring) delete state.auditSoldDuring[p.id]; }
+    if(!failedIds.has(p.id)){ state.auditCounts[p.id] = Number(p.stock_qty || 0); delete state.auditTouched[p.id]; if(state.auditSoldDuring) delete state.auditSoldDuring[p.id]; if(state.auditCountedAt) delete state.auditCountedAt[p.id]; }
   });
 
   saveLocalState();

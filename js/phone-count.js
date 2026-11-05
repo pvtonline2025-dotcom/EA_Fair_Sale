@@ -89,6 +89,7 @@ try { window.__eaCountMode = /[?&]count=/.test(location.search); } catch (_) {}
       const p = (s.products || []).find(x => x.id === e.product_id); if (!p) continue;
       if (!s.auditTouched[p.id]) { s.auditCounts[p.id] = 0; s.auditTouched[p.id] = true; (s.auditRemoteTouched || (s.auditRemoteTouched = {}))[p.id] = true; }
       s.auditCounts[p.id] = Number(s.auditCounts[p.id] || 0) + Number(e.qty || 0);
+      window.markAuditCounted?.(p.id, Date.parse(e.created_at) || Date.now());   // ขายหลังเวลานับในมือถือ → หักให้
       merged[e.id] = { pid: p.id, qty: Number(e.qty || 0), who: e.staff_name || e.device || 'มือถือ', at: e.created_at };
       changed = true;
     }
@@ -319,9 +320,10 @@ try { window.__eaCountMode = /[?&]count=/.test(location.search); } catch (_) {}
         <label class="pc-lbl">นับได้ (${esc(unit)})</label>
         <div class="pc-qty">
           <button type="button" onclick="phoneCountStep(-1)">−</button>
-          <input id="pcQty" type="number" inputmode="decimal" min="0" step="any" value="${esc(sel.qty)}" placeholder="0" oninput="phoneCountQty(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();phoneCountSend()}">
+          <input id="pcQty" type="text" inputmode="tel" value="${esc(sel.qty)}" placeholder="0" oninput="phoneCountQty(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();phoneCountSend()}">
           <button type="button" onclick="phoneCountStep(1)">+</button>
         </div>
+        <div class="pc-hint">นับเป็นกระสอบ/แพ็ค พิมพ์สูตรได้ เช่น <b>10+10+6</b> หรือ <b>2*10+6</b></div>
         <div class="pc-quick">${[5, 10, 12, 20, 24, 50].map(n => `<button type="button" onclick="phoneCountStep(${n})">+${n}</button>`).join('')}</div>
         <div class="pc-act">
           <button type="button" class="pc-cancel" onclick="phoneCountCancel()">ยกเลิก</button>
@@ -332,7 +334,8 @@ try { window.__eaCountMode = /[?&]count=/.test(location.search); } catch (_) {}
   function phoneCountQty(v) { if (sel) sel.qty = v; }
   function phoneCountStep(d) {
     if (!sel) return;
-    sel.qty = String(Math.max(0, (Number(sel.qty) || 0) + d));
+    const cur = window.eaParseCountExpr ? window.eaParseCountExpr($('pcQty')?.value ?? sel.qty) : Number(sel.qty);
+    sel.qty = String(Math.max(0, (isNaN(cur) ? 0 : cur) + d));
     const n = $('pcQty'); if (n) n.value = sel.qty;
   }
   function closeSheet() { sel = null; renderSheet(); lastCode = ''; }
@@ -340,8 +343,9 @@ try { window.__eaCountMode = /[?&]count=/.test(location.search); } catch (_) {}
   async function phoneCountSend() {
     if (!sel) return;
     const raw = String($('pcQty')?.value ?? sel.qty).trim();
-    if (raw === '' || !(Number(raw) >= 0)) { toast('ใส่จำนวนที่นับได้ก่อน'); $('pcQty')?.focus(); return; }
-    const qty = Math.round(Number(raw) * 1000) / 1000;
+    const val = window.eaParseCountExpr ? window.eaParseCountExpr(raw) : Number(raw);
+    if (raw === '' || isNaN(val) || val < 0) { toast('ใส่จำนวนที่นับได้ก่อน เช่น 26 หรือ 10+10+6'); $('pcQty')?.focus(); return; }
+    const qty = Math.round(val * 1000) / 1000;
     const p = sel.p;
     const btn = $('pcSend'); if (btn) { btn.disabled = true; btn.textContent = 'กำลังส่ง...'; }
     try {

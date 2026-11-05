@@ -143,7 +143,8 @@
       if (isQr(sale.payment_method)) { d.qr += amt; d.qrBills += 1; } else { d.cash += amt; d.cashBills += 1; }
       if (sale.is_pending_sync) d.pending += 1;
       const t = sale.created_at || `${sale.sale_date}T${sale.sale_time || '00:00:00'}`;
-      if (!d.last || String(t) > String(d.last.t)) d.last = { t, label: timeHM(sale) };
+      if (!d.last || String(t) > String(d.last.t)) { d.last = { t, label: timeHM(sale) }; d.staff = window.saleStaffName?.(sale) || d.staff || ''; }
+      const sn = window.saleStaffName?.(sale); if (sn) { d.staffSet = d.staffSet || new Set(); d.staffSet.add(sn); }
     }
     for (const h of (s?.handovers || [])) {
       if (h.handover_date !== today) continue;
@@ -264,7 +265,7 @@
       <article class="hub-device">
         <header class="hub-device-head">
           <div>
-            <div class="hub-device-name">${escapeHtml(d.code)}</div>
+            <div class="hub-device-name">${escapeHtml(d.code)}${d.staffSet && d.staffSet.size ? ` <span class="hub-device-staff">👤 ${escapeHtml([...d.staffSet].join(', '))}</span>` : ''}</div>
             <div class="hub-device-sub">${d.bills} บิล${d.last ? ` · ล่าสุด ${escapeHtml(d.last.label)} น.` : ''}${d.pending ? ` · <b class="hub-pending">${d.pending} รอซิงค์</b>` : ''}</div>
           </div>
           <div class="hub-device-total">฿${money(d.total)}</div>

@@ -632,7 +632,8 @@
     const t = tally();
     const name = $('psDeviceName');
     const line = $('psTally');
-    if (name) name.textContent = terminalName();
+    const staff = window.getStaffName?.() || '';
+    if (name) name.textContent = staff ? `${terminalName()} · ${staff}` : terminalName();
     if (line) line.textContent = `วันนี้ ${t.bills} บิล · ฿${money(t.total)}`;
     if (!$('psSummary')?.hidden) renderSummary();
   }
@@ -709,6 +710,13 @@
           <button type="button" class="ps-btn-secondary" onclick="savePhoneDeviceName()">บันทึก</button>
         </span>
       </label>
+      <label class="ps-field">
+        <span>ชื่อผู้รับผิดชอบเครื่องนี้ (ติดไปกับทุกบิล)</span>
+        <span class="ps-field-row">
+          <input id="psStaffInput" type="text" maxlength="30" value="${escapeHtml(window.getStaffName?.() || '')}" placeholder="เช่น พี่แดง">
+          <button type="button" class="ps-btn-secondary" onclick="savePhoneStaffName()">บันทึก</button>
+        </span>
+      </label>
       <label class="ps-switch-row">
         <span>เปิดหน้าสแกนคิดเงินทันทีเมื่อเปิดแอป</span>
         <input type="checkbox" ${autoOpen ? 'checked' : ''} onchange="setPhoneCashierMode(this.checked)">
@@ -736,6 +744,21 @@
     window.refreshRemoteInbox?.();
     renderTally();
     notice(`ตั้งชื่อเครื่องเป็น "${v}" แล้ว • บิลใหม่จะบันทึกในชื่อนี้`, 'info');
+  }
+
+  function savePhoneStaffName() {
+    const v = window.setStaffName?.($('psStaffInput')?.value || '') || '';
+    renderTally();
+    notice(v ? `ผู้รับผิดชอบเครื่องนี้: ${v} • บิลใหม่จะติดชื่อนี้` : 'ล้างชื่อผู้รับผิดชอบแล้ว', 'info');
+  }
+  // ถามชื่อครั้งแรกก่อนรับเงิน (ถ้ายังไม่ได้ตั้ง)
+  function ensureStaffName() {
+    if (window.getStaffName?.()) return true;
+    const v = window.prompt('ใส่ชื่อผู้รับผิดชอบเครื่องนี้ (จะติดไปกับทุกบิล)\nเปลี่ยนภายหลังได้ที่ปุ่ม 📊 → ตั้งค่าเครื่องนี้', '');
+    if (v === null) return true;       // ข้ามได้ ไม่บังคับ
+    window.setStaffName?.(v);
+    renderTally();
+    return true;
   }
 
   function setPhoneShowSend(on) {
@@ -844,6 +867,7 @@
 
   function openPhonePay() {
     if (!items.length || busy) return;
+    ensureStaffName();
     syncPrices();
     renderList();
     pay = { method: 'cash', received: '', disc: 0, discNote: '', discOpen: false };
@@ -1210,7 +1234,10 @@
         if (st) st.terminal = station;
         try { localStorage.setItem(typeof TERMINAL_KEY !== 'undefined' ? TERMINAL_KEY : 'ea_fairsale_terminal', station); } catch (e) {}
         lsSet(MODE_KEY, 'true');
+        const staff = String(params.get('staff') || '').trim().slice(0, 30);
+        if (staff) window.setStaffName?.(staff);   // QR ระบุชื่อเจ้าหน้าที่ → ตั้งให้อัตโนมัติ
         params.delete('cashier');
+        params.delete('staff');
         const q = params.toString();
         history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + location.hash);
       }
@@ -1228,7 +1255,7 @@
         if ((st && !st.loading && st.products?.length) || Date.now() - started > 8000) {
           clearInterval(wait);
           document.documentElement.classList.remove('ps-booting');
-          openPhoneScan().then(() => { if (fromQr) notice(`พร้อมคิดเงินที่จุด "${terminalName()}" • ยอดของจุดนี้จะส่งเข้าศูนย์กลาง`, 'info'); });
+          openPhoneScan().then(() => { if (fromQr) notice(`พร้อมคิดเงินที่จุด "${terminalName()}"${window.getStaffName?.() ? ` • ผู้รับผิดชอบ: ${window.getStaffName()}` : ''} • ยอดเข้าศูนย์กลาง`, 'info'); });
         }
       }, 300);
     }
@@ -1277,6 +1304,7 @@
     openPhoneSummary,
     closePhoneSummary,
     savePhoneDeviceName,
+    savePhoneStaffName,
     setPhoneCashierMode,
     sendPhoneScan,
     newPhoneScanBill,

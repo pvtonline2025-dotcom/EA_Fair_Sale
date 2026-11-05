@@ -178,7 +178,7 @@
       <article class="cbx-bill ${fresh ? 'is-fresh' : ''} ${qr ? 'is-qr' : 'is-cash'}">
         <header>
           <span class="cbx-time">${saleTime(x)}</span>
-          <span class="cbx-dev">${escapeHtml(norm(x.terminal_code))}</span>
+          <span class="cbx-dev">${escapeHtml(norm(x.terminal_code))}${window.saleStaffName?.(x) ? ` <span class="cbx-staff">👤 ${escapeHtml(window.saleStaffName(x))}</span>` : ''}</span>
           <span class="cbx-no">${escapeHtml(String(x.sale_no || '').slice(-12))}</span>
           ${x.is_pending_sync ? '<span class="cbx-tag warn">รอซิงค์</span>' : ''}
           <span class="cbx-pay ${qr ? 'qr' : 'cash'}">${qr ? 'โอน/QR' : 'เงินสด'}</span>

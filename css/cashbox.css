@@ -90,3 +90,58 @@ dialog.cbx-dialog[open] { display: flex; }
 .cbx-note { height: 44px; padding: 0 12px; border-radius: 4px; border: 1px solid var(--card-border, #475569); background: transparent; color: inherit; font: inherit; font-size: 15px; }
 .cbx-dlg-foot { display: grid; grid-template-columns: 1fr 2fr; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--card-border, #334155); }
 .cbx-dlg-foot .cbx-btn-main { margin-top: 0; }
+.cbx-staff { margin-left: 4px; padding: 1px 8px; border-radius: 4px; background: color-mix(in srgb, var(--cbx-qr) 16%, transparent); color: var(--cbx-tx); font-weight: 700; font-size: 13px; }
+
+/* ===== หน้า QR จุดขาย ===== */
+.qrs-page { --q-bg: var(--surface-card, #1e293b); --q-bd: var(--card-border, #334155); --q-tx: var(--text-main, #f8fafc); --q-sub: var(--text-muted, #94a3b8);
+  display: flex; flex-direction: column; gap: 16px; color: var(--q-tx); }
+[data-color-mode="light"] .qrs-page { --q-bg: #fff; --q-bd: #e2e8f0; --q-tx: #0f172a; --q-sub: #64748b; }
+.qrs-editor { background: var(--q-bg); border: 1px solid var(--q-bd); border-radius: 6px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.qrs-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.qrs-editor-head h3 { margin: 0; font-size: 16px; font-weight: 800; }
+.qrs-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.qrs-btn { min-height: 42px; padding: 6px 14px; border-radius: 4px; border: 1px solid var(--q-bd); background: transparent; color: var(--q-tx); font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; }
+.qrs-btn.qrs-main { background: var(--primary, #2563eb); border-color: var(--primary, #2563eb); color: #fff; }
+.qrs-warn { padding: 8px 12px; border-radius: 4px; background: rgba(245, 158, 11, .14); border: 1px solid rgba(245, 158, 11, .5); font-size: 13.5px; }
+.qrs-rows { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 8px; }
+.qrs-row { display: grid; grid-template-columns: 48px 120px 1fr 40px; gap: 8px; align-items: center; }
+.qrs-no { font-weight: 900; color: var(--q-sub); }
+.qrs-in { height: 44px; padding: 0 12px; border-radius: 4px; border: 1px solid var(--q-bd); background: transparent; color: var(--q-tx); font: inherit; font-size: 16px; min-width: 0; }
+.qrs-code { font-weight: 800; }
+.qrs-del { height: 44px; border-radius: 4px; border: 1px solid var(--q-bd); background: transparent; color: #ef4444; font-size: 16px; font-weight: 800; cursor: pointer; }
+.qrs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+.qrs-card { background: #fff; color: #0f172a; border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px; text-align: center; position: relative; }
+.qrs-card-no { position: absolute; top: 10px; left: 12px; font-weight: 900; color: #64748b; }
+.qrs-qr svg { width: 100%; max-width: 230px; height: auto; display: block; margin: 0 auto; }
+.qrs-code-big { margin-top: 6px; font-size: 26px; font-weight: 900; }
+.qrs-name-big { font-size: 22px; font-weight: 800; color: #0369a1; }
+.qrs-name-big.is-empty { color: #94a3b8; font-weight: 600; font-size: 16px; }
+.qrs-fs-head { display: none; }
+/* โหมดเต็มจอให้สแกน */
+body.qr-fs .appbar, body.qr-fs .bottom-nav, body.qr-fs .qrs-editor { display: none !important; }
+body.qr-fs .main { padding-bottom: 0 !important; }
+body.qr-fs .content { max-width: none !important; padding: 14px 18px !important; }
+body.qr-fs .qrs-fs-head { display: flex; align-items: center; justify-content: space-between; font-size: 20px; }
+body.qr-fs .qrs-grid { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+body.qr-fs .qrs-qr svg { max-width: 300px; }
+.qrs-card { padding-top: 34px; }
+.qrs-tip { font-size: 14px; color: var(--q-sub); }
+button.qrs-card { font: inherit; cursor: pointer; width: 100%; transition: transform .1s ease, box-shadow .1s ease; }
+button.qrs-card:hover { box-shadow: 0 4px 16px rgba(15, 23, 42, .18); }
+button.qrs-card:active { transform: scale(.98); }
+/* ป๊อปอัป QR ใหญ่ */
+dialog.qrz-dialog { width: min(94vw, 94vh) !important; max-width: none !important; height: min(94vh, 94dvh); max-height: none !important;
+  padding: 2.5vh 3vh; border: 0; border-radius: 6px; background: #fff !important; color: #0f172a !important; overflow: hidden !important;
+  display: none; flex-direction: column; align-items: center; justify-content: center; gap: 1.5vh; position: fixed; }
+dialog.qrz-dialog[open] { display: flex; }
+dialog.qrz-dialog::backdrop { background: rgba(2, 6, 23, .85); }
+.qrz-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; justify-content: center; }
+.qrz-head span { font-size: 2.6vh; font-weight: 800; color: #64748b; }
+.qrz-head strong { font-size: 5vh; font-weight: 900; }
+.qrz-head em { font-style: normal; font-size: 4.2vh; font-weight: 800; color: #0369a1; }
+.qrz-qr { flex: 1 1 auto; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center; }
+.qrz-qr svg { width: auto; height: 100%; max-width: 100%; aspect-ratio: 1; display: block; }
+.qrz-foot { font-size: 2.2vh; color: #64748b; }
+.qrz-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 64px; height: 96px; border: 1px solid #e2e8f0; border-radius: 4px;
+  background: rgba(255, 255, 255, .92); color: #0f172a; font-size: 48px; font-weight: 700; cursor: pointer; line-height: 1; }
+.qrz-nav.prev { left: 10px; } .qrz-nav.next { right: 10px; }

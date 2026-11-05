@@ -796,6 +796,26 @@ function toast(t,duration=2100){const x=el("toast");if(!x)return;
   x.textContent=t;x.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>x.classList.remove("show"),Math.max(1200,Number(duration)||2100))}
 function isQrPayment(pm){const v=String(pm||"").toLowerCase();return v==="promptpay"||v==="qr"||v==="transfer"}
 function card(title,body,action=""){return `<section class="card"><div class="card-head"><h2>${title}</h2>${action}</div><div class="card-body">${body}</div></section>`}
+/* ---------- ผู้รับผิดชอบประจำเครื่อง (ติดไปกับทุกบิล) ---------- */
+const STAFF_KEY = "ea_staff_name";
+function getStaffName(){ try { return (localStorage.getItem(STAFF_KEY) || "").trim(); } catch(_) { return ""; } }
+function setStaffName(v){
+  const name = String(v || "").replace(/[•|]/g, " ").trim().slice(0, 30);
+  try { name ? localStorage.setItem(STAFF_KEY, name) : localStorage.removeItem(STAFF_KEY); } catch(_) {}
+  return name;
+}
+// อ่านชื่อผู้รับผิดชอบจากบิล (เก็บไว้ในหมายเหตุบิล "ผู้รับผิดชอบ: ชื่อ")
+function saleStaffName(sale){
+  if(!sale) return "";
+  if(sale.staff_name) return String(sale.staff_name);
+  const m = /ผู้รับผิดชอบ:\s*([^•()\n]+)/.exec(String(sale.note || ""));
+  return m ? m[1].trim() : "";
+}
+function saveStaffFromSettings(){
+  const v = setStaffName(el("staffNameInput")?.value || "");
+  toast(v ? `ตั้งผู้รับผิดชอบเครื่องนี้เป็น "${v}" แล้ว • บิลใหม่จะติดชื่อนี้` : "ล้างชื่อผู้รับผิดชอบแล้ว");
+  if(state.page === "settings") renderSettings();
+}
 function setHeader(t,s){el("pageTitle").textContent=t;el("pageSubtitle").textContent=s}
 
 const G_ICONS = {
@@ -1733,6 +1753,7 @@ async function mergePendingOfflineSalesIntoState(){
         received_amount: Number(rec.received_amount || 0),
         change_amount: Number(rec.change_amount || 0),
         note: rec.note || "",
+        staff_name: rec.staff_name || "",
         created_at: created,
         is_pending_sync: true
       });
@@ -4424,6 +4445,7 @@ function renderMenu(){
         { icon: "🧾", title: "ประวัติการขาย", hint: billsToday ? `วันนี้ ${billsToday} บิล • ดูย้อนหลัง` : "ดูบิลย้อนหลัง", on: "go('salesHistory')", accent: "green" },
         { icon: "💰", title: "กล่องเงิน (เรียลไทม์)", hint: "ดูบิล รับมา/ทอน • นับเงินตรวจ", on: "openCashbox()", accent: "green" },
         { icon: "🏢", title: "ศูนย์กลาง", hint: "ยอดทุกเครื่อง • รับเงินสด", on: "go('hub')", accent: "green" },
+        { icon: "📲", title: "QR จุดขาย", hint: "ให้เจ้าหน้าที่สแกนด้วยมือถือตัวเอง", on: "go('qrStations')", accent: "green" },
         { icon: "💸", title: "ค่าใช้จ่าย & กำไร", hint: "บันทึกรายจ่าย", on: "go('expenses')", accent: "green" }
       ])}
       ${group("สินค้าและสต็อก", [
@@ -7049,7 +7071,7 @@ function handleCartLiveScannedBarcode(code){
 }
 
 function renderSale(){
-  setHeader("ขายสินค้า",`จุดขาย ${state.terminal}`);
+  setHeader("ขายสินค้า",`จุดขาย ${state.terminal}${getStaffName() ? ` • ${getStaffName()}` : ""}`);
   
   const activeProds = state.products.filter(p => p.is_active && Number(p.stock_qty) > 0);
   const modeTabs = `
@@ -8826,7 +8848,8 @@ async function checkoutCart(){
   const recVal = Number(state.receivedCash || 0);
   const changeVal = recVal >= totalAmt ? (recVal - totalAmt) : 0;
   const billDiscReason = String(state.billDiscount?.note || '').trim();
-  const saleNote = `ขายจาก ${state.terminal}${billDiscAmt > 0 ? ` (ส่วนลดท้ายบิล ฿${money(billDiscAmt)}${billDiscReason ? ` - ${billDiscReason}` : ''})` : ''}`;
+  const staffName = getStaffName();
+  const saleNote = `ขายจาก ${state.terminal}${billDiscAmt > 0 ? ` (ส่วนลดท้ายบิล ฿${money(billDiscAmt)}${billDiscReason ? ` - ${billDiscReason}` : ''})` : ''}${staffName ? ` • ผู้รับผิดชอบ: ${staffName}` : ''}`;
 
   // One stable id per bill. Used by the idempotent RPC online AND by the offline
   // queue, so an ambiguous network failure can be queued without double charging.
@@ -8850,6 +8873,7 @@ async function checkoutCart(){
   const saleRecord = {
     id: saleId,
     terminal: state.terminal,
+    staff_name: staffName,
     items,
     item_details: itemDetails,
     payment_method: state.paymentMethod,
@@ -21498,7 +21522,10 @@ function renderSettings(){
   el("content").innerHTML=`${connectionNotice()}<div class="panel-grid">
     ${card("🎨 สีธีม & โหมดสว่าง/มืด", renderThemeSelectorHTML())}
 
-    ${card("จุดขายของเครื่องนี้",`<p style="margin-top:0;color:var(--muted);font-size:12px">ตั้งคนละ POS ในแต่ละแท็บเล็ต เช่น เครื่องแรก POS-01 เครื่องสอง POS-02</p><div class="terminal-options">${["POS-01","POS-02","POS-03","POS-04"].map(c=>`<button class="terminal-btn ${state.terminal===c?"active":""}" onclick="setTerminal('${c}')">${c}</button>`).join("")}</div>`)}
+    ${card("จุดขายของเครื่องนี้",`<p style="margin-top:0;color:var(--muted);font-size:12px">ตั้งคนละ POS ในแต่ละแท็บเล็ต เช่น เครื่องแรก POS-01 เครื่องสอง POS-02</p><div class="terminal-options">${["POS-01","POS-02","POS-03","POS-04"].map(c=>`<button class="terminal-btn ${state.terminal===c?"active":""}" onclick="setTerminal('${c}')">${c}</button>`).join("")}</div>
+      <div class="field" style="margin-top:14px;"><label for="staffNameInput">ผู้รับผิดชอบเครื่องนี้ (ติดชื่อไปกับทุกบิล)</label>
+        <div style="display:flex; gap:8px;"><input id="staffNameInput" maxlength="30" placeholder="เช่น พี่แดง" value="${escapeHtml(getStaffName())}" style="flex:1;" onkeydown="if(event.key==='Enter')saveStaffFromSettings()">
+        <button type="button" class="btn btn-primary" onclick="saveStaffFromSettings()">บันทึก</button></div></div>`)}
 
     ${card("📱 รับบิลจากมือถือ (สแกนส่งเครื่องคิดเงิน)",`<p style="margin-top:0;color:var(--muted);font-size:12px">เปิดที่แท็บเล็ต/เครื่องคิดเงิน เพื่อรับบิลที่พนักงานสแกนจากมือถือ • มือถือที่ใช้สแกนอย่างเดียวให้ปิดไว้<br>มือถือ: เมนู <b>สแกนส่งเครื่องคิดเงิน</b> → สแกนสินค้า → กด <b>📤 ส่งไปเครื่องคิดเงิน</b></p>
       <label class="toggle-switch-row" style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
@@ -21775,7 +21802,7 @@ function toggleHomeTopCardsMode() {
   toast(`ปรับขนาดการ์ดบน: ${labelMap[state.homeTopCardsMode]}`);
 }
 
-function go(page){if(state.page==="sale"&&page!=="sale"){stopScanner();stopCartLiveScanner();}if(page!=="audit"&&state.auditFullscreen)exitAuditFullscreen(false);state.page=page;render();window.scrollTo({top:0,behavior:"smooth"})}
+function go(page){if(page!=="qrStations")document.body.classList.remove("qr-fs");if(state.page==="sale"&&page!=="sale"){stopScanner();stopCartLiveScanner();}if(page!=="audit"&&state.auditFullscreen)exitAuditFullscreen(false);state.page=page;render();window.scrollTo({top:0,behavior:"smooth"})}
 el("searchInput").addEventListener("input",()=>{
   if(state.page!=="stock"){
     state.page="stock";
@@ -21829,7 +21856,7 @@ Object.assign(window,{
   setPosMode,onPosSearchInput,clearPosSearch,addProductToCartById,setPaymentMethod,
   setQuickCash,addQuickCash,clearQuickCash,generateQuickPayAmounts,calculateChangeBreakdown,onReceivedCashInput,setStockFilter,setStockViewMode,onStockSearch,clearStockSearch,
   setStockPage,setStockPageSize,setStockSort,toggleStockTableSort,
-  deleteProduct,toggleLowStockAdvanced,selectAppFont,getAppFontStack,onEventPeriodChange,setEventLengthDays,openStockAuditModal,toggleAuditFullscreen,enterAuditFullscreen,exitAuditFullscreen,toggleAuditBulkMode,setAuditBulkQty,stepAuditBulkQty,onAuditBulkQtyInput,setAuditFilter,setAuditScanStep,onAuditSearch,handleAuditBarcodeInput,handleAuditScannedBarcode,undoAuditRecentScan,startAuditCameraScan,updateAuditCount,stepAuditCount,resetAuditProductToSystem,setAllAuditToSystem,setAllAuditToZero,openDiscrepancyReportModal,printDiscrepancyReport,applyStockAuditAdjustments,exportStockAuditExcel,exportStockAuditCSV,renderPhysicalAuditPage,
+  deleteProduct,toggleLowStockAdvanced,getStaffName,setStaffName,saleStaffName,saveStaffFromSettings,selectAppFont,getAppFontStack,onEventPeriodChange,setEventLengthDays,openStockAuditModal,toggleAuditFullscreen,enterAuditFullscreen,exitAuditFullscreen,toggleAuditBulkMode,setAuditBulkQty,stepAuditBulkQty,onAuditBulkQtyInput,setAuditFilter,setAuditScanStep,onAuditSearch,handleAuditBarcodeInput,handleAuditScannedBarcode,undoAuditRecentScan,startAuditCameraScan,updateAuditCount,stepAuditCount,resetAuditProductToSystem,setAllAuditToSystem,setAllAuditToZero,openDiscrepancyReportModal,printDiscrepancyReport,applyStockAuditAdjustments,exportStockAuditExcel,exportStockAuditCSV,renderPhysicalAuditPage,
   setAuditSubTab,setAuditHistoryFilterStatus,onAuditHistorySearchInput,openAuditBatchDetailModal,switchAuditDetailModalTab,exportAuditBatchHistoryExcel,exportAuditBatchHistoryPDF,renderAuditBatchHistoryTab,
   initDashboardAllFilter,getDashboardAllDateRange,setDashboardAllPeriod,onDashboardAllDateInputChange,applyDashboardAllCustomDate,getDashboardAllFilteredSales,setAllDaysChartMetric,mountAllDaysSalesChart,renderAllDaysSalesChart,
   initSalesHistoryFilter,getFilteredSalesHistory,getSalesHistoryKPIs,setSalesHistoryPeriod,
@@ -21869,6 +21896,7 @@ function render(){
   else if(state.page==="report")renderReport();
   else if(state.page==="hub" && typeof window.renderHub==="function")window.renderHub();
   else if(state.page==="cashbox" && typeof window.renderCashbox==="function")window.renderCashbox();
+  else if(state.page==="qrStations" && typeof window.renderQrStations==="function")window.renderQrStations();
   else renderSettings();
 }
 loadAll();

@@ -644,7 +644,7 @@
         <thead><tr><th>เครื่อง</th><th class="r">บิล</th><th class="r">ยอดขาย</th><th class="r">เงินสด</th><th class="r">โอน/QR</th><th class="r">รับเงินแล้ว</th><th class="r">ส่วนต่าง</th></tr></thead>
         <tbody>${d.devices.map(x => {
           const diff = x.received - x.cash;
-          return `<tr><td class="b">${escapeHtml(x.code)}</td><td class="r">${x.bills}</td><td class="r">${money(x.total)}</td><td class="r">${money(x.cash)}</td><td class="r">${money(x.qr)}</td><td class="r">${money(x.received)}</td>
+          return `<tr><td class="b">${escapeHtml(x.code)}${x.staffSet && x.staffSet.size ? `<br><small>${escapeHtml([...x.staffSet].join(', '))}</small>` : ''}</td><td class="r">${x.bills}</td><td class="r">${money(x.total)}</td><td class="r">${money(x.cash)}</td><td class="r">${money(x.qr)}</td><td class="r">${money(x.received)}</td>
             <td class="r ${Math.abs(diff) < 0.01 ? 'ok' : diff < 0 ? 'bad' : 'warn'}">${Math.abs(diff) < 0.01 ? 'ครบ' : (diff < 0 ? 'ค้าง ' : 'เกิน ') + money(Math.abs(diff))}</td></tr>`;
         }).join('')}
           <tr class="tot"><td>รวม</td><td class="r">${d.bills}</td><td class="r">${money(d.total)}</td><td class="r">${money(d.cashTotal)}</td><td class="r">${money(d.qrTotal)}</td><td class="r">${money(d.received)}</td>
@@ -691,7 +691,7 @@
     t += `\n— แยกเครื่อง —\n`;
     d.devices.forEach(x => {
       const diff = x.received - x.cash;
-      t += `${x.code}: ${x.bills} บิล ฿${money(x.total)} (สด ${money(x.cash)} / QR ${money(x.qr)}) รับเงินแล้ว ${money(x.received)}${Math.abs(diff) < 0.01 ? ' ✓ครบ' : diff < 0 ? ` ❗ค้าง ${money(-diff)}` : ` เกิน ${money(diff)}`}\n`;
+      t += `${x.code}${x.staffSet && x.staffSet.size ? ` (${[...x.staffSet].join(', ')})` : ''}: ${x.bills} บิล ฿${money(x.total)} (สด ${money(x.cash)} / QR ${money(x.qr)}) รับเงินแล้ว ${money(x.received)}${Math.abs(diff) < 0.01 ? ' ✓ครบ' : diff < 0 ? ` ❗ค้าง ${money(-diff)}` : ` เกิน ${money(diff)}`}\n`;
     });
     t += `\nเงินสดนำส่ง ฿${money(d.cashTotal)}${Math.abs(outstanding) < 0.01 ? ' (รับครบแล้ว)' : outstanding > 0 ? ` (ยังค้างรับจากเครื่อง ฿${money(outstanding)})` : ` (รับเกิน ฿${money(-outstanding)})`}`;
     if (d.pending) t += `\n⚠️ มี ${d.pending} บิลยังไม่ซิงค์`;
@@ -706,8 +706,131 @@
     return lsGet(K.stations, 'เครื่อง A,เครื่อง B,เครื่อง C')
       .split(',').map(x => x.trim().slice(0, 20)).filter(Boolean).slice(0, 12);
   }
-  function stationUrl(name) {
-    return `${location.origin}${location.pathname}?cashier=${encodeURIComponent(name)}`;
+  function stationUrl(name, staff) {
+    return `${location.origin}${location.pathname}?cashier=${encodeURIComponent(name)}${staff ? `&staff=${encodeURIComponent(staff)}` : ''}`;
+  }
+
+  // =========================================================
+  // หน้า "QR จุดขาย" : จุดขาย + ชื่อเจ้าหน้าที่ประจำวัน → สแกนด้วยมือถือของตัวเองได้เลย
+  // =========================================================
+  const QR_KEY = 'ea_qr_stations';
+  const QR_DATE_KEY = 'ea_qr_stations_date';
+  function qrStations() {
+    let list = null;
+    try { list = JSON.parse(lsGet(QR_KEY, 'null')); } catch (_) {}
+    if (!Array.isArray(list) || !list.length) list = ['POS-02', 'POS-03', 'POS-04'].map(code => ({ code, name: '' }));
+    return list.map(x => ({ code: String(x.code || '').trim().slice(0, 20), name: String(x.name || '').trim().slice(0, 30) })).filter(x => x.code);
+  }
+  function saveQrStations(list) { lsSet(QR_KEY, JSON.stringify(list)); lsSet(QR_DATE_KEY, todayStr()); }
+  function todayStr() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+  function rerenderQr(focusId) {
+    const pos = document.getElementById(focusId)?.selectionStart;
+    renderQrStations();
+    const n = focusId && document.getElementById(focusId);
+    if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (_) {} }
+  }
+  let qrTimer = null;
+  function qrStationEdit(i, field, value) {
+    const list = qrStations();
+    if (!list[i]) return;
+    list[i][field] = String(value || '').replace(/[,&?#]/g, ' ').slice(0, field === 'code' ? 20 : 30);
+    saveQrStations(list);
+    clearTimeout(qrTimer);
+    qrTimer = setTimeout(() => rerenderQr(`qrs-${field}-${i}`), 400);  // อัปเดต QR หลังพิมพ์เสร็จ
+  }
+  function qrStationAdd() {
+    const list = qrStations();
+    const nums = list.map(x => Number((/(\d+)$/.exec(x.code) || [])[1]) || 0);
+    list.push({ code: `POS-${String(Math.max(1, ...nums) + 1).padStart(2, '0')}`, name: '' });
+    saveQrStations(list.slice(0, 12)); renderQrStations();
+  }
+  function qrStationRemove(i) {
+    const list = qrStations(); list.splice(i, 1);
+    saveQrStations(list.length ? list : [{ code: 'POS-02', name: '' }]); renderQrStations();
+  }
+  function qrStationsClearNames() {
+    if (!window.confirm('ล้างชื่อเจ้าหน้าที่ทุกจุด (เริ่มวันใหม่)?')) return;
+    saveQrStations(qrStations().map(x => ({ ...x, name: '' }))); renderQrStations();
+  }
+  function qrStationsFullscreen(on) {
+    document.body.classList.toggle('qr-fs', !!on);
+    const de = document.documentElement;
+    try {
+      if (on && !document.fullscreenElement) de.requestFullscreen?.()?.catch?.(() => {});
+      if (!on && document.fullscreenElement) document.exitFullscreen?.()?.catch?.(() => {});
+    } catch (_) {}
+  }
+  function renderQrStations() {
+    if (typeof setHeader === 'function') setHeader('QR จุดขาย', 'เจ้าหน้าที่สแกนด้วยมือถือของตัวเอง → เข้าหน้าคิดเงินของจุดนั้นทันที');
+    const list = qrStations();
+    const local = /^(localhost|127\.|192\.168\.|10\.)/.test(location.hostname);
+    const stale = lsGet(QR_DATE_KEY, '') && lsGet(QR_DATE_KEY, '') !== todayStr() && list.some(x => x.name);
+    const content = document.getElementById('content');
+    if (!content) return;
+    content.innerHTML = `
+      <div class="qrs-page">
+        <div class="qrs-editor">
+          <div class="qrs-editor-head">
+            <h3>จุดขาย & เจ้าหน้าที่วันนี้</h3>
+            <div class="qrs-actions">
+              <button type="button" class="qrs-btn" onclick="qrStationsClearNames()">ล้างชื่อ (วันใหม่)</button>
+              <button type="button" class="qrs-btn" onclick="qrStationsPrint()">🖨️ พิมพ์</button>
+            </div>
+          </div>
+          ${stale ? '<div class="qrs-warn">ชื่อเจ้าหน้าที่เป็นของวันก่อน • แก้ชื่อให้ตรงคนที่มาวันนี้</div>' : ''}
+          ${local ? '<div class="qrs-warn">ตอนนี้เปิดแอปจากที่อยู่ในเครื่อง (' + escapeHtml(location.host) + ') มือถือคนอื่นจะเปิดลิงก์ใน QR ไม่ได้ • ให้เปิดหน้านี้จากเว็บจริงของร้าน (ที่ deploy ไว้) แล้ว QR จะใช้ได้</div>' : ''}
+          <div class="qrs-rows">
+            ${list.map((x, i) => `
+              <div class="qrs-row">
+                <span class="qrs-no">QR${i + 1}</span>
+                <input id="qrs-code-${i}" class="qrs-in qrs-code" value="${escapeHtml(x.code)}" placeholder="POS-02" oninput="qrStationEdit(${i},'code',this.value)" aria-label="ชื่อจุดขาย">
+                <input id="qrs-name-${i}" class="qrs-in" value="${escapeHtml(x.name)}" placeholder="ชื่อเจ้าหน้าที่ (ไม่ใส่ก็ได้)" oninput="qrStationEdit(${i},'name',this.value)" aria-label="ชื่อเจ้าหน้าที่">
+                <button type="button" class="qrs-del" onclick="qrStationRemove(${i})" aria-label="ลบ">✕</button>
+              </div>`).join('')}
+          </div>
+          <button type="button" class="qrs-btn" onclick="qrStationAdd()">＋ เพิ่มจุดขาย</button>
+        </div>
+
+        <div class="qrs-tip">แตะที่ QR เพื่อขยายใหญ่ให้เจ้าหน้าที่สแกนได้ง่าย</div>
+        <div class="qrs-grid">
+          ${list.map((x, i) => `
+            <button type="button" class="qrs-card" onclick="qrStationZoom(${i})" aria-label="ขยาย QR ${escapeHtml(x.code)}">
+              <div class="qrs-card-no">QR${i + 1}</div>
+              <div class="qrs-qr">${qrSvg(stationUrl(x.code, x.name), 6)}</div>
+              <div class="qrs-code-big">${escapeHtml(x.code)}</div>
+              <div class="qrs-name-big ${x.name ? '' : 'is-empty'}">${x.name ? escapeHtml(x.name) : 'ยังไม่ระบุชื่อ'}</div>
+            </button>`).join('')}
+        </div>
+      </div>`;
+  }
+  // แตะ QR → ป๊อปอัปใหญ่เกือบเต็มจอ (แตะที่ไหนก็ได้เพื่อปิด / ปุ่มเลื่อนไปจุดถัดไป)
+  function qrStationZoom(i) {
+    const list = qrStations();
+    if (!list.length) return;
+    i = ((i % list.length) + list.length) % list.length;
+    const x = list[i];
+    let dlg = document.getElementById('qrZoomDialog');
+    if (!dlg) {
+      dlg = document.createElement('dialog');
+      dlg.id = 'qrZoomDialog';
+      dlg.className = 'qrz-dialog';
+      document.body.appendChild(dlg);
+      dlg.addEventListener('click', e => { if (!e.target.closest('.qrz-nav')) dlg.close(); });
+    }
+    dlg.innerHTML = `
+      <div class="qrz-head"><span>QR${i + 1}</span><strong>${escapeHtml(x.code)}</strong>${x.name ? `<em>${escapeHtml(x.name)}</em>` : ''}</div>
+      <div class="qrz-qr">${qrSvg(stationUrl(x.code, x.name), 10)}</div>
+      <div class="qrz-foot">สแกนด้วยกล้องมือถือ เพื่อเริ่มคิดเงิน • แตะที่ว่างเพื่อปิด</div>
+      ${list.length > 1 ? `
+        <button type="button" class="qrz-nav prev" onclick="qrStationZoom(${i - 1})" aria-label="ก่อนหน้า">‹</button>
+        <button type="button" class="qrz-nav next" onclick="qrStationZoom(${i + 1})" aria-label="ถัดไป">›</button>` : ''}`;
+    if (!dlg.open) dlg.showModal();
+  }
+  function qrStationsPrint() {
+    printHtml('QR จุดขาย', `
+      <h1>QR จุดขาย – ${escapeHtml(shopName())}</h1>
+      <div class="sub">${escapeHtml(dateTh())} • สแกนด้วยกล้องมือถือ → เข้าหน้าคิดเงินของจุดนั้นทันที</div>
+      <div class="qrs">${qrStations().map((x, i) => `<div class="qrc">${qrSvg(stationUrl(x.code, x.name), 8)}<h3>QR${i + 1} = ${escapeHtml(x.code)}</h3><div style="font-size:15pt;font-weight:800">${x.name ? escapeHtml(x.name) : '&nbsp;'}</div></div>`).join('')}</div>`, { fit: false });
   }
   function qrSvg(text, cell) {
     if (typeof window.qrcode !== 'function') return '<div class="hub-empty">โหลดตัวสร้าง QR ไม่สำเร็จ</div>';
@@ -740,7 +863,7 @@
         <div class="hub-actions"><button type="button" class="hub-btn" onclick="printStationQr()">🖨️ พิมพ์ QR ไปติดที่จุดขาย</button></div>
       </div>`;
   }
-  function toggleHubQr() { showQr = !showQr; window.renderHub?.(); }
+  function toggleHubQr() { if (typeof go === 'function') go('qrStations'); }
   function hubSetStations(v) {
     const list = String(v || '').split(',').map(x => x.trim().slice(0, 20)).filter(Boolean);
     lsSet(K.stations, (list.length ? list : ['เครื่อง A']).join(','));
@@ -810,6 +933,14 @@
     copyCashSummaryText,
     hubCashSummaryText: cashSummaryText,
     toggleHubQr,
+    renderQrStations,
+    qrStationEdit,
+    qrStationAdd,
+    qrStationRemove,
+    qrStationsClearNames,
+    qrStationsFullscreen,
+    qrStationZoom,
+    qrStationsPrint,
     hubSetStations,
     printStationQr,
     hubDailyReportText: dailyReportText,

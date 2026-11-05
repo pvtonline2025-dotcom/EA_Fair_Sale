@@ -1257,7 +1257,7 @@
     let fullSession = false;
     try { fullSession = sessionStorage.getItem(FULL_SESSION_KEY) === '1'; } catch (e) {}
     applySendVisibility();
-    if (fromQr || (autoOpenEnabled() && !fullSession)) {
+    if (!window.__eaCountMode && (fromQr || (autoOpenEnabled() && !fullSession))) {
       document.documentElement.classList.add('ps-booting');
       const started = Date.now();
       const wait = setInterval(() => {

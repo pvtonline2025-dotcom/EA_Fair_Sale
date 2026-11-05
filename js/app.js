@@ -13413,11 +13413,15 @@ function initPhysicalAuditState(force = false){
   if(!state.auditCounts || force){
     state.auditCounts = {};
     state.auditTouched = {};
+    state.auditSysSeen = {};
+    state.auditSoldDuring = {};
     (state.products || []).forEach(p => {
       state.auditCounts[p.id] = Number(p.stock_qty || 0);
     });
   }
   if(!state.auditTouched || typeof state.auditTouched !== "object") state.auditTouched = {};
+  syncAuditWithLiveStock();
+  if(window.eaMergeRemoteCounts) window.eaMergeRemoteCounts();
   if(!Array.isArray(state.auditSessionScanLogs)) state.auditSessionScanLogs = [];
   if(state.auditBulkMode === undefined) state.auditBulkMode = false;
   if(!state.auditBulkQty) state.auditBulkQty = 10;
@@ -13427,6 +13431,39 @@ function initPhysicalAuditState(force = false){
   if(!Array.isArray(state.auditRecentScans)) state.auditRecentScans = [];
   if(!state.auditNote) state.auditNote = `ตรวจนับสต็อกจริง & กระทบยอดประจำวัน ${todayISO()}`;
 }
+
+// ขายระหว่างตรวจนับ: สต็อกในระบบลดลงหลังจากนับสินค้านั้นแล้ว
+//  - สินค้าที่นับแล้ว → ของออกจากชั้นหลังนับ จึงหักยอดนับตามจำนวนที่ขาย (ผลต่างยังถูกต้อง ไม่เด้งเป็น "ขาด")
+//  - สินค้าที่ยังไม่นับ → ยอดนับตั้งต้นตามระบบล่าสุด (ไม่ไปปรับสต็อกกลับ)
+function syncAuditWithLiveStock(){
+  if(!state.auditCounts) return;
+  if(!state.auditSysSeen || typeof state.auditSysSeen !== "object") state.auditSysSeen = {};
+  if(!state.auditSoldDuring || typeof state.auditSoldDuring !== "object") state.auditSoldDuring = {};
+  (state.products || []).forEach(p => {
+    const now = Number(p.stock_qty || 0);
+    const seen = state.auditSysSeen[p.id];
+    if(seen === undefined){ state.auditSysSeen[p.id] = now; if(!state.auditTouched[p.id]) state.auditCounts[p.id] = now; return; }
+    if(now === seen) return;
+    const delta = now - seen;
+    if(state.auditTouched[p.id]){
+      state.auditCounts[p.id] = Math.max(0, Number(state.auditCounts[p.id] || 0) + delta);
+      state.auditSoldDuring[p.id] = Number(state.auditSoldDuring[p.id] || 0) - delta;
+    } else {
+      state.auditCounts[p.id] = now;
+    }
+    state.auditSysSeen[p.id] = now;
+  });
+}
+// หน้าตรวจนับเปิดอยู่ + มีข้อมูลขายใหม่ → อัปเดตยอดนับทันที (ถ้าไม่ได้พิมพ์อยู่)
+window.addEventListener("ea:data-refreshed", () => {
+  if(state.page !== "audit" || !state.auditCounts) return;
+  const a = document.activeElement;
+  const scanBox = a && a.id === "auditBarcodeInput" && !a.value;
+  if(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && !scanBox) { syncAuditWithLiveStock(); return; }
+  rerenderAuditView();
+  if(scanBox) setTimeout(() => el("auditBarcodeInput")?.focus(), 0);
+});
+function markAuditSysSeen(p){ if(p){ if(!state.auditSysSeen) state.auditSysSeen = {}; state.auditSysSeen[p.id] = Number(p.stock_qty || 0); } }
 
 // ปุ่ม "ตรวจนับสต็อก" จากหน้าสต็อก: เปิดหน้าตรวจนับเต็มจอ (แทนหน้าต่างป๊อปอัปเล็กเดิม)
 function openStockAuditModal(){
@@ -13803,6 +13840,7 @@ function renderPhysicalAuditPage(){
       </div>
 
       <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        ${window.eaShowCountQr ? `<button type="button" class="btn btn-light" style="padding:6px 12px; font-size:12px; font-weight:800;" onclick="eaShowCountQr()" title="ให้มือถือสแกนแล้วช่วยนับ ยอดส่งเข้าหน้านี้ทันที">📱 มือถือช่วยนับ ${window.eaRemoteCountBadge ? window.eaRemoteCountBadge() : ''}</button>` : ''}
         <button type="button" class="btn ${state.auditFullscreen ? 'btn-primary' : 'btn-light'} audit-fs-btn" style="padding:6px 12px; font-size:12px; font-weight:800;" onclick="toggleAuditFullscreen()" title="${state.auditFullscreen ? 'ออกจากโหมดเต็มหน้า' : 'เปิดหน้าตรวจนับแบบเต็มหน้าจอ'}">
           ${state.auditFullscreen ? '✖️ ออกจากเต็มจอ' : '⛶ เต็มจอ'}
         </button>
@@ -14042,6 +14080,8 @@ function renderPhysicalAuditPage(){
                   <td><code style="color:#94a3b8; font-size:12px;">${escapeHtml(p.product_code || "-")}</code></td>
                   <td>
                     <div style="font-weight:700; color:#f1f5f9; font-size:13.5px;">${escapeHtml(p.product_name)}</div>
+                    ${window.eaAuditRemoteLine ? window.eaAuditRemoteLine(p) : ''}
+                    ${state.auditTouched[p.id] && Number(state.auditSoldDuring?.[p.id] || 0) ? `<div class="audit-sold-during">🛒 ${Number(state.auditSoldDuring[p.id]) > 0 ? `ขายระหว่างนับ ${Number(state.auditSoldDuring[p.id])}` : `รับเข้าระหว่างนับ ${-Number(state.auditSoldDuring[p.id])}`} ${escapeHtml(p.unit || 'ชิ้น')} • ปรับยอดนับให้แล้ว</div>` : ''}
                     <div style="font-size:11px; color:#64748b; font-family:monospace; margin-top:2px;">
                       🏷️ ${escapeHtml(p.barcode || "-")} • ${escapeHtml(p.category || "ทั่วไป")}
                     </div>
@@ -14542,6 +14582,8 @@ function printDiscrepancyReport(){
 }
 
 async function applyStockAuditAdjustments(){
+  // ดึงสต็อกล่าสุดก่อน (เผื่อมีขายจากเครื่องอื่นระหว่างนับ)
+  try { if(window.eaQuietRefresh) await Promise.race([window.eaQuietRefresh(), new Promise(r => setTimeout(r, 5000))]); } catch(e) {}
   initPhysicalAuditState(false);
   const counts = state.auditCounts || {};
   const noteInput = el("auditNoteInput");
@@ -14550,6 +14592,7 @@ async function applyStockAuditAdjustments(){
 
   const adjustments = [];
   (state.products || []).forEach(p => {
+    if(!state.auditTouched[p.id]) return;          // ยังไม่ได้นับ → ไม่ปรับ
     const sysQty = Number(p.stock_qty || 0);
     const newQty = Number(counts[p.id] !== undefined ? counts[p.id] : sysQty);
     if(sysQty !== newQty){
@@ -14563,7 +14606,9 @@ async function applyStockAuditAdjustments(){
   }
 
   const untouchedCount = (state.products || []).filter(p => !state.auditTouched[p.id]).length;
+  const soldDuringN = Object.entries(state.auditSoldDuring || {}).filter(([id, n]) => n && state.auditTouched[id]).length;
   const confirmMsg = `ยืนยันปรับสต็อกตามยอดนับจริง ${adjustments.length} รายการ?` +
+    (soldDuringN ? `\n\n(มีขายระหว่างนับ ${soldDuringN} รายการ — หักออกจากยอดนับให้แล้ว)` : "") +
     (untouchedCount > 0 ? `\n\n(สินค้าที่ยังไม่ได้นับ ${untouchedCount} รายการ จะคงยอดตามระบบ)` : "");
   if(!window.confirm(confirmMsg)) return;
 
@@ -14611,6 +14656,7 @@ async function applyStockAuditAdjustments(){
     }
 
     p.stock_qty = adj.newQty;
+    markAuditSysSeen(p);
     state.movements.unshift({
       id: "audit-move-" + Date.now() + "-" + Math.random().toString(36).substring(2,6),
       product_id: p.id,
@@ -14688,7 +14734,7 @@ async function applyStockAuditAdjustments(){
   state.auditRecentScans = [];
   state.auditLastScanned = null;
   (state.products || []).forEach(p => {
-    if(!failedIds.has(p.id)){ state.auditCounts[p.id] = Number(p.stock_qty || 0); delete state.auditTouched[p.id]; }
+    if(!failedIds.has(p.id)){ state.auditCounts[p.id] = Number(p.stock_qty || 0); delete state.auditTouched[p.id]; markAuditSysSeen(p); if(state.auditSoldDuring) delete state.auditSoldDuring[p.id]; }
   });
 
   saveLocalState();
@@ -20070,11 +20116,13 @@ function printA4DailyReport() {
       <head>
         <meta charset="utf-8">
         <title>รายงานสรุปยอดขายประจำวัน - ${targetDate}</title>
-        <link rel="stylesheet" href="/css/app.css">
+        ${a4PrintStyleLinks()}
         <style>
           @page { size: A4 portrait; margin: 10mm; }
           body { background: #ffffff !important; color: #0f172a !important; margin: 0; padding: 12px; font-family: 'Prompt', 'Sarabun', sans-serif; }
           .a4-paper-sheet { box-shadow: none !important; max-width: 100% !important; padding: 0 !important; width: 100% !important; }
+          /* app.css ซ่อนทุกอย่างตอนพิมพ์ (ใช้กับหน้าแอป) → หน้าพิมพ์แยกนี้ต้องแสดงทั้งหมด */
+          @media print { body * { visibility: visible !important; } }
         </style>
       </head>
       <body>
@@ -20097,6 +20145,17 @@ function printA4DailyReport() {
     console.warn("Frame creation error, falling back to window.print():", err);
     fallbackWindowPrint();
   }
+}
+
+// สไตล์ของแอปสำหรับหน้าพิมพ์แยก: ฝังเป็น <style> (ไม่ต้องโหลดไฟล์ใหม่ • ใช้ได้ทั้งตอนรันไฟล์ต้นฉบับและตอน build)
+function a4PrintStyleLinks(){
+  let css = '';
+  const links = [];
+  for(const sh of [...document.styleSheets]){
+    try{ css += [...sh.cssRules].map(r => r.cssText).join('\n') + '\n'; }
+    catch(e){ if(sh.href) links.push(sh.href); }
+  }
+  return links.map(h => `<link rel="stylesheet" href="${h}">`).join('') + (css ? `<style>${css.replace(/<\/style/gi, '<\\/style')}</style>` : '');
 }
 
 function fallbackWindowPrint() {
@@ -20129,7 +20188,7 @@ function openA4PrintWindow() {
     <head>
       <meta charset="utf-8">
       <title>รายงานสรุปยอดขายประจำวัน - ${targetDate}</title>
-      <link rel="stylesheet" href="/css/app.css">
+      ${a4PrintStyleLinks()}
       <style>
         @page { size: A4 portrait; margin: 10mm; }
         body { background: #f8fafc; color: #0f172a; padding: 24px; font-family: 'Prompt', 'Sarabun', sans-serif; display: flex; flex-direction: column; align-items: center; }
@@ -20138,7 +20197,8 @@ function openA4PrintWindow() {
         .btn-print-now { background: #0284c7; color: #ffffff; border: none; padding: 8px 18px; font-size: 14px; font-weight: 800; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
         .btn-print-now:hover { background: #0369a1; }
         @media print {
-          body { background: #ffffff !important; padding: 0 !important; }
+          body { background: #ffffff !important; padding: 0 !important; display: block !important; }
+          body * { visibility: visible !important; }
           .no-print-bar { display: none !important; }
           .a4-paper-sheet { box-shadow: none !important; }
         }
@@ -20166,6 +20226,16 @@ function openA4PrintWindow() {
   }, 400);
 }
 
+// วันที่แบบไทย วัน/เดือน/ปี พ.ศ. เช่น 05/11/2569
+function a4ThaiDate(iso){
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
+  return m ? `${m[3]}/${m[2]}/${Number(m[1]) + 543}` : String(iso || "-");
+}
+function a4ThaiDateTime(d){
+  const p = n => String(n).padStart(2, "0");
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear() + 543} ${p(d.getHours())}:${p(d.getMinutes())} น.`;
+}
+
 function buildA4DailyReportHTML(targetDate, daySales, daySaleItems) {
   const shopName = state.settings.shopName || "EA Fair Sale";
   const dayOfWeek = getThaiDayOfWeek(targetDate);
@@ -20189,15 +20259,23 @@ function buildA4DailyReportHTML(targetDate, daySales, daySaleItems) {
     const origP = Number(i.original_price) || Number(i.unit_price) || 0;
     const unitP = Number(i.unit_price) || 0;
     const prodId = i.product_id || i.product_name || "item";
-    const key = `${prodId}_u${unitP}_o${origP}`;
+    const pnote = String(i.price_note || "").trim();
+    const key = `${prodId}_u${unitP}_o${origP}_n${pnote}`;
+    let w = i.weights;
+    if (typeof w === "string") { try { w = JSON.parse(w); } catch (e) { w = null; } }
     const lineTot = Number(i.line_total) || (unitP * qty);
     const lineDisc = (origP > unitP) ? (origP - unitP) * qty : 0;
 
     totalItemDiscounts += lineDisc;
 
     if (!productSummaryMap[key]) {
+      const prod = (state.products || []).find(p => p.id === i.product_id);
       productSummaryMap[key] = {
-        name: i.product_name || "ไม่ระบุชื่อสินค้า",
+        productId: i.product_id || "",
+        code: prod?.product_code || "",
+        name: i.product_name || prod?.product_name || "ไม่ระบุชื่อสินค้า",
+        priceNote: pnote,
+        weights: [],
         unitPrice: unitP,
         originalPrice: origP,
         unit: i.unit || "ชิ้น",
@@ -20208,11 +20286,29 @@ function buildA4DailyReportHTML(targetDate, daySales, daySaleItems) {
     }
 
     productSummaryMap[key].qty += qty;
+    if (Array.isArray(w)) productSummaryMap[key].weights.push(...w.map(Number).filter(x => x > 0));
     productSummaryMap[key].discount += lineDisc;
     productSummaryMap[key].total += lineTot;
   });
 
-  const productSummaryList = Object.values(productSummaryMap);
+  // เรียงแบบเอกสารยอดขายรายวัน: ตามรหัสสินค้า (ลำดับในคลัง) → ราคาปกติก่อน → ราคาพิเศษ/โปร → ของแถมท้ายสุด
+  const a4Rank = p => (p.unitPrice === 0 ? 2 : (p.priceNote || p.originalPrice > p.unitPrice) ? 1 : 0);
+  const productSummaryList = Object.values(productSummaryMap).sort((a, b) =>
+    String(a.code || "\uffff").localeCompare(String(b.code || "\uffff"), "th", { numeric: true }) ||
+    a.name.localeCompare(b.name, "th", { numeric: true }) || a4Rank(a) - a4Rank(b) || b.unitPrice - a.unitPrice);
+  // หมายเหตุ: ราคาพิเศษ / ของแถม / น้ำหนัก (สำหรับลงเบิกคลังเป็น กก.)
+  const a4Note = p => {
+    const parts = [];
+    if (p.priceNote) parts.push(`<span class="a4-note-promo">** ${escapeHtml(p.priceNote)} **</span>`);
+    else if (p.unitPrice === 0) parts.push(`<span class="a4-note-promo">** แถม **</span>`);
+    else if (p.originalPrice > p.unitPrice) parts.push(`<span class="a4-note-promo">ลดจาก ${money(p.originalPrice)}</span>`);
+    if (p.weights.length) {
+      const sumW = p.weights.reduce((a, x) => a + x, 0);
+      parts.push(`<span class="a4-note-w">${p.weights.map(x => Number(x).toLocaleString("th-TH", { maximumFractionDigits: 3 })).join(", ")} <b>(รวม ${sumW.toLocaleString("th-TH", { maximumFractionDigits: 3 })} กก.)</b></span>`);
+    }
+    return parts.join("<br>");
+  };
+  const a4LineSum = productSummaryList.reduce((a, p) => a + p.total, 0);
   const billDiscounts = daySales.reduce((s, x) => s + (Number(x.discount_amount) || 0), 0);
   const totalDiscounts = totalItemDiscounts + billDiscounts;
   const grossTotal = totalRevenue + totalDiscounts;
@@ -20255,76 +20351,36 @@ function buildA4DailyReportHTML(targetDate, daySales, daySaleItems) {
           <h2 class="a4-doc-title">📋 รายงานสรุปยอดขายประจำวัน (A4 DAILY SALES REPORT)</h2>
         </div>
         <div class="a4-doc-meta">
-          <div><b>วันที่ขาย:</b> ${escapeHtml(targetDate)} (${escapeHtml(dayOfWeek)})</div>
-          <div><b>จุดขาย (POS):</b> ${escapeHtml(state.terminal || 'POS-01')}</div>
-          <div><b>วันที่พิมพ์:</b> ${nowStr}</div>
+          <div><b>วันที่ขาย:</b> ${escapeHtml(a4ThaiDate(targetDate))} (${escapeHtml(dayOfWeek)})</div>
+          <div><b>จุดขาย:</b> ${escapeHtml(state.settings?.shopBranch || state.settings?.shopAddress || state.terminal || '-')}</div>
+          <div><b>วันที่พิมพ์:</b> ${escapeHtml(a4ThaiDateTime(new Date()))}</div>
         </div>
       </div>
 
-      <!-- Executive KPI Summary Bar -->
-      <div class="a4-kpi-bar">
-        <div class="a4-kpi-item">
-          <span class="a4-kpi-lbl">💰 ยอดขายสุทธิรวม</span>
-          <span class="a4-kpi-val green">฿${money(totalRevenue)}</span>
-        </div>
-        <div class="a4-kpi-item">
-          <span class="a4-kpi-lbl">🧾 จำนวนบิลรวม</span>
-          <span class="a4-kpi-val">${totalBills} บิล</span>
-        </div>
-        <div class="a4-kpi-item">
-          <span class="a4-kpi-lbl">📦 สินค้าที่ขายได้</span>
-          <span class="a4-kpi-val">${totalUnits} ชิ้น</span>
-        </div>
-        <div class="a4-kpi-item">
-          <span class="a4-kpi-lbl">🏷️ รวมส่วนลดทั้งสิ้น</span>
-          <span class="a4-kpi-val amber">฿${money(totalDiscounts)}</span>
-        </div>
-        <div class="a4-kpi-item">
-          <span class="a4-kpi-lbl">💵 ยอดเงินสด</span>
-          <span class="a4-kpi-val">฿${money(cashTotal)}</span>
-        </div>
-        <div class="a4-kpi-item">
-          <span class="a4-kpi-lbl">📱 ยอด QR Code</span>
-          <span class="a4-kpi-val">฿${money(qrTotal)}</span>
-        </div>
-      </div>
-
-      <!-- Section 1: Aggregated Product Sales for the Day (MAIN TABLE - NO BILL SEPARATION) -->
-      <div class="a4-section-title">
-        <span>📦 สรุปรายการสินค้าที่ขายได้ประจำวัน (${productSummaryList.length} รายการสินค้า)</span>
-        <span style="font-size: 8.5pt; font-weight: normal; color: #1e293b;">แยกรายการตามราคาขายสุทธิเพื่อความชัดเจน</span>
-      </div>
+      <!-- (ตัดกล่องสรุปยอด/เงินสดออก: เคลียร์เงินที่หน้า "กล่องเงิน" / "สรุปเงินสด") -->
       <div class="a4-table-responsive">
         <table class="a4-table">
           <thead>
             <tr>
-              <th style="width:35px;" class="th-center">#</th>
-              <th>ชื่อสินค้า</th>
-              <th style="width:120px;" class="th-right">ราคาขาย/หน่วย</th>
-              <th style="width:80px;" class="th-center">จำนวนรวม</th>
-              <th style="width:60px;" class="th-center">หน่วย</th>
-              <th style="width:110px;" class="th-right">มูลค่าส่วนลด</th>
-              <th style="width:120px;" class="th-right">ราคารวมสุทธิ</th>
+              <th style="width:30px;" class="th-center">#</th>
+              <th>สินค้า</th>
+              <th style="width:78px;" class="th-right">ราคา</th>
+              <th style="width:58px;" class="th-center">จำนวน</th>
+              <th style="width:50px;" class="th-center">หน่วย</th>
+              <th style="width:92px;" class="th-right">ผลรวม</th>
+              <th style="min-width:110px;">หมายเหตุ</th>
             </tr>
           </thead>
           <tbody>
             ${productSummaryList.length > 0 ? productSummaryList.map((p, idx) => `
               <tr>
                 <td class="td-center" style="color:#0f172a; font-weight:800;">${idx + 1}</td>
-                <td>
-                  <b style="color:#0f172a; font-size:10pt;">${escapeHtml(p.name)}</b>
-                  ${p.originalPrice > p.unitPrice ? `<span style="font-size:8pt; color:#92400e; font-weight:bold; background:#fef3c7; padding:1px 6px; border-radius:4px; margin-left:6px; border:1px solid #fcd34d;">[ราคาพิเศษ / ลดราคา]</span>` : ''}
-                </td>
-                <td class="td-right">
-                  ${p.originalPrice > p.unitPrice ? `<small style="text-decoration:line-through; color:#64748b; font-size:8pt; margin-right:4px;">฿${money(p.originalPrice)}</small>` : ''}
-                  <b style="${p.originalPrice > p.unitPrice ? 'color:#b45309;' : 'color:#000000;'}">฿${money(p.unitPrice)}</b>
-                </td>
-                <td class="td-center" style="font-weight:800; color:#000000; font-size:10.5pt;">${p.qty}</td>
+                <td class="a4-pname">${escapeHtml(p.name)}</td>
+                <td class="td-right" style="color:#000;">${p.unitPrice === 0 ? '-' : money(p.unitPrice)}</td>
+                <td class="td-center" style="font-weight:800; color:#000000; font-size:10.5pt;">${Number(p.qty).toLocaleString("th-TH", { maximumFractionDigits: 3 })}</td>
                 <td class="td-center" style="color:#0f172a; font-weight:700;">${escapeHtml(p.unit)}</td>
-                <td class="td-right" style="color:${p.discount > 0 ? '#b45309' : '#0f172a'}; font-weight:${p.discount > 0 ? '800' : 'normal'};">
-                  ${p.discount > 0 ? `-฿${money(p.discount)}` : '-'}
-                </td>
-                <td class="td-right" style="font-weight:900; color:#047857; font-size:10.5pt;">฿${money(p.total)}</td>
+                <td class="td-right" style="font-weight:900; color:#000; font-size:10.5pt;">${money(p.total)}</td>
+                <td class="a4-note">${a4Note(p)}</td>
               </tr>
             `).join('') : `
               <tr><td colspan="7" class="td-center" style="color:#0f172a; font-weight:bold; padding:16px;">ไม่มีข้อมูลสินค้าที่ขายออกในวันที่ ${escapeHtml(targetDate)}</td></tr>
@@ -20333,46 +20389,17 @@ function buildA4DailyReportHTML(targetDate, daySales, daySaleItems) {
           ${productSummaryList.length > 0 ? `
             <tfoot>
               <tr>
-                <td colspan="3" class="td-center" style="color:#000000; font-weight:800;">รวมยอดสินค้าทั้งสิ้น (${productSummaryList.length} รายการ)</td>
-                <td class="td-center" style="font-weight:900; color:#000000; font-size:11pt;">${totalUnits}</td>
-                <td class="td-center" style="color:#000000;">-</td>
-                <td class="td-right" style="color:#b45309; font-weight:900; font-size:10pt;">${totalItemDiscounts > 0 ? `-฿${money(totalItemDiscounts)}` : '-'}</td>
-                <td class="td-right" style="color:#047857; font-size:11.5pt; font-weight:900;">฿${money(totalRevenue)}</td>
+                <td colspan="3" class="td-center" style="color:#000000; font-weight:800;">รวมทั้งหมด (${productSummaryList.length} รายการ)</td>
+                <td class="td-center" style="font-weight:900; color:#000000; font-size:11pt;">${Number(totalUnits).toLocaleString("th-TH", { maximumFractionDigits: 3 })}</td>
+                <td></td>
+                <td class="td-right" style="color:#000; font-size:11.5pt; font-weight:900;">${money(a4LineSum)}</td>
+                <td></td>
               </tr>
             </tfoot>
           ` : ''}
         </table>
       </div>
 
-      <!-- Grand Daily Financial Total -->
-      <div class="a4-grand-total-box" style="margin-top:18px;">
-        <div style="font-weight:800; font-size:11pt; color:#0f172a; border-bottom:1px solid #cbd5e1; padding-bottom:6px; margin-bottom:6px;">
-          💵 สรุปยอดเงินรวมสุทธิประจำวัน (DAILY GRAND TOTAL)
-        </div>
-        <div class="a4-grand-total-row">
-          <span>ยอดขายรวมก่อนหักส่วนลด (Gross Total):</span>
-          <span>฿${money(grossTotal)}</span>
-        </div>
-        ${totalItemDiscounts > 0 ? `
-          <div class="a4-grand-total-row" style="color:#d97706;">
-            <span>หัก ส่วนลดสินค้าพิเศษเฉพาะบุคคล:</span>
-            <span>-฿${money(totalItemDiscounts)}</span>
-          </div>
-        ` : ''}
-        ${billDiscounts > 0 ? `
-          <div class="a4-grand-total-row" style="color:#d97706;">
-            <span>หัก ส่วนลดท้ายบิล:</span>
-            <span>-฿${money(billDiscounts)}</span>
-          </div>
-        ` : ''}
-        <div class="a4-grand-total-row highlight">
-          <span>รวมราคาทั้งหมดที่ได้ในวันนั้น (Grand Net Revenue):</span>
-          <span>฿${money(totalRevenue)}</span>
-        </div>
-        <div class="a4-grand-total-row" style="margin-top:6px; font-size:9.5pt;">
-          <span>การชำระเงิน: 💵 เงินสด <b>฿${money(cashTotal)}</b> (${cashSales.length} บิล) &nbsp;|&nbsp; 📱 QR PromptPay <b>฿${money(qrTotal)}</b> (${qrSales.length} บิล)</span>
-        </div>
-      </div>
     </div>
   `;
 }

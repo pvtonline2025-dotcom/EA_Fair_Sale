@@ -176,6 +176,9 @@
       received: a.received + d.received, pending: a.pending + d.pending
     }), { total: 0, bills: 0, cash: 0, qr: 0, received: 0, pending: 0 });
     const outstanding = g.cash - g.received;
+    // ใบจองที่ส่งของวันนี้: มัดจำ + เงินคงค้าง นับเป็นยอดของวันนี้
+    const rm = window.eaReservationMoney?.() || null;
+    const rs = rm ? rm.sales : 0, rc = rm ? rm.todayCash : 0, rq = rm ? rm.todayQr : 0;
     const low = (typeof lowProducts === 'function' ? lowProducts() : [])
       .sort((a, b) => Number(a.stock_qty) - Number(b.stock_qty));
     const outCount = low.filter(p => Number(p.stock_qty) <= 0).length;
@@ -198,11 +201,11 @@
         <div class="hub-kpis">
           <div class="hub-kpi hub-kpi-main">
             <span>ยอดขายรวมวันนี้ (ทุกเครื่อง)</span>
-            <strong>฿${money(g.total)}</strong>
-            <small>${g.bills} บิล · ${devices.filter(d => d.bills).length} เครื่อง</small>
+            <strong>฿${money(g.total + rs)}</strong>
+            <small>${g.bills} บิล · ${devices.filter(d => d.bills).length} เครื่อง${rs ? ` · รวมใบจองส่งของ ฿${money(rs)}` : ''}</small>
           </div>
-          <div class="hub-kpi"><span>💵 เงินสด</span><strong>฿${money(g.cash)}</strong></div>
-          <div class="hub-kpi"><span>📱 โอน / QR</span><strong>฿${money(g.qr)}</strong></div>
+          <div class="hub-kpi"><span>💵 เงินสด</span><strong>฿${money(g.cash + rc)}</strong>${rc ? `<small>ใบจอง ฿${money(rc)}</small>` : ''}</div>
+          <div class="hub-kpi"><span>📱 โอน / QR</span><strong>฿${money(g.qr + rq)}</strong>${rq ? `<small>ใบจอง ฿${money(rq)}</small>` : ''}</div>
           <div class="hub-kpi ${outstanding > 0.009 ? 'is-warn' : 'is-ok'}">
             <span>เงินสดที่ยังไม่ได้รับจากเครื่อง</span>
             <strong>฿${money(Math.max(0, outstanding))}</strong>
@@ -377,6 +380,7 @@
   function hubRefreshNow() {
     toast('กำลังอัปเดต...');
     quietRefresh().then(() => { if (st()?.page === 'hub') renderHub(); });
+    window.addEventListener('ea:reservations-changed', () => { if (st()?.page === 'hub') renderHub(); });
   }
 
   function init() {

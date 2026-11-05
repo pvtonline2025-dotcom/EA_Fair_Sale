@@ -171,3 +171,17 @@ html:not(#_a) body dialog .modal-head .icon-close svg path{ stroke:#fff !importa
 
 /* แถบล่าง 5 ปุ่ม (เพิ่มกล่องเงิน) */
 html:not(#_a) body .bottom-nav{ grid-template-columns:repeat(5, 1fr) !important; }
+
+/* รายงานยอดขายรายวัน A4: ช่องหมายเหตุ */
+.a4-table td.a4-note { font-size: 8.5pt; line-height: 1.45; color: #0f172a; word-break: break-word; }
+.a4-note-promo { color: #e11d48; font-weight: 700; }
+.a4-note-w { color: #0f172a; }
+.a4-note-w b { white-space: nowrap; }
+/* ชื่อสินค้าบรรทัดเดียว (ช่องกว้างตามชื่อที่ยาวที่สุด) */
+html:not(#_a) .a4-table td.a4-pname { white-space: nowrap !important; font-size: 9pt !important; font-weight: 700 !important; }
+html:not(#_a) .a4-table td, html:not(#_a) .a4-table th { padding: 6px 7px !important; }
+html:not(#_a) .a4-table td.a4-note { white-space: normal !important; font-size: 8pt !important; }
+
+/* พื้นที่สำหรับสั่งพิมพ์ ไม่แสดงบนหน้าจอ (ก่อนนี้รายงาน A4 ไปค้างอยู่ท้ายหน้า เลื่อนไม่สุด) */
+@media screen { .a4-print-area { display: none !important; } }
+.audit-sold-during { margin-top: 3px; font-size: 11.5px; font-weight: 700; color: #f59e0b; }

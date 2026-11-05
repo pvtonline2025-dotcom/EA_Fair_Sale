@@ -657,7 +657,8 @@
       units: sum(sold, r => r.qty),
       received,
       pending: sales.filter(s => s.is_pending_sync).length,
-      resvSales: rm ? rm.sales : 0, resvCash: rm ? rm.todayCash : 0, resvQr: rm ? rm.todayQr : 0
+      resvSales: rm ? rm.sales : 0, resvCash: rm ? rm.todayCash : 0, resvQr: rm ? rm.todayQr : 0,
+      resvRows: rm ? resvSaleRows(rm) : []
     };
   }
 
@@ -670,7 +671,7 @@
       <table class="daily">
         <thead><tr><th class="c">วันที่</th><th>สินค้า</th><th class="r">ราคา</th><th class="c">จำนวน</th><th class="c">หน่วย</th><th class="r">ผลรวม</th></tr></thead>
         <tbody>
-          ${d.sold.map((r, i) => `
+          ${[...d.sold, ...d.resvRows].map((r, i) => `
             <tr class="${r.weights.length ? 'has-w' : ''}">
               <td class="c b">${i === 0 ? shortDateBE() : ''}</td>
               <td>${escapeHtml(r.name)}${r.note ? ` <span class="promo">** ${escapeHtml(r.note)} **</span>` : ''}</td>
@@ -682,14 +683,36 @@
             ${r.weights.length ? `<tr class="w"><td></td><td colspan="5">${r.weights.map(w => fmtQty(w)).join(', ')} <span class="muted">(รวม ${fmtQty(Math.round(r.weights.reduce((a, x) => a + x, 0) * 1000) / 1000)} กก.)</span></td></tr>` : ''}`).join('')}
         </tbody>
       </table>
-      <div class="grand"><span>รวมทั้งหมด</span><strong>${money(d.sold.reduce((a, r) => a + r.amount, 0))}</strong></div>
+      <div class="grand"><span>รวมทั้งหมด</span><strong>${money([...d.sold, ...d.resvRows].reduce((a, r) => a + r.amount, 0))}</strong></div>
       ${d.discount > 0 ? `<div class="sub">ส่วนลดท้ายบิล −${money(d.discount)}</div>` : ''}
-      ${d.depDeduct > 0 ? `<div class="sub">หักมัดจำใบจองในบิล −${money(d.depDeduct)} (นับรวมในยอดใบจองด้านล่าง)</div>` : ''}
-      ${d.discount > 0 || d.depDeduct > 0 ? `<div class="sub">ยอดเก็บเงินจากบิลขายวันนี้ ${money(d.total)}</div>` : ''}
-      ${resvSectionHtml(d)}
-      ${d.resvSales ? `<div class="grand"><span>ยอดขายวันนี้ (บิลขาย + ใบจองที่ส่งของ)</span><strong>${money(d.total + d.resvSales)}</strong></div>` : ''}`;
+      ${d.discount > 0 ? `<div class="grand"><span>ยอดขายสุทธิวันนี้</span><strong>${money(d.total + d.resvSales)}</strong></div>` : ''}
+      ${d.resvSales ? `<div class="sub">รวมใบจองที่ส่งของวันนี้ ฿${money(d.resvSales)} (ดึงมัดจำเข้ายอดวันนี้แล้ว)</div>` : ''}
+      ${resvSectionHtml(d)}`;
 
     printHtml('ยอดขายรายวัน', salesTable);
+  }
+
+  // แถวขายจากใบจองที่ส่งของวันนี้ (ไม่ได้เปิดบิลขาย) → ใส่ในตารางยอดขายรายวัน
+  // ยอด = มัดจำ + เงินคงค้างที่รับ  • ใบที่ส่งผ่านบิลขาย มีสินค้าอยู่ในบิลแล้ว (มัดจำถูกหักเป็นส่วนลด) ไม่ต้องใส่ซ้ำ
+  function resvSaleRows(m) {
+    const rows = [];
+    for (const r of m.picked) {
+      if (r.sale_no) continue;
+      const items = Array.isArray(r.items) ? r.items : [];
+      const amt = Number(r.deposit_amount || 0) + Number(r.final_amount || 0);
+      const lineSum = items.reduce((a, i) => a + Number(i.qty || 0) * Number(i.unit_price || 0), 0);
+      const note = `ใบจอง ${r.res_no} ${r.customer_name}`;
+      if (items.length && Math.abs(lineSum - amt) < 0.01) {
+        items.forEach(i => rows.push({ name: i.name, price: Number(i.unit_price || 0), qty: Number(i.qty || 0), unit: i.unit || '', amount: Number(i.qty || 0) * Number(i.unit_price || 0), note, weights: [] }));
+      } else {
+        rows.push({ name: items.map(i => `${i.name} ${fmtQty(Number(i.qty))} ${i.unit || ''}`.trim()).join(' + ') || 'สินค้าสั่งจอง', price: amt, qty: 1, unit: 'ชุด', amount: amt, note: `${note} ราคาตกลง`, weights: [] });
+      }
+    }
+    for (const r of m.cancelled) {
+      const f = Math.max(0, Number(r.deposit_amount || 0) - Number(r.refund_amount || 0));
+      if (f > 0) rows.push({ name: `ริบมัดจำ (ยกเลิกใบจอง)`, price: f, qty: 1, unit: 'รายการ', amount: f, note: `ใบจอง ${r.res_no} ${r.customer_name}`, weights: [] });
+    }
+    return rows;
   }
 
   // ใบจอง: มัดจำแยกเก็บ → นับเป็นยอดของ "วันที่ส่งของ"
@@ -768,7 +791,7 @@
       <table>
         <tr><td>เงินสดจากบิลขาย</td><td class="r b">฿${money(d.cashTotal)}</td></tr>
         ${d.rm && d.rm.finalCash ? `<tr><td>+ รับเงินคงค้างใบจอง (สด)</td><td class="r">฿${money(d.rm.finalCash)}</td></tr>` : ''}
-        ${d.rm && d.rm.inCash ? `<tr><td>+ มัดจำสดของใบจองที่ส่งของ/ยกเลิกวันนี้ (นำออกจากซองมัดจำ)</td><td class="r">฿${money(d.rm.inCash)}</td></tr>` : ''}
+        ${d.rm && d.rm.inCash ? `<tr><td>+ มัดจำสดของใบจองที่ส่งของ/ยกเลิกวันนี้ (ย้ายจากซองเข้ากล่อง)</td><td class="r">฿${money(d.rm.inCash)}</td></tr>` : ''}
         ${d.resvCash ? `<tr><td>รวมเงินสดนำส่งวันนี้</td><td class="r b">฿${money(d.cashTotal + d.resvCash)}</td></tr>` : ''}
         ${d.rm && d.rm.depositCash ? `<tr><td>มัดจำสดที่รับวันนี้ ฿${money(d.rm.depositCash)} — เก็บในซองมัดจำ <b>ไม่นำส่ง</b></td><td class="r"></td></tr>` : ''}
         ${d.rm && d.rm.held.length ? `<tr><td>ซองมัดจำคงเหลือหลังเคลียร์ (${d.rm.held.length} ใบรอรับ)</td><td class="r">฿${money(d.rm.heldCash)}</td></tr>` : ''}
@@ -782,16 +805,14 @@
   function dailyReportText() {
     const d = reportData();
     let t = `📊 ยอดขายรายวัน ${shopName()}\n${dateTh()} (ณ ${timeTh()} น.)\n\n`;
-    d.sold.forEach((r, i) => {
+    [...d.sold, ...d.resvRows].forEach((r, i) => {
       t += `${i + 1}. ${r.name}${r.note ? ` **${r.note}**` : ''}  ${r.price === 0 ? 'แถม' : fmtPrice(r.price)} × ${fmtQty(r.qty)} ${r.unit} = ${money(r.amount)}\n`;
       if (r.weights.length) t += `   ⚖️ ${r.weights.map(w => fmtQty(w)).join(', ')}\n`;
     });
-    t += `\nรวมทั้งหมด ${money(d.sold.reduce((a, r) => a + r.amount, 0))}`;
-    if (d.discount > 0) t += `\nส่วนลดท้ายบิล −${money(d.discount)}`;
-    if (d.depDeduct > 0) t += `\nหักมัดจำใบจองในบิล −${money(d.depDeduct)}`;
-    if (d.discount > 0 || d.depDeduct > 0) t += `\nยอดเก็บเงินจากบิลขาย ${money(d.total)}`;
+    t += `\nรวมทั้งหมด ${money([...d.sold, ...d.resvRows].reduce((a, r) => a + r.amount, 0))}`;
+    if (d.discount > 0) t += `\nส่วนลดท้ายบิล −${money(d.discount)}\nยอดขายสุทธิ ${money(d.total + d.resvSales)}`;
+    if (d.resvSales) t += `\n(รวมใบจองที่ส่งของวันนี้ ฿${money(d.resvSales)} • ดึงมัดจำเข้ายอดแล้ว)`;
     t += resvText(d);
-    if (d.resvSales) t += `\n✅ ยอดขายวันนี้ (บิล + ใบจองที่ส่งของ) ${money(d.total + d.resvSales)}`;
     if (d.pending) t += `\n⚠️ มี ${d.pending} บิลยังไม่ซิงค์`;
     return t;
   }

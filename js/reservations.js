@@ -654,7 +654,7 @@
     }
     s.cart = cart;
     s.billDiscount = Number(r.deposit_amount) > 0 ? { type: 'baht', value: Number(r.deposit_amount), note: `หักมัดจำ ใบจอง ${r.res_no}` } : { type: 'none', value: 0, note: '' };
-    s.pendingReservation = { id: r.id, res_no: r.res_no, customer: r.customer_name, deposit: Number(r.deposit_amount) };
+    s.pendingReservation = { id: r.id, res_no: r.res_no, customer: r.customer_name, deposit: Number(r.deposit_amount), deposit_amount: Number(r.deposit_amount), deposit_method: r.deposit_method };
     s.receivedCash = '';
     try { window.saveCartLocal?.(); } catch (_) {}
     if (typeof go === 'function') go('sale');
@@ -686,6 +686,7 @@
           <label class="rsv-f"><span>รับเงินคงค้างจริง</span><input id="rsvPayAmt" type="number" inputmode="decimal" min="0" step="any" value="${payForm.amount}" oninput="rsvPaySet('amount', this.value, true)"></label>
           <div class="rsv-f"><span>จ่ายด้วย</span>${`<div class="rsv-seg">${[['cash', 'เงินสด (เข้ากล่อง)'], ['promptpay', 'โอน/QR'], ['shop', 'จ่ายที่ร้าน']].map(([v, t]) => `<button type="button" class="${payForm.method === v ? 'is-on' : ''}" onclick="rsvPaySet('method','${v}')">${t}</button>`).join('')}</div>`}</div>
         </div>
+        ${!isQr(r.deposit_method) && Number(r.deposit_amount) > 0 ? `<div class="rsv-move">💵 หยิบเงินมัดจำ <b>฿${money(r.deposit_amount)}</b> ออกจากซองมัดจำ ใส่กล่องเงิน (นับเป็นยอดวันนี้)</div>` : ''}
         <div class="rsv-hint">${payForm.method === 'shop' ? 'เงินไม่เข้ากล่องเงินบูธ (ร้าน/ฝ่ายขายรับเงินเอง)' : payForm.method === 'cash' ? 'เงินสดจะรวมใน "กล่องเงิน" และรายงานวันนี้' : 'บันทึกเป็นยอดโอนในรายงานวันนี้'}${hasBooth ? ' • ไม่ตัดสต็อกบูธ' : ''}</div>
       </div>
       <div class="rsv-dlg-foot">
@@ -729,7 +730,7 @@
       const out = await orig.apply(this, args);
       if (pend && s.lastBill && s.lastBill !== prev && !s.cart.length) {
         s.pendingReservation = null;
-        try { await save({ id: pend.id, status: 'picked_up', sale_no: String(s.lastBill.saleNo || '') }); toast(`✅ ใบจอง ${pend.res_no} รับของเรียบร้อย`, 4000); }
+        try { await save({ id: pend.id, status: 'picked_up', sale_no: String(s.lastBill.saleNo || '') }); toast(`✅ ใบจอง ${pend.res_no} รับของเรียบร้อย${!isQr(pend.deposit_method) && Number(pend.deposit_amount) > 0 ? ` • หยิบมัดจำ ฿${money(pend.deposit_amount)} จากซองใส่กล่องเงิน` : ''}`, 6000); }
         catch (e) { toast(`ขายแล้ว แต่บันทึกสถานะใบจองไม่สำเร็จ: ${e.message || e} • กด "ลูกค้ามารับ" ซ้ำไม่ได้ ให้แก้สถานะในหน้าใบจอง`, 7000); }
       }
       return out;

@@ -70,18 +70,37 @@
     const qrTotal = r2(qr.reduce((a, x) => a + Number(x.total_amount || 0), 0));
     const adjIn = r2(b.adjust.filter(a => a.amount > 0).reduce((s, a) => s + a.amount, 0));
     const adjOut = r2(b.adjust.filter(a => a.amount < 0).reduce((s, a) => s - a.amount, 0));
-    const rm = window.eaReservationMoney?.() || null;
+    let rm = null;
+    try { rm = window.eaReservationMoney?.() || null; } catch (e) { console.error('[cashbox] reservation money', e); }
     const devOk = code => { const sel = selectedDevices(); return !sel || sel.includes(norm(code)); };
     // มัดจำแยกเก็บในซองมัดจำ (ไม่อยู่ในกล่องเงินทอน) • คืนมัดจำจ่ายจากซอง
     const depCash = rm ? rm.depositCash : 0;
     const refCash = 0;
     const finCash = rm ? r2((rm.finals || []).filter(r => r.final_method === 'cash' && devOk(r.final_terminal)).reduce((a, r) => a + Number(r.final_amount), 0)) : 0;
-    const expected = r2(b.float + cashTotal + finCash + adjIn - adjOut);
-    return { b, cash, qr, cashTotal, qrTotal, adjIn, adjOut, depCash, finCash, refCash, rm, expected, bills: sales.length };
+    // ส่งของ/ยกเลิกวันนี้ → ย้ายมัดจำสดจากซองเข้ากล่อง (หักคืนลูกค้าออก)
+    const cashDep = r => isQr(r.deposit_method) ? 0 : Number(r.deposit_amount || 0);
+    const closed = rm ? [...(rm.picked || []), ...(rm.cancelled || [])].filter(r => !selectedDevices() || devOk(r.final_terminal || r.refund_terminal || '')) : [];
+    const depMoved = r2(closed.reduce((a, r) => a + cashDep(r), 0));
+    const depRefund = r2(closed.reduce((a, r) => a + (r.refund_method === 'cash' ? Number(r.refund_amount || 0) : 0), 0));
+    const depIn = r2(depMoved - depRefund);
+    const expected = r2(b.float + cashTotal + finCash + depIn + adjIn - adjOut);
+    return { b, cash, qr, cashTotal, qrTotal, adjIn, adjOut, depCash, finCash, refCash, depMoved, depRefund, depIn, closedCount: closed.filter(r => cashDep(r) > 0).length, rm, expected, bills: sales.length };
   }
 
   // ---------- หน้าจอ ----------
+  // กันหน้าว่าง: ถ้ามีข้อผิดพลาด ให้แสดงข้อความบนหน้าจอ (แจ้งผู้พัฒนาได้)
   function renderCashbox() {
+    try { renderCashboxInner(); }
+    catch (e) {
+      console.error('[cashbox]', e);
+      const c = el('content');
+      if (c) c.innerHTML = `<section class="cbx"><div class="cbx-panel"><h3>⚠️ เปิดหน้ากล่องเงินไม่สำเร็จ</h3>
+        <p>${escapeHtml(e?.message || String(e))}</p>
+        <p style="opacity:.75">ลองกดปุ่มด้านล่าง • ถ้ายังไม่ได้ ให้ถ่ายรูปหน้านี้ส่งมา</p>
+        <button type="button" class="cbx-btn" onclick="location.reload()">↻ โหลดแอปใหม่</button></div></section>`;
+    }
+  }
+  function renderCashboxInner() {
     const s = st(); if (!s) return;
     setHeader('กล่องเงิน', `เรียลไทม์ • อัปเดต ${nowHM()} น.`);
     const sum = summary();
@@ -126,6 +145,8 @@
               <button type="button" class="cbx-link" onclick="cashboxEditFloat()">฿${money(sum.b.float)} ✏️</button></div>
             <div class="cbx-line"><span>+ ขายเงินสด <small>${sum.cash.length} บิล</small></span><b>฿${money(sum.cashTotal)}</b></div>
             ${sum.finCash ? `<div class="cbx-line"><span>+ รับเงินคงค้างใบจอง (สด)</span><b>฿${money(sum.finCash)}</b></div>` : ''}
+            ${sum.depMoved ? `<div class="cbx-line"><span>+ เงินมัดจำ (ส่งของแล้ว) <small>${sum.closedCount} ใบ</small></span><b>฿${money(sum.depMoved)}</b></div>` : ''}
+            ${sum.depRefund ? `<div class="cbx-line"><span>− คืนมัดจำลูกค้า (สด)</span><b>฿${money(sum.depRefund)}</b></div>` : ''}
             ${sum.adjIn ? `<div class="cbx-line"><span>+ เติมเงินเข้า</span><b>฿${money(sum.adjIn)}</b></div>` : ''}
             ${sum.adjOut ? `<div class="cbx-line"><span>− นำเงินออก</span><b>฿${money(sum.adjOut)}</b></div>` : ''}
             <div class="cbx-expected"><span>ควรมีในกล่อง</span><strong>฿${money(sum.expected)}</strong></div>
@@ -172,10 +193,8 @@
         <h3>ซองเงินมัดจำ (แยกเก็บ)</h3>
         <div class="cbx-line"><span>ใบจองรอรับ <small>${m.held.length} ใบ</small></span><b>฿${money(m.heldCash)}</b></div>
         ${m.depositCash ? `<div class="cbx-line cbx-muted"><span>• รวมมัดจำสดที่รับวันนี้</span><span>฿${money(m.depositCash)}</span></div>` : ''}
-        ${m.inCash ? `<div class="cbx-line"><span>+ ใบจองที่ส่งของ/ยกเลิกวันนี้</span><b>฿${money(m.inCash)}</b></div>` : ''}
-        <div class="cbx-expected"><span>ในซองควรมีตอนนี้</span><strong>฿${money(m.envelopeNow)}</strong></div>
-        ${m.inCash ? `<div class="cbx-env-move">ปิดยอดวันนี้: นำออกจากซอง <b>฿${money(m.inCash)}</b> ไปรวมเงินนำส่งวันนี้ • เหลือในซอง ฿${money(m.heldCash)}</div>` : ''}
-        ${m.refundCash ? `<div class="cbx-line cbx-muted"><span>คืนมัดจำเงินสดจากซองแล้ว</span><span>฿${money(m.refundCash)}</span></div>` : ''}
+        <div class="cbx-expected"><span>ในซองควรมีตอนนี้</span><strong>฿${money(m.heldCash)}</strong></div>
+        ${m.pickedDepCash + m.cancelDepCash > 0 ? `<div class="cbx-env-move">ส่งของ/ยกเลิกวันนี้: ย้ายมัดจำ <b>฿${money(m.pickedDepCash + m.cancelDepCash)}</b> ออกจากซอง ใส่กล่องเงินแล้ว (รวมในยอดวันนี้)</div>` : ''}
         ${m.heldQr ? `<div class="cbx-line cbx-muted"><span>มัดจำโอน (อยู่ในบัญชี)</span><span>฿${money(m.heldQr)}</span></div>` : ''}
       </div>`;
   }

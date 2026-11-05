@@ -21733,6 +21733,7 @@ function updateBottomNav(){
 
     if(state.page==="home") active=target==="home";
     else if(state.page==="sale") active=target==="sale";
+    else if(state.page==="cashbox") active=target==="cashbox";
     else if(state.page==="stock" || state.page==="movement" || state.page==="lowStock" || state.page==="audit") active=target==="stock";
     else if(state.page==="menu" || state.page==="dashboardToday" || state.page==="dashboardAll" || state.page==="salesHistory" || state.page==="expenses" || state.page==="report" || state.page==="settings" || state.page==="hub") active=target==="menu";
 

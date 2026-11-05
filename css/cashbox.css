@@ -1,4 +1,3 @@
-
 /* ===== หน้า "กล่องเงิน" (เรียลไทม์) ===== */
 .cbx {
   --cbx-bg: var(--surface-card, #1e293b); --cbx-bd: var(--card-border, #334155);

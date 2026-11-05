@@ -161,3 +161,13 @@ html:not(#_a) body #content .pos-layout .pos-card-foot{
 }
 html:not(#_a) body #content .pos-layout .pos-card-price{ font-size:20px !important; white-space:nowrap; }
 html:not(#_a) body #content .pos-layout .pos-product-card{ min-height:76px !important; height:auto !important; padding:12px 14px !important; }
+
+/* ปุ่มปิด (X) ของทุกหน้าต่าง: เห็นชัดทุกธีม */
+html:not(#_a) body dialog .modal-head .icon-close{
+  background:#ef4444 !important; color:#fff !important; border:1px solid #f87171 !important; width:40px; height:40px;
+}
+html:not(#_a) body dialog .modal-head .icon-close svg{ display:block !important; width:18px; height:18px; }
+html:not(#_a) body dialog .modal-head .icon-close svg path{ stroke:#fff !important; }
+
+/* แถบล่าง 5 ปุ่ม (เพิ่มกล่องเงิน) */
+html:not(#_a) body .bottom-nav{ grid-template-columns:repeat(5, 1fr) !important; }

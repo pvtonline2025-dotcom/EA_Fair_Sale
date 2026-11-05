@@ -187,7 +187,7 @@
             ${r.status === 'booked' ? `
               <button type="button" class="rsv-btn rsv-main" onclick="reservationPickup('${r.id}')">✅ ลูกค้ามารับ</button>
               <button type="button" class="rsv-btn" onclick="reservationSlip('${r.id}')">🧾 ใบรับมัดจำ</button>
-              <button type="button" class="rsv-btn" onclick="reservationStickers('${r.id}')">🏷️ สติ๊กเกอร์ QR</button>
+              <button type="button" class="rsv-btn" onclick="reservationStickers('${r.id}')">🏷️ สติ๊กเกอร์บาร์โค้ด</button>
               <button type="button" class="rsv-btn" onclick="openReservationForm('${r.id}')">แก้ไข</button>
               ${r.requisition_mode !== 'none' ? `<button type="button" class="rsv-btn" onclick="reservationToggleReq('${r.id}')">${r.requisitioned_at ? 'ยังไม่เบิก' : 'เบิกแล้ว'}</button>` : ''}
               <button type="button" class="rsv-btn rsv-danger" onclick="reservationCancel('${r.id}')">ยกเลิก</button>` : `
@@ -434,15 +434,15 @@
     ctx.fillText(`นัดรับ ${thDate(r.pickup_date)} • ${r.pickup_place === 'shop' ? 'ที่ร้าน / โกดัง' : 'ที่บูธในงาน'}`, P, y + 54);
     y += 130;
     ctx.fillStyle = '#334155'; ctx.font = `500 30px ${FONT}`; noteLines.forEach(l => { ctx.fillText(l, P, y); y += 42; });
-    // QR ใบจอง: สแกนแล้วเห็นรายการที่ต้องส่ง + ยอดคงค้าง
-    const qs = 300;
-    if (drawQr(ctx, qrText(r), (W - qs) / 2, y, qs)) {
+    // บาร์โค้ดใบจอง (สแกนได้เฉพาะในแอป) ตรงกลาง
+    const bh = 170;
+    if (drawBarcode(ctx, barcodeText(r), P, y, W - 2 * P, bh)) {
       ctx.textAlign = 'center';
-      ctx.fillStyle = '#7c3aed'; ctx.font = `800 30px ${FONT}`; ctx.fillText(r.res_no, W / 2, y + qs + 40);
-      ctx.fillStyle = '#475569'; ctx.font = `500 27px ${FONT}`; ctx.fillText('แสดง QR นี้ให้พนักงานสแกน เมื่อมารับสินค้า', W / 2, y + qs + 82);
+      ctx.fillStyle = '#0f172a'; ctx.font = `800 32px ${FONT}`; ctx.fillText(r.res_no, W / 2, y + bh + 42);
+      ctx.fillStyle = '#475569'; ctx.font = `500 27px ${FONT}`; ctx.fillText('แสดงบาร์โค้ดนี้ให้พนักงานสแกน เมื่อมารับสินค้า', W / 2, y + bh + 84);
       ctx.textAlign = 'left';
     }
-    y += qs + 110;
+    y += bh + 110;
     ctx.fillStyle = '#94a3b8'; ctx.font = `500 24px ${FONT}`;
     ctx.fillText('กรุณาแสดงใบนี้เมื่อมารับสินค้า', P, H - 40);
     return cv;
@@ -476,26 +476,38 @@
   function rsvSlipSave() { const a = document.createElement('a'); a.href = slip.url; a.download = slip.file.name; document.body.appendChild(a); a.click(); a.remove(); toast('💾 บันทึกรูปแล้ว'); }
   async function rsvSlipCopy() { try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': slip.blob })]); toast('📋 คัดลอกรูปแล้ว'); } catch (_) { toast('คัดลอกไม่สำเร็จ'); } }
 
-  // ---------- QR ใบจอง ----------
-  function qrText(r) { return `${location.origin}${location.pathname}?rsv=${encodeURIComponent(r.res_no)}`; }
-  function qrObj(text) {
-    if (typeof window.qrcode !== 'function') return null;
-    try { const q = window.qrcode(0, 'M'); q.addData(text); q.make(); return q; } catch (_) { return null; }
+  // ---------- บาร์โค้ดใบจอง (CODE128) ----------
+  // เก็บเลขใบจองแบบไม่มีขีด (R261105111212) ให้แท่งบาร์กว้าง อ่านง่าย • ไม่ใช่ลิงก์ → สแกนได้เฉพาะในแอป
+  function barcodeText(r) { return String(r.res_no || '').replace(/-/g, ''); }
+  function barcodeCanvas(text, moduleW, h) {
+    if (typeof window.JsBarcode !== 'function') return null;
+    try { const c = document.createElement('canvas'); window.JsBarcode(c, text, { format: 'CODE128', width: moduleW, height: h, margin: 0, displayValue: false, background: '#ffffff', lineColor: '#000000' }); return c; } catch (_) { return null; }
   }
-  function drawQr(ctx, text, x, y, size) {
-    const q = qrObj(text); if (!q) return false;
-    const n = q.getModuleCount(), quiet = 2, cell = size / (n + quiet * 2);
-    ctx.fillStyle = '#fff'; ctx.fillRect(x, y, size, size);
-    ctx.fillStyle = '#000';
-    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) ctx.fillRect(Math.floor(x + (c + quiet) * cell), Math.floor(y + (r + quiet) * cell), Math.ceil(cell), Math.ceil(cell));
+  // วาดบาร์โค้ดกึ่งกลางพื้นที่ (x..x+w) • ขนาดแท่งเป็นจำนวนเต็ม พิกเซลคมชัด เว้นขอบเงียบ ≥ 10 แท่ง
+  function drawBarcode(ctx, text, x, y, w, h) {
+    const one = barcodeCanvas(text, 1, 10); if (!one) return false;
+    const mods = one.width;
+    const scale = Math.max(1, Math.floor(w / (mods + 20)));
+    const c = barcodeCanvas(text, scale, h); if (!c) return false;
+    ctx.fillStyle = '#fff'; ctx.fillRect(x, y, w, h);
+    ctx.drawImage(c, Math.round(x + (w - c.width) / 2), y);
     return true;
   }
-  function qrSvg(text) { const q = qrObj(text); return q ? q.createSvgTag({ cellSize: 4, margin: 0, scalable: true }) : ''; }
+  function barcodeSvg(text) {
+    if (typeof window.JsBarcode !== 'function') return '';
+    try {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      window.JsBarcode(svg, text, { format: 'CODE128', width: 2, height: 60, margin: 0, displayValue: false });
+      const w = svg.getAttribute('width').replace('px', ''), h = svg.getAttribute('height').replace('px', '');
+      svg.setAttribute('viewBox', `0 0 ${w} ${h}`); svg.setAttribute('preserveAspectRatio', 'none');
+      svg.removeAttribute('width'); svg.removeAttribute('height'); svg.removeAttribute('style');
+      return svg.outerHTML;
+    } catch (_) { return ''; }
+  }
   function codeOf(raw) {
     const t = String(raw || '').trim();
-    let m = /[?&]rsv=([^&#\s]+)/.exec(t); if (m) { try { return decodeURIComponent(m[1]); } catch (_) { return m[1]; } }
-    m = /^RSV:(\S+)$/i.exec(t); if (m) return m[1];
-    if (/^R\d{6}-\d{4,}$/.test(t)) return t;
+    let m = /^RSV:(\S+)$/i.exec(t); if (m) return m[1];
+    m = /^R(\d{6})-?(\d{4,})$/.exec(t); if (m) return `R${m[1]}-${m[2]}`;
     return null;
   }
   // เรียกจากตัวสแกนทุกจุด: เป็น QR ใบจอง → เปิดหน้าใบจอง แล้วคืนค่า true
@@ -562,29 +574,25 @@
     reservationPickup(id);
   }
 
-  // ---------- สติ๊กเกอร์ QR (ติดม้วน/ของจอง) A4 4 คอลัมน์ ดวงละ 4.2×3 ซม. ----------
+  // ---------- สติ๊กเกอร์บาร์โค้ด (ติดม้วน/ของจอง) A4 4 คอลัมน์ ดวงละ 4.2×3 ซม. ----------
   function reservationStickers(id) {
     const r = list.find(x => x.id === id); if (!r) return;
     const items = Array.isArray(r.items) ? r.items : [];
     const def = Math.max(1, Math.min(36, items.reduce((a, i) => a + Math.max(1, Math.ceil(Number(i.qty) || 1)), 0)));
-    const v = window.prompt(`พิมพ์สติ๊กเกอร์ QR ใบจอง ${r.res_no} กี่ดวง? (ติดที่ม้วน/ของแต่ละชิ้น)`, String(def));
+    const v = window.prompt(`พิมพ์สติ๊กเกอร์บาร์โค้ดใบจอง ${r.res_no} กี่ดวง? (ติดที่ม้วน/ของแต่ละชิ้น)`, String(def));
     if (v === null) return;
     const n = Math.max(1, Math.min(72, parseInt(String(v).replace(/\D/g, ''), 10) || def));
     // ไล่ชื่อสินค้าให้แต่ละดวง ตามจำนวนชิ้น
     const names = [];
     items.forEach(i => { const c = Math.max(1, Math.ceil(Number(i.qty) || 1)); for (let k = 0; k < c; k++) names.push(i.name); });
-    const svg = qrSvg(qrText(r));
-    if (!svg) { toast('โหลดตัวสร้าง QR ไม่สำเร็จ'); return; }
+    const svg = barcodeSvg(barcodeText(r));
+    if (!svg) { toast('โหลดตัวสร้างบาร์โค้ดไม่สำเร็จ'); return; }
     const cells = Array.from({ length: n }, (_, k) => `
       <div class="st">
-        <div class="q">${svg}</div>
-        <div class="t">
-          <div class="tag">ของจอง</div>
-          <div class="c">${escapeHtml(r.customer_name)}</div>
-          <div class="i">${escapeHtml(names[k % (names.length || 1)] || '')}</div>
-          <div class="d">รับ ${escapeHtml(thDate(r.pickup_date))}</div>
-          <div class="no">${escapeHtml(r.res_no)}${n > 1 ? ` • ${k + 1}/${n}` : ''}</div>
-        </div>
+        <div class="top"><span class="tag">ของจอง</span><span class="c">${escapeHtml(r.customer_name)}</span></div>
+        <div class="i">${escapeHtml(names[k % (names.length || 1)] || '')}</div>
+        <div class="bc">${svg}</div>
+        <div class="bot"><span class="no">${escapeHtml(r.res_no)}</span><span class="d">รับ ${escapeHtml(new Date(String(r.pickup_date).slice(0, 10) + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }))}${n > 1 ? ` ${k + 1}/${n}` : ''}</span></div>
       </div>`).join('');
     const html = `<!doctype html><html lang="th"><head><meta charset="utf-8"><title>สติ๊กเกอร์ ${escapeHtml(r.res_no)}</title>
       <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -598,18 +606,18 @@
         .bar .p { background: #10b981; color: #fff; } .bar .x { background: #4b5563; color: #fff; }
         .page { width: 210mm; min-height: 297mm; margin: 16px auto; padding-top: 5mm; background: #fff; }
         .sheet { width: 177mm; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 42mm); grid-auto-rows: 30mm; gap: 2mm 3mm; }
-        .st { width: 42mm; height: 30mm; overflow: hidden; display: flex; gap: 1.2mm; padding: 1.5mm; border: 0.3mm dashed #cbd5e1; page-break-inside: avoid; }
-        .q { flex: 0 0 22mm; height: 22mm; align-self: center; } .q svg { width: 22mm; height: 22mm; display: block; }
-        .t { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.12; }
-        .tag { align-self: flex-start; background: #000; color: #fff; font-size: 5.5pt; font-weight: 800; padding: .2mm 1mm; margin-bottom: .6mm; }
-        .c { font-size: 7.5pt; font-weight: 800; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-        .i { font-size: 6pt; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; margin-top: .4mm; }
-        .d { font-size: 6pt; font-weight: 800; margin-top: auto; }
-        .no { font-size: 5pt; font-family: ui-monospace, monospace; }
+        .st { width: 42mm; height: 30mm; overflow: hidden; display: flex; flex-direction: column; padding: 1.4mm 1.8mm 1.2mm; border: 0.3mm dashed #cbd5e1; page-break-inside: avoid; line-height: 1.12; }
+        .top { display: flex; align-items: center; gap: 1mm; min-width: 0; }
+        .tag { flex: none; background: #000; color: #fff; font-size: 5.5pt; font-weight: 800; padding: .2mm 1mm; }
+        .c { font-size: 7.5pt; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .i { font-size: 6pt; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; margin-top: .3mm; height: 4.4mm; }
+        .bc { flex: 1; display: flex; align-items: center; padding: .6mm 1.5mm; } .bc svg { width: 100%; height: 11mm; display: block; }
+        .bot { display: flex; justify-content: space-between; gap: 1mm; font-size: 6pt; font-weight: 800; white-space: nowrap; }
+        .no { font-family: ui-monospace, monospace; font-size: 5.5pt; }
         @media print { html { background: #fff; } .bar { display: none; } .page { margin: 0; padding: 0; min-height: 0; width: auto; } .st { border-color: transparent; } }
         @media screen and (max-width: 820px) { .page { zoom: .5; } }
       </style></head><body>
-      <div class="bar"><button class="p" onclick="window.print()">🖨️ พิมพ์สติ๊กเกอร์ (A4 • 4.2×3 ซม.)</button><button class="x" onclick="window.close()">ปิด</button></div>
+      <div class="bar"><button class="p" onclick="window.print()">🖨️ พิมพ์สติ๊กเกอร์บาร์โค้ด (A4 • 4.2×3 ซม.)</button><button class="x" onclick="window.close()">ปิด</button></div>
       <div class="page"><div class="sheet">${cells}</div></div>
       <script>(document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(function () { if (window.__eaAutoPrint) setTimeout(function () { window.focus(); window.print(); }, 200); });<\/script>
       </body></html>`;
@@ -805,15 +813,6 @@
   window.addEventListener('ea:data-refreshed', () => load().then(afterChange));
   function init() {
     hookCheckout();
-    try {
-      const params = new URLSearchParams(location.search);
-      const no = String(params.get('rsv') || '').trim();
-      if (no) {
-        params.delete('rsv'); const q = params.toString();
-        history.replaceState(null, '', location.pathname + (q ? '?' + q : '') + location.hash);
-        setTimeout(() => openByNo(no), 2500);
-      }
-    } catch (_) {}
     setTimeout(() => { hookCheckout(); load(true).then(afterChange); startLive(); }, 3500);
   }
 
@@ -823,7 +822,7 @@
     rsvPaySet, rsvPayClose, rsvPayConfirm, rsvQty, rsvLine, rsvRemove, rsvDepPct,
     reservationSlip, rsvSlipShare, rsvSlipSave, rsvSlipCopy, reservationPickup, reservationPickupCancel,
     reservationCancel, reservationToggleReq, reservationStickers, rsvScanPickup,
-    eaReservationScan: reservationScan, eaOpenReservationByNo: openByNo,
+    eaReservationScan: reservationScan, eaReservationBarcode: barcodeText, eaDrawReservationBarcode: drawBarcode, eaOpenReservationByNo: openByNo,
     eaReservations: all, eaReservationRequisitions: requisitionList, eaMarkReservationsRequisitioned: markRequisitioned,
     eaReservationMoney: moneyToday, eaReservationPosBanner: posBanner, eaReservationsLoad: load
   });

@@ -70,6 +70,13 @@
         for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) ctx.fillRect(x0 + c * cell, y + r * cell, cell, cell);
         y += s + 6; return true;
       },
+      barcode(text, h = 90) {
+        y += 12;
+        const ok = window.eaDrawReservationBarcode?.(ctx, text, 0, y, W, h);
+        ctx.fillStyle = '#000';
+        if (ok) y += h + 4;
+        return !!ok;
+      },
       space(h = 10) { y += h; },
       finish() {
         y += 40;   // เผื่อขอบตัดกระดาษ
@@ -160,9 +167,9 @@
     const pd = new Date(String(r.pickup_date).slice(0, 10) + 'T00:00:00').toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' });
     d.box(`นัดรับ ${pd} • ${r.pickup_place === 'shop' ? 'ร้าน/โกดัง' : 'ที่บูธ'}`, { size: 22 });
     if (r.note) d.text(`หมายเหตุ: ${r.note}`, { size: 20 });
-    d.qr(`${location.origin}${location.pathname}?rsv=${encodeURIComponent(r.res_no)}`, 250);
-    d.text(r.res_no, { size: 20, bold: true, align: 'center', after: 0 });
-    d.text('แสดง QR นี้เมื่อมารับสินค้า', { size: 21, align: 'center' });
+    d.barcode(window.eaReservationBarcode?.(r) || String(r.res_no).replace(/-/g, ''), 100);
+    d.text(r.res_no, { size: 22, bold: true, align: 'center', after: 0 });
+    d.text('แสดงบาร์โค้ดนี้เมื่อมารับสินค้า', { size: 21, align: 'center' });
     return d.finish();
   }
 

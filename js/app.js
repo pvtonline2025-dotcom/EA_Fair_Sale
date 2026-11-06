@@ -1483,7 +1483,8 @@ function loadFromLocalStorageFallback(){
     saveLocalState();
   }
 
-  if (!state.expenses || state.expenses.length === 0) {
+  if (!Array.isArray(state.expenses)) state.expenses = [];
+  if (false) {   // (เลิกใส่ข้อมูลตัวอย่างค่าใช้จ่าย • หน้าเงินสำรองจ่ายใช้ข้อมูลจริงเท่านั้น)
     const today = todayISO();
     state.expenses = [
       { id: "exp-1", title: "ค่าเช่าพื้นที่บูธหน้างาน (รายวัน)", category: "booth_rent", amount: 1500, expense_date: today, expense_time: "08:30", payment_method: "transfer", recorder: "Admin", note: "ชำระให้ผู้จัดงาน" },
@@ -4451,7 +4452,7 @@ function renderMenu(){
         { icon: "💰", title: "กล่องเงิน (เรียลไทม์)", hint: "ดูบิล รับมา/ทอน • นับเงินตรวจ", on: "openCashbox()", accent: "green" },
         { icon: "🏢", title: "ศูนย์กลาง", hint: "ยอดทุกเครื่อง • รับเงินสด", on: "go('hub')", accent: "green" },
         { icon: "📲", title: "QR จุดขาย", hint: "ให้เจ้าหน้าที่สแกนด้วยมือถือตัวเอง", on: "go('qrStations')", accent: "green" },
-        { icon: "💸", title: "ค่าใช้จ่าย & กำไร", hint: "บันทึกรายจ่าย", on: "go('expenses')", accent: "green" }
+        { icon: "💸", title: "เงินสำรองจ่าย", hint: "เบิก / จ่าย / คงเหลือ", on: "go('expenses')", accent: "green" }
       ])}
       ${group("สินค้าและสต็อก", [
         { icon: "📦", title: "สต็อกสินค้า", hint: "รายการ • แก้ไข • รับเข้า", on: "go('stock')", accent: "blue" },

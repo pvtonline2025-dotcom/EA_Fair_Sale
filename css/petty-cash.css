@@ -1,0 +1,55 @@
+/* เงินสำรองจ่าย */
+.ptc { --p-card: var(--surface-card, #111827); --p-bd: var(--card-border, #334155); --p-sub: var(--text-muted, #94a3b8); max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+[data-color-mode="light"] .ptc { --p-card: #fff; --p-bd: #e2e8f0; --p-sub: #64748b; }
+.ptc-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.ptc-kpi { padding: 12px 14px; border: 1px solid var(--p-bd); border-left: 4px solid #0ea5e9; border-radius: 6px; background: var(--p-card); }
+.ptc-kpi span { display: block; font-size: 13px; color: var(--p-sub); font-weight: 700; }
+.ptc-kpi b { font-size: 24px; font-variant-numeric: tabular-nums; }
+.ptc-kpi small { display: block; font-size: 11.5px; color: #ef4444; }
+.ptc-kpi.out { border-left-color: #f59e0b; } .ptc-kpi.left { border-left-color: #10b981; } .ptc-kpi.left b { color: #10b981; font-size: 28px; }
+.ptc-kpi.left.neg { border-left-color: #ef4444; } .ptc-kpi.left.neg b { color: #ef4444; } .ptc-kpi.warn { border-left-color: #ef4444; } .ptc-kpi.warn b { color: #ef4444; }
+.ptc-actions { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+.ptc-actions button { min-height: 58px; padding: 6px 8px; border: 1px solid var(--p-bd); border-radius: 6px; background: var(--p-card); color: inherit; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.ptc-actions button i { font-style: normal; font-size: 22px; line-height: 1; }
+.ptc-actions .ptc-in { background: #059669; border-color: #059669; color: #fff; grid-column: span 2; font-size: 16px; }
+.ptc-actions .ptc-ret { color: #0284c7; border-color: #0284c7; }
+.ptc-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--p-bd); border-radius: 6px; background: var(--p-card); }
+.ptc-range { display: inline-flex; border: 1px solid var(--p-bd); border-radius: 4px; overflow: hidden; }
+.ptc-range button { min-height: 38px; padding: 0 14px; border: 0; background: transparent; color: inherit; font: inherit; font-weight: 700; cursor: pointer; }
+.ptc-range button.on { background: #0369a1; color: #fff; }
+.ptc-cats { flex: 1; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13.5px; } .ptc-cats .muted { color: var(--p-sub); }
+.ptc-tools { display: flex; gap: 6px; }
+.ptc-tools button { min-height: 38px; padding: 0 12px; border: 1px solid var(--p-bd); border-radius: 4px; background: transparent; color: inherit; font: inherit; font-weight: 700; cursor: pointer; }
+.ptc-day { border: 1px solid var(--p-bd); border-radius: 6px; background: var(--p-card); overflow: hidden; }
+.ptc-day-h { display: flex; justify-content: space-between; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--p-bd); font-size: 14px; } .ptc-day-h span { color: var(--p-sub); }
+.ptc-table { width: 100%; border-collapse: collapse; }
+.ptc-table th { padding: 6px 10px; font-size: 12.5px; color: var(--p-sub); text-align: left; border-bottom: 1px solid var(--p-bd); }
+.ptc-table td { padding: 8px 10px; border-bottom: 1px solid var(--p-bd); vertical-align: middle; font-size: 14px; }
+.ptc-table tr:last-child td { border-bottom: 0; }
+.ptc-table .r { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; } .ptc-table .c { text-align: center; } .ptc-table th.r { text-align: right; }
+.ptc-table .t { width: 54px; color: var(--p-sub); font-size: 13px; }
+.ptc-table .n { font-weight: 700; } .ptc-table small { color: var(--p-sub); font-size: 12px; }
+.ptc-table td.in { color: #10b981; font-weight: 800; } .ptc-table td.out { color: #f59e0b; font-weight: 800; } .ptc-table td.bal { font-weight: 800; } .ptc-table td.bal.neg { color: #ef4444; }
+.ptc-table tr.k-in { background: rgba(16,185,129,.06); } .ptc-table tr.k-return { background: rgba(2,132,199,.06); }
+.ptc-bill { min-height: 30px; padding: 0 8px; border-radius: 4px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.ptc-bill.yes { border: 1px solid #10b981; background: rgba(16,185,129,.12); color: #10b981; } .ptc-bill.no { border: 1px solid #ef4444; background: rgba(239,68,68,.1); color: #ef4444; }
+.ptc-table .act { white-space: nowrap; } .ptc-table .act button { min-height: 32px; margin-left: 4px; padding: 0 10px; border: 1px solid var(--p-bd); border-radius: 4px; background: transparent; color: inherit; font: inherit; font-size: 12.5px; cursor: pointer; } .ptc-table .act .del { color: #ef4444; border-color: rgba(239,68,68,.5); }
+.ptc-empty { padding: 30px; text-align: center; border: 1px dashed var(--p-bd); border-radius: 6px; color: var(--p-sub); line-height: 1.6; }
+html:not(#_a) dialog.ptc-dialog { width: min(560px, calc(100vw - 24px)) !important; max-width: none !important; max-height: calc(var(--vvh, 100dvh) - 16px) !important; padding: 0; border: 1px solid var(--card-border, #334155); border-radius: 6px; background: var(--surface-card, #111827) !important; color: var(--text-main, #f8fafc) !important; display: none; flex-direction: column; overflow: hidden !important; }
+html:not(#_a) dialog.ptc-dialog[open] { display: flex; }
+[data-color-mode="light"] dialog.ptc-dialog { background: #fff !important; color: #0f172a !important; }
+.ptc-dialog::backdrop { background: rgba(0,0,0,.55); }
+.ptc-dh { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--card-border, #334155); font-size: 17px; }
+.ptc-x { width: 40px; height: 38px; border: 0; border-radius: 4px; background: #ef4444; color: #fff; font-size: 18px; cursor: pointer; }
+.ptc-db { padding: 12px 14px; overflow: auto; display: grid; gap: 10px; }
+.ptc-db label { display: grid; gap: 4px; font-size: 13px; font-weight: 700; }
+.ptc-db input:not([type=checkbox]) { height: 44px; padding: 0 10px; border-radius: 4px; border: 1px solid var(--card-border, #475569); background: transparent; color: inherit; font: inherit; font-size: 15px; font-weight: 400; }
+.ptc-db input.big { height: 54px; font-size: 26px; font-weight: 800; }
+.ptc-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ptc-chk { display: flex !important; align-items: center; gap: 8px; } .ptc-chk input { width: 22px; height: 22px; }
+.ptc-catpick { display: flex; flex-wrap: wrap; gap: 6px; }
+.ptc-catpick button { min-height: 38px; padding: 0 10px; border: 1px solid var(--card-border, #475569); border-radius: 4px; background: transparent; color: inherit; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.ptc-catpick button.on { background: #0369a1; border-color: #0369a1; color: #fff; }
+.ptc-df { display: grid; grid-template-columns: 1fr 2fr; gap: 10px; padding: 12px 14px; border-top: 1px solid var(--card-border, #334155); }
+.ptc-df button { min-height: 50px; border: 1px solid var(--card-border, #475569); border-radius: 4px; background: transparent; color: inherit; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; }
+.ptc-df .main { background: #059669; border-color: #059669; color: #fff; font-size: 17px; }

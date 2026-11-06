@@ -190,6 +190,124 @@
 
   // ---------- หน้าตัวอย่าง + ส่งไปแอปเครื่องพิมพ์ ----------
   let cur = null;
+  // =========================================================
+  // พิมพ์ตรงผ่านบลูทูธ (Web Bluetooth • Chrome บน Android/Windows)
+  // โปรโตคอล PeriPage A6: ความเข้ม 10ff1000nn • รีเซ็ต 10fffe01+00×12 • ภาพ 1d763000 xL xH yL yH + แถวละ 48 ไบต์ • ป้อนกระดาษ 1b4a nn
+  // =========================================================
+  const U16 = x => `0000${x}-0000-1000-8000-00805f9b34fb`;
+  const BLE_SERVICES = [U16('ff00'), U16('18f0'), U16('ae30'), U16('fff0'), U16('ffe0'), U16('fee7'),
+    'e7810a71-73ae-499d-8c15-faa9aef0c3f2', '49535343-fe7d-4ae5-8fa9-9fafd205e455', '6e400001-b5a3-f393-e0a9-e50e24dcca9e'];
+  const BLE_WRITE = [U16('ff02'), U16('2af1'), U16('ae01'), U16('fff2'), U16('fff1'), U16('ffe1'),
+    'bef8d6c9-9c21-4c9e-b632-bd58c1009f9f', '49535343-8841-43f4-a8d4-ecbe34729bb3', '6e400002-b5a3-f393-e0a9-e50e24dcca9e'];
+  const GENERIC = [U16('1800'), U16('1801'), U16('180a'), U16('180f')];
+  const BT_KEY = 'ea_bt_printer';
+  const bt = { device: null, ch: null, busy: false };
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const hasBle = () => !!navigator.bluetooth;
+  const btName = () => bt.device?.name || (() => { try { return JSON.parse(localStorage.getItem(BT_KEY) || '{}').name || ''; } catch (_) { return ''; } })();
+  const btConnected = () => !!(bt.device?.gatt?.connected && bt.ch);
+
+  async function gattSetup(dev) {
+    const server = await dev.gatt.connect();
+    const svcs = await server.getPrimaryServices();
+    const list = [];
+    for (const sv of svcs) {
+      let cs = []; try { cs = await sv.getCharacteristics(); } catch (_) { continue; }
+      for (const c of cs) if (c.properties.write || c.properties.writeWithoutResponse) list.push({ c, svc: sv.uuid });
+    }
+    if (!list.length) throw new Error('เครื่องพิมพ์นี้ไม่รองรับการพิมพ์ตรงจากแอป (บลูทูธแบบเก่า) • ใช้วิธีบันทึกรูปแทน');
+    const score = x => { const i = BLE_WRITE.indexOf(x.c.uuid); let n = i >= 0 ? 100 - i : 0; if (BLE_SERVICES.includes(x.svc)) n += 50; if (GENERIC.includes(x.svc)) n -= 200; if (x.c.properties.writeWithoutResponse) n += 5; return n; };
+    list.sort((a, b) => score(b) - score(a));
+    bt.device = dev; bt.ch = list[0].c;
+    dev.addEventListener('gattserverdisconnected', () => { bt.ch = null; });
+    try { localStorage.setItem(BT_KEY, JSON.stringify({ id: dev.id, name: dev.name || '' })); } catch (_) {}
+  }
+  // เชื่อมต่ออัตโนมัติกับเครื่องที่เคยจับคู่ (ไม่ต้องเลือกใหม่ทุกครั้ง)
+  async function btReconnect() {
+    if (btConnected()) return true;
+    if (bt.device) { try { await gattSetup(bt.device); return true; } catch (_) {} }
+    try {
+      if (!navigator.bluetooth?.getDevices) return false;
+      const saved = JSON.parse(localStorage.getItem(BT_KEY) || '{}');
+      if (!saved.id) return false;
+      const dev = (await navigator.bluetooth.getDevices()).find(d => d.id === saved.id);
+      if (!dev) return false;
+      await gattSetup(dev); return true;
+    } catch (_) { return false; }
+  }
+  async function btChoose() {
+    if (!hasBle()) throw new Error('เบราว์เซอร์นี้พิมพ์ผ่านบลูทูธไม่ได้ • ใช้ Chrome บน Android (เปิดบลูทูธ + ตำแหน่ง)');
+    const dev = await navigator.bluetooth.requestDevice({
+      filters: ['PeriPage', 'Peripage', 'PERIPAGE', 'PPG', 'A6', 'PP'].map(namePrefix => ({ namePrefix })),
+      optionalServices: BLE_SERVICES
+    });
+    await gattSetup(dev);
+  }
+  async function btWrite(bytes) {
+    const size = 100, delay = 12, noRsp = bt.ch.properties.writeWithoutResponse;
+    for (let i = 0; i < bytes.length; i += size) {
+      const part = bytes.subarray(i, Math.min(i + size, bytes.length));
+      let tries = 0;
+      for (;;) {
+        try {
+          if (noRsp && bt.ch.writeValueWithoutResponse) await bt.ch.writeValueWithoutResponse(part);
+          else if (bt.ch.writeValueWithResponse) await bt.ch.writeValueWithResponse(part);
+          else await bt.ch.writeValue(part);
+          break;
+        } catch (e) { if (++tries > 3) throw e; await sleep(120); }
+      }
+      await sleep(delay);
+    }
+  }
+  const hexb = h => new Uint8Array(h.match(/../g).map(b => parseInt(b, 16)));
+  async function btPrintCanvas(cv) {
+    const w = cv.width, h = cv.height, bpr = Math.ceil(w / 8);
+    const px = cv.getContext('2d').getImageData(0, 0, w, h).data;
+    const data = new Uint8Array(bpr * h);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      if (px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114 < 128) data[y * bpr + (x >> 3)] |= 0x80 >> (x & 7);
+    }
+    await btWrite(hexb('10ff100001'));                 // ความเข้มปกติ
+    await sleep(30);
+    for (let y = 0; y < h; y += 255) {
+      const rows = Math.min(255, h - y);
+      await btWrite(hexb('10fffe01000000000000000000000000'));
+      await sleep(20);
+      await btWrite(new Uint8Array([0x1d, 0x76, 0x30, 0x00, bpr & 0xff, bpr >> 8, rows & 0xff, rows >> 8]));
+      await btWrite(data.subarray(y * bpr, (y + rows) * bpr));
+    }
+    await btWrite(new Uint8Array([0x1b, 0x4a, 80]));   // ป้อนกระดาษเผื่อฉีก
+  }
+  // พิมพ์ตรง: เชื่อมเครื่องเดิมอัตโนมัติ • ยังไม่เคยเลือก → ให้เลือกเครื่อง
+  async function btPrint(cv, choose) {
+    if (bt.busy) return;
+    bt.busy = true;
+    const btn = document.getElementById('mpBtPrint');
+    const setBtn = t => { if (btn) btn.textContent = t; };
+    try {
+      let saved = {}; try { saved = JSON.parse(localStorage.getItem(BT_KEY) || '{}'); } catch (_) {}
+      if (choose || bt.nextChoose || (!bt.device && !saved.id)) {
+        bt.nextChoose = false;
+        await btChoose();                       // ต้องเรียกทันทีจากการแตะ (ข้อกำหนดของเบราว์เซอร์)
+      } else {
+        setBtn('กำลังเชื่อมต่อ...');
+        if (!(await btReconnect())) {
+          bt.nextChoose = true;
+          toast('เชื่อมเครื่องเดิมไม่ได้ • แตะ "พิมพ์ตรง" อีกครั้งเพื่อเลือกเครื่อง', 5000);
+          return;
+        }
+      }
+      setBtn('กำลังพิมพ์...');
+      await btPrintCanvas(cv);
+      toast(`✅ ส่งพิมพ์แล้ว (${btName() || 'เครื่องพิมพ์'})`, 2500);
+      document.getElementById('miniPrintDialog')?.close();
+    } catch (e) {
+      if (e?.name === 'NotFoundError') { setBtn('🔵 พิมพ์ตรง (บลูทูธ)'); return; }   // กดยกเลิกการเลือกเครื่อง
+      try { window.alert(`พิมพ์ไม่สำเร็จ: ${e?.message || e}\n\n• เปิดบลูทูธ/ตำแหน่ง และเปิดเครื่องพิมพ์\n• ปิดแอป PeriPage ก่อน (เครื่องพิมพ์ต่อได้ทีละแอป)`); } catch (_) {}
+    } finally { bt.busy = false; setBtn(bt.nextChoose ? '🔵 แตะเพื่อเลือกเครื่องพิมพ์' : `🔵 พิมพ์ตรง${btName() ? ` • ${btName()}` : ' (บลูทูธ)'}`); }
+  }
+
   async function preview(cv, name, title) {
     // JPEG พื้นขาวทึบ + ชื่อไฟล์ภาษาอังกฤษ (แอป PeriPage นำเข้า PNG/ชื่อไทยแล้วขึ้นหน้าว่าง)
     const flat = document.createElement('canvas'); flat.width = cv.width; flat.height = cv.height;
@@ -203,7 +321,7 @@
     const blob = await new Promise(res => flat.toBlob(res, 'image/jpeg', 0.95));
     if (cur?.url) URL.revokeObjectURL(cur.url);
     const file = new File([blob], `${String(name).replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'receipt'}.jpg`, { type: 'image/jpeg' });
-    cur = { blob, file, url: URL.createObjectURL(blob) };
+    cur = { blob, file, url: URL.createObjectURL(blob), canvas: flat };
     let dlg = document.getElementById('miniPrintDialog');
     if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'miniPrintDialog'; dlg.className = 'restock-img-dialog mini-print-dialog'; document.body.appendChild(dlg); }
     const canShare = !!(navigator.canShare && navigator.canShare({ files: [file] }));
@@ -212,14 +330,17 @@
         <button type="button" class="rid-close" onclick="document.getElementById('miniPrintDialog').close()" aria-label="ปิด">✕</button></div>
       <div class="rid-body mini-print-body"><img src="${cur.url}" alt="${esc(title)}"></div>
       <div class="rid-actions">
-        ${canShare ? '<button type="button" class="rid-btn rid-primary" onclick="eaMiniPrintShare()">🖨️ ส่งไปแอป PeriPage</button>' : ''}
-        <button type="button" class="rid-btn ${canShare ? '' : 'rid-primary'}" onclick="eaMiniPrintSave()">💾 บันทึกรูป</button>
+        ${hasBle() ? `<button type="button" class="rid-btn rid-primary" id="mpBtPrint" onclick="eaMiniPrintBt()">🔵 พิมพ์ตรง${btName() ? ` • ${esc(btName())}` : ' (บลูทูธ)'}</button>` : ''}
+        ${canShare ? `<button type="button" class="rid-btn ${hasBle() ? '' : 'rid-primary'}" onclick="eaMiniPrintShare()">📤 ส่งไปแอป PeriPage</button>` : ''}
+        <button type="button" class="rid-btn ${canShare || hasBle() ? '' : 'rid-primary'}" onclick="eaMiniPrintSave()">💾 บันทึกรูป</button>
       </div>
+      ${hasBle() ? `<div class="rid-hint">พิมพ์ตรง: ครั้งแรกเลือกเครื่อง PeriPage จากรายการ (เปิดบลูทูธ + ตำแหน่ง และ <b>ปิดแอป PeriPage ก่อน</b>) • ครั้งต่อไปกดพิมพ์ได้เลย ${btName() ? `<a href="#" onclick="eaMiniPrintBt(true);return false;">เปลี่ยนเครื่อง</a>` : ''}</div>` : ''}
       <div class="rid-hint">${canShare
         ? 'กด "ส่งไปแอป PeriPage" → เลือกแอป PeriPage → กดพิมพ์ • ใช้กระดาษม้วนต่อเนื่อง 57 มม. (สติ๊กเกอร์ 57×30 บิลยาวจะพิมพ์ข้ามดวง)'
         : 'เครื่องนี้ส่งรูปไปแอปโดยตรงไม่ได้ • บันทึกรูปแล้วเปิดในแอป PeriPage เพื่อพิมพ์ (แนะนำใช้จากแท็บเล็ต/มือถือ)'}</div>`;
     if (!dlg.open) dlg.showModal();
   }
+  function btPrintCurrent(choose) { if (cur?.canvas) return btPrint(cur.canvas, !!choose); }
   async function share() {
     if (!cur) return;
     try { await navigator.share({ files: [cur.file] }); }
@@ -261,7 +382,7 @@
 
   Object.assign(window, {
     eaMiniPrintBill: printBill, eaMiniPrintReservation: printReservation,
-    eaMiniPrintShare: share, eaMiniPrintSave: save,
+    eaMiniPrintShare: share, eaMiniPrintSave: save, eaMiniPrintBt: btPrintCurrent,
     eaDrawThermalBill: drawBill, eaDrawThermalReservation: drawReservation
   });
 })();

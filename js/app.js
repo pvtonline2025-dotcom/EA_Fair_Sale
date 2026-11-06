@@ -21786,7 +21786,7 @@ async function saveSettings(){
   const promptPayId = el("promptPayId")?.value.trim() || "";
   const shopTaxId = el("shopTaxId")?.value.trim() || "";
   const shopLine = el("shopLine")?.value.trim() || "";
-  const receiptFooterNote = el("receiptFooterNote")?.value.trim() || "ขอบคุณที่อุดหนุนสินค้า สามารถเปลี่ยนคืนสินค้าได้ภายใน 7 วัน";
+  const receiptFooterNote = el("receiptFooterNote")?.value.trim() || "*************************";
   const enableVat = Boolean(el("enableVatInput")?.checked);
   const vatRate = Number(el("vatRateInput")?.value || 7);
   const target = Number(el("targetInput")?.value || 5000);

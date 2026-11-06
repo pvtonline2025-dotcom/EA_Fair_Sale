@@ -20755,7 +20755,7 @@ function getBarcodePrintStyles(format) {
     <style>
       @page {
         size: ${String(format).startsWith('a4-grid') ? 'A4 portrait' : (format === 'shelf-tag' ? '70mm 40mm' : (format === 'thermal-42x30' ? '42mm 30mm' : '50mm 30mm'))};
-        margin: ${format === 'a4-grid-36' ? '5.5mm 16.5mm' : (format === 'a4-grid-24' ? '5mm 4mm' : '0')};
+        margin: ${format === 'a4-grid-36' ? '13.5mm 21mm' : (format === 'a4-grid-24' ? '5mm 4mm' : '0')};
       }
       * {
         box-sizing: border-box;
@@ -20957,15 +20957,16 @@ function getBarcodePrintStyles(format) {
 
       /* A4 4 คอลัมน์ × 9 แถว = 36 ดวง • ดวงละ 42×30mm พอดี (ระยะห่าง 3mm × 2mm, จัดกึ่งกลางแผ่น) */
       .barcode-a4-sheet.a4-4col {
-        width: 177mm; min-height: 0; height: 286mm; padding: 0; margin: 0 auto;
+        width: 168mm; min-height: 0; height: 270mm; padding: 0; margin: 0 auto;
         grid-template-columns: repeat(4, 42mm);
         grid-auto-rows: 30mm;
-        gap: 2mm 3mm;
+        gap: 0;                         /* วางติดกัน กรีดตามเส้นเอง */
         align-content: start;
+        outline: 0.2mm solid #94a3b8;
       }
       .barcode-a4-sheet.a4-4col .barcode-label-a4-cell {
-        width: 42mm; height: 30mm; max-height: 30mm; padding: 1.4mm 1.8mm 1.2mm; border-radius: 2px;
-        border: 0.3mm dashed #cbd5e1;
+        width: 42mm; height: 30mm; max-height: 30mm; padding: 1.4mm 1.8mm 1.2mm; border-radius: 0;
+        border: 0; box-shadow: inset -0.2mm -0.2mm 0 #94a3b8;   /* เส้นกรีดบางๆ */
       }
       .barcode-a4-sheet.a4-4col .lbl-shop { font-size: 5.5pt; }
       .barcode-a4-sheet.a4-4col .lbl-name { font-size: 7pt; line-height: 1.12; max-height: 2.24em;
@@ -21183,7 +21184,7 @@ function renderBarcodePrintModalContent() {
   const hasBarcode = Boolean(currentP && currentP.barcode && String(currentP.barcode).trim());
   const barcodeDisplayVal = hasBarcode ? String(currentP.barcode).trim() : String(currentP.product_code || '-');
   const batchList = getBatchPrintList();
-  const totalBatchLabels = batchList.reduce((acc, p) => acc + (barcodePrintState.batchType === 'by-stock' ? Math.max(1, Number(p.stock_qty) || 1) : 1), 0);
+  const totalBatchLabels = batchLabelItems(batchList).reduce((acc, it) => acc + it.qty, 0);
   const totalBatchA4Sheets = Math.ceil(totalBatchLabels / (barcodePrintState.format === 'a4-grid-36' ? 36 : 24)) || 1;
 
   body.innerHTML = `
@@ -21269,9 +21270,16 @@ function renderBarcodePrintModalContent() {
                 🏷️ 1 ดวง / รายการ (${batchList.length} ดวง)
               </button>
               <button type="button" class="btn ${barcodePrintState.batchType === 'by-stock' ? 'btn-primary' : 'btn-light'}" style="min-height:40px; font-size:12px; padding:6px;" onclick="setBarcodeBatchType('by-stock')">
-                📦 ตามสต็อกคงเหลือ (${totalBatchLabels} ดวง)
+                📦 ตามสต็อกคงเหลือ
               </button>
             </div>
+            <div class="bc-extra">
+              <span>เผื่อเสีย/ขาด</span>
+              ${[0, 1, 2, 3, 5].map(n => `<button type="button" class="barcode-chip-btn ${Number(barcodePrintState.batchExtra || 0) === n ? 'active' : ''}" onclick="setBarcodeBatchExtra(${n})">${n ? `+${n}` : 'ไม่เผื่อ'}</button>`).join('')}
+              <span>ดวง / สินค้า</span>
+            </div>
+            ${String(barcodePrintState.format).startsWith('a4-grid') ? `<label class="bc-fill"><input type="checkbox" ${barcodePrintState.batchFillPage ? 'checked' : ''} onchange="toggleBarcodeFillPage()"> พิมพ์เต็มแผ่น (ช่องว่างแผ่นสุดท้าย ใส่เป็นดวงสำรองให้)</label>` : ''}
+            <div class="bc-total">รวมพิมพ์ <b>${totalBatchLabels}</b> ดวง${String(barcodePrintState.format).startsWith('a4-grid') ? ` • ${Math.ceil(totalBatchLabels / (barcodePrintState.format === 'a4-grid-36' ? 36 : 24))} แผ่น A4` : ''}</div>
           </div>
         `}
 
@@ -21387,6 +21395,24 @@ function updateBarcodePreview() {
   }
 }
 
+// จำนวนดวงชุดรวม: 1 ดวง/ตามสต็อก + เผื่อเสีย (+N ดวงต่อสินค้า) + เติมให้เต็มแผ่น A4 สุดท้าย
+function batchLabelItems(list){
+  const extra = Math.max(0, Number(barcodePrintState.batchExtra) || 0);
+  const items = (list || []).map(p => ({
+    product: p,
+    qty: (barcodePrintState.batchType === "by-stock" ? Math.max(1, Number(p.stock_qty) || 1) : 1) + extra
+  }));
+  const per = barcodePrintState.format === "a4-grid-36" ? 36 : (barcodePrintState.format === "a4-grid-24" ? 24 : 0);
+  if (barcodePrintState.batchFillPage && per && items.length) {
+    const total = items.reduce((a, it) => a + it.qty, 0);
+    let left = (per - (total % per)) % per, k = 0;
+    while (left > 0) { items[k % items.length].qty += 1; left--; k++; }   // ดวงที่เหลือในแผ่นสุดท้าย แจกเป็นดวงสำรองทีละสินค้า
+  }
+  return items;
+}
+function setBarcodeBatchExtra(v){ barcodePrintState.batchExtra = Math.max(0, Math.min(50, parseInt(v, 10) || 0)); renderBarcodePrintModalContent(); }
+function toggleBarcodeFillPage(){ barcodePrintState.batchFillPage = !barcodePrintState.batchFillPage; renderBarcodePrintModalContent(); }
+
 // พิมพ์สติ๊กเกอร์บาร์โค้ดด้วยเครื่องพิมพ์เล็ก (57×30 มม.)
 function printBarcodeLabelsMini() {
   let items = [];
@@ -21395,7 +21421,7 @@ function printBarcodeLabelsMini() {
     if (!p) { toast("กรุณาเลือกสินค้า"); return; }
     items = [{ product: p, qty: barcodePrintState.quantity }];
   } else {
-    items = getBatchPrintList().map(p => ({ product: p, qty: barcodePrintState.batchType === "by-stock" ? Math.max(1, Number(p.stock_qty) || 1) : 1 }));
+    items = batchLabelItems(getBatchPrintList());
     if (!items.length) { toast("ไม่มีสินค้าในเงื่อนไขการพิมพ์ชุดรวม"); return; }
   }
   window.eaMiniPrintProductLabels?.(items);
@@ -21416,10 +21442,7 @@ function printBarcodeLabels() {
       toast("ไม่มีสินค้าในเงื่อนไขการพิมพ์ชุดรวม");
       return;
     }
-    itemsToPrint = list.map(p => ({
-      product: p,
-      qty: barcodePrintState.batchType === "by-stock" ? Math.max(1, Number(p.stock_qty) || 1) : 1
-    }));
+    itemsToPrint = batchLabelItems(list);
   }
 
   const printArea = el("barcodePrintArea");
@@ -21497,10 +21520,7 @@ function openBarcodePrintWindow() {
       toast("ไม่มีสินค้าในเงื่อนไขการพิมพ์ชุดรวม");
       return;
     }
-    itemsToPrint = list.map(p => ({
-      product: p,
-      qty: barcodePrintState.batchType === "by-stock" ? Math.max(1, Number(p.stock_qty) || 1) : 1
-    }));
+    itemsToPrint = batchLabelItems(list);
   }
 
   const fullHtml = buildAllBarcodeLabelsPrintHTML(itemsToPrint, barcodePrintState.format);
@@ -21971,7 +21991,7 @@ Object.assign(window,{
   clearExpenseSearch,calculateFinancials,openExpenseModal,closeExpenseModal,saveExpenseFromModal,
   deleteExpense,renderExpenses,exportExpensesExcel,exportExpensesCSV,printExpensesReport,
   showReceiptModal,closeReceiptModal,printReceipt,saveReceiptAsJPEG,toast,el,
-  openBarcodePrintModal,closeBarcodePrintModal,openBarcodePrintFromScanner,setBarcodeMode,setBarcodeFormat,setBarcodeQty,onBarcodeQtyChange,onBarcodeSearchInput,clearBarcodeSearch,onBarcodeProductSelect,toggleBarcodeOption,setBarcodeBatchType,toggleBarcodeBatchOnlyInStock,assignGeneratedBarcode,promptEditBarcode,printBarcodeLabels,openBarcodePrintWindow,downloadBarcodeImage,
+  openBarcodePrintModal,closeBarcodePrintModal,openBarcodePrintFromScanner,setBarcodeMode,setBarcodeFormat,setBarcodeQty,onBarcodeQtyChange,onBarcodeSearchInput,clearBarcodeSearch,onBarcodeProductSelect,toggleBarcodeOption,setBarcodeBatchType,setBarcodeBatchExtra,toggleBarcodeFillPage,batchLabelItems,toggleBarcodeBatchOnlyInStock,assignGeneratedBarcode,promptEditBarcode,printBarcodeLabels,openBarcodePrintWindow,downloadBarcodeImage,
   openLowStockPdfModal,updateLowStockModalContent,printLowStockSummaryPDF,copyLowStockSummaryText,setDashboardChartMode,exportRestockOrderPDF,downloadRestockOrderText,copyRestockOrderText,setRestockMultiplier,resetRestockOrder,updateRestockItemQty,receivePOItems,updatePOStatus,viewPODetailModal,selectProductForPOTimeline,saveSmartPODraft,setReplenishmentOption,updateSmartPODraftQty,setStockForecastUrgencyFilter,setStockForecastCatFilter,onStockForecastSearchInput,setLowStockSubTab,setPosFilter,setDashboardPeriod,onDashboardDateInputChange,applyDashboardCustomDate,updateProductModalBarcodePreview,generateAndSetProductModalBarcode,applyReportCustomDate,exportAccountingJournalExcel,exportAccountingJournalCSV,updateLiveReceiptPreview,buildReportBasketTab
 });
 function render(){

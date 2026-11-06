@@ -147,3 +147,21 @@ dialog.qrz-dialog::backdrop { background: rgba(2, 6, 23, .85); }
 .qrz-nav.prev { left: 10px; } .qrz-nav.next { right: 10px; }
 .cbx-bill.cbx-dep { border-left-color: #8b5cf6; }
 .cbx-tag.dep { padding: 1px 8px; border-radius: 4px; background: #8b5cf6; color: #fff; font-weight: 800; }
+
+/* หน้าต่างนับเงิน: สูงไม่เกินจอที่มองเห็น (ไม่โดนแถบล่าง/แป้นพิมพ์บัง) • จอแนวนอน แบ่ง 2 คอลัมน์ */
+dialog.cbx-dialog { max-height: calc(var(--vvh, 100dvh) - 16px) !important; }
+dialog.cbx-dialog .cbx-dlg-body { flex: 1 1 auto; min-height: 0; }
+dialog.cbx-dialog .cbx-dlg-foot { flex: none; }
+@media (min-width: 860px) {
+  dialog.cbx-dialog#cashCountDialog { width: min(96vw, 980px) !important; }
+  #cashCountDialog .cbx-denoms { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(5, auto); grid-auto-flow: column; gap: 6px 24px; }
+  #cashCountDialog .cbx-denom { grid-template-columns: 64px 44px auto 1fr; gap: 8px; }
+  #cashCountDialog .cbx-step button, #cashCountDialog .cbx-step input { height: 40px; }
+  #cashCountDialog .cbx-dlg-body { display: grid; grid-template-columns: 1fr; gap: 10px; }
+  #cashCountDialog .cbx-result { display: grid; grid-template-columns: repeat(3, auto); gap: 4px 24px; align-items: center; }
+  #cashCountDialog .cbx-result .cbx-line { gap: 10px; }
+}
+@media (max-height: 560px) {
+  #cashCountDialog .cbx-dlg-head, #cashCountDialog .cbx-dlg-foot { padding-top: 8px; padding-bottom: 8px; }
+  #cashCountDialog .cbx-step button, #cashCountDialog .cbx-step input { height: 36px; }
+}

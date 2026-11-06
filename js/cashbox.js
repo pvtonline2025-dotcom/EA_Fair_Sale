@@ -329,8 +329,16 @@
     }
     renderCountDialog();
     if (!dlg.open) dlg.showModal();
-    setTimeout(() => document.querySelector('#cashCountDialog input[data-d="1000"]')?.focus(), 60);
+    // ไม่โฟกัสช่องอัตโนมัติ (แท็บเล็ตจะเด้งแป้นพิมพ์/แถบล่างขึ้นมาบัง) • กด + / − ได้เลย
   }
+  // ความสูงจอที่มองเห็นจริง (หักแป้นพิมพ์/แถบล่างของแท็บเล็ต) → หน้าต่างนับเงินไม่โดนบัง
+  (function trackViewport() {
+    const set = () => { const h = window.visualViewport ? window.visualViewport.height : window.innerHeight; document.documentElement.style.setProperty('--vvh', `${Math.round(h)}px`); };
+    set();
+    window.visualViewport?.addEventListener('resize', set);
+    window.addEventListener('resize', set);
+    document.addEventListener('focusin', e => { if (e.target.closest?.('#cashCountDialog')) setTimeout(() => e.target.scrollIntoView({ block: 'center' }), 300); });
+  })();
   function countedTotal() { return r2(DENOMS.reduce((a, d) => a + d.v * (Number(countDraft[d.v]) || 0), 0)); }
   function renderCountDialog() {
     const dlg = document.getElementById('cashCountDialog'); if (!dlg) return;

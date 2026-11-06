@@ -191,9 +191,18 @@
   // ---------- หน้าตัวอย่าง + ส่งไปแอปเครื่องพิมพ์ ----------
   let cur = null;
   async function preview(cv, name, title) {
-    const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+    // JPEG พื้นขาวทึบ + ชื่อไฟล์ภาษาอังกฤษ (แอป PeriPage นำเข้า PNG/ชื่อไทยแล้วขึ้นหน้าว่าง)
+    const flat = document.createElement('canvas'); flat.width = cv.width; flat.height = cv.height;
+    const fx = flat.getContext('2d'); fx.fillStyle = '#ffffff'; fx.fillRect(0, 0, flat.width, flat.height); fx.drawImage(cv, 0, 0);
+    // ทำเป็นขาว-ดำล้วน (เครื่องพิมพ์ความร้อนพิมพ์สีเทาอ่อนไม่ออก)
+    try {
+      const im = fx.getImageData(0, 0, flat.width, flat.height), d = im.data;
+      for (let i = 0; i < d.length; i += 4) { const v = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) < 170 ? 0 : 255; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
+      fx.putImageData(im, 0, 0);
+    } catch (_) {}
+    const blob = await new Promise(res => flat.toBlob(res, 'image/jpeg', 0.95));
     if (cur?.url) URL.revokeObjectURL(cur.url);
-    const file = new File([blob], `${name}.png`, { type: 'image/png' });
+    const file = new File([blob], `${String(name).replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'receipt'}.jpg`, { type: 'image/jpeg' });
     cur = { blob, file, url: URL.createObjectURL(blob) };
     let dlg = document.getElementById('miniPrintDialog');
     if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'miniPrintDialog'; dlg.className = 'restock-img-dialog mini-print-dialog'; document.body.appendChild(dlg); }
@@ -228,13 +237,13 @@
     bill = (bill && bill.items) ? bill : st()?.lastBill;
     if (!bill) { toast('ยังไม่มีบิลล่าสุด'); return; }
     await fontsReady();
-    await preview(drawBill(bill), `ใบเสร็จ-${bill.saleNo || 'บิล'}`, `ใบเสร็จ ${bill.saleNo || ''}`);
+    await preview(drawBill(bill), `receipt-${bill.saleNo || Date.now()}`, `ใบเสร็จ ${bill.saleNo || ''}`);
   }
   async function printReservationInner(id) {
     const r = (window.eaReservations?.() || []).find(x => x.id === id);
     if (!r) { toast('ไม่พบใบจอง'); return; }
     await fontsReady();
-    await preview(drawReservation(r), `ใบจอง-${r.res_no}`, `ใบจอง ${r.res_no}`);
+    await preview(drawReservation(r), `booking-${r.res_no}`, `ใบจอง ${r.res_no}`);
   }
 
   // ปุ่มในหน้าต่าง "ขายสินค้าสำเร็จ"

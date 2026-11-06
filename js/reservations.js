@@ -187,6 +187,7 @@
             ${r.status === 'booked' ? `
               <button type="button" class="rsv-btn rsv-main" onclick="reservationPickup('${r.id}')">✅ ลูกค้ามารับ</button>
               <button type="button" class="rsv-btn" onclick="reservationSlip('${r.id}')">🧾 ใบรับมัดจำ</button>
+              <button type="button" class="rsv-btn" onclick="eaMiniPrintReservation('${r.id}')">🖨️ พิมพ์เครื่องเล็ก</button>
               <button type="button" class="rsv-btn" onclick="reservationStickers('${r.id}')">🏷️ สติ๊กเกอร์บาร์โค้ด</button>
               <button type="button" class="rsv-btn" onclick="openReservationForm('${r.id}')">แก้ไข</button>
               ${r.requisition_mode !== 'none' ? `<button type="button" class="rsv-btn" onclick="reservationToggleReq('${r.id}')">${r.requisitioned_at ? 'ยังไม่เบิก' : 'เบิกแล้ว'}</button>` : ''}
@@ -575,13 +576,34 @@
   }
 
   // ---------- สติ๊กเกอร์บาร์โค้ด (ติดม้วน/ของจอง) A4 4 คอลัมน์ ดวงละ 4.2×3 ซม. ----------
+  // เลือกจำนวนดวง + พิมพ์แบบ A4 (4.2×3) หรือเครื่องเล็ก (57×30)
   function reservationStickers(id) {
     const r = list.find(x => x.id === id); if (!r) return;
     const items = Array.isArray(r.items) ? r.items : [];
     const def = Math.max(1, Math.min(36, items.reduce((a, i) => a + Math.max(1, Math.ceil(Number(i.qty) || 1)), 0)));
-    const v = window.prompt(`พิมพ์สติ๊กเกอร์บาร์โค้ดใบจอง ${r.res_no} กี่ดวง? (ติดที่ม้วน/ของแต่ละชิ้น)`, String(def));
-    if (v === null) return;
-    const n = Math.max(1, Math.min(72, parseInt(String(v).replace(/\D/g, ''), 10) || def));
+    let dlg = document.getElementById('rsvStkDialog');
+    if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'rsvStkDialog'; dlg.className = 'rsv-stk-dialog'; document.body.appendChild(dlg); }
+    dlg.innerHTML = `
+      <div class="rsv-stk-head"><strong>🏷️ สติ๊กเกอร์บาร์โค้ด ${escapeHtml(r.res_no)}</strong><button type="button" class="rsv-x" onclick="document.getElementById('rsvStkDialog').close()" aria-label="ปิด">✕</button></div>
+      <div class="rsv-stk-body">
+        <label>จำนวนดวง (ติดที่ม้วน/ของแต่ละชิ้น)</label>
+        <input id="rsvStkN" type="number" inputmode="numeric" min="1" max="72" value="${def}">
+        <div class="rsv-stk-act">
+          ${window.eaMiniPrintReservationLabels ? `<button type="button" class="rsv-btn rsv-main" onclick="rsvStkGo('${r.id}','mini')">🖨️ เครื่องเล็ก 57×30 มม.</button>` : ''}
+          <button type="button" class="rsv-btn" onclick="rsvStkGo('${r.id}','a4')">📄 กระดาษ A4 (ดวง 4.2×3 ซม.)</button>
+        </div>
+      </div>`;
+    if (!dlg.open) dlg.showModal();
+  }
+  function rsvStkGo(id, mode) {
+    const n = Math.max(1, Math.min(72, parseInt(document.getElementById('rsvStkN')?.value, 10) || 1));
+    document.getElementById('rsvStkDialog')?.close();
+    if (mode === 'mini') window.eaMiniPrintReservationLabels?.(id, n);
+    else reservationStickersA4(id, n);
+  }
+  function reservationStickersA4(id, n) {
+    const r = list.find(x => x.id === id); if (!r) return;
+    const items = Array.isArray(r.items) ? r.items : [];
     // ไล่ชื่อสินค้าให้แต่ละดวง ตามจำนวนชิ้น
     const names = [];
     items.forEach(i => { const c = Math.max(1, Math.ceil(Number(i.qty) || 1)); for (let k = 0; k < c; k++) names.push(i.name); });
@@ -822,7 +844,7 @@
     rsvTab, rsvSearch, rsvField, rsvSet, rsvQuery, rsvAdd, rsvAddFirst, rsvAddCustom, rsvText,
     rsvPaySet, rsvPayClose, rsvPayConfirm, rsvQty, rsvLine, rsvRemove, rsvDepPct,
     reservationSlip, rsvSlipShare, rsvSlipSave, rsvSlipCopy, reservationPickup, reservationPickupCancel,
-    reservationCancel, reservationToggleReq, reservationStickers, rsvScanPickup,
+    reservationCancel, reservationToggleReq, reservationStickers, rsvStkGo, rsvScanPickup,
     eaReservationScan: reservationScan, eaReservationBarcode: barcodeText, eaDrawReservationBarcode: drawBarcode, eaOpenReservationByNo: openByNo,
     eaReservations: all, eaReservationRequisitions: requisitionList, eaMarkReservationsRequisitioned: markRequisitioned,
     eaReservationMoney: moneyToday, eaReservationPosBanner: posBanner, eaReservationsLoad: load

@@ -21345,6 +21345,7 @@ function renderBarcodePrintModalContent() {
           <button type="button" class="btn btn-primary" style="flex:1; min-height:46px; background:linear-gradient(135deg, #0284c7 0%, #0369a1 100%); font-weight:800;" onclick="printBarcodeLabels()">
             🖨️ สั่งพิมพ์ฉลาก (${barcodePrintState.mode === 'single' ? barcodePrintState.quantity : totalBatchLabels} ดวง)
           </button>
+          ${window.eaMiniPrintProductLabels ? `<button type="button" class="btn btn-light" style="min-height:46px; font-weight:800;" onclick="printBarcodeLabelsMini()" title="พิมพ์สติ๊กเกอร์ 57×30 มม. ด้วยเครื่องพิมพ์เล็ก (PeriPage)">🖨️ เครื่องเล็ก 57×30</button>` : ''}
           <button type="button" class="btn btn-light" style="min-height:46px;" onclick="openBarcodePrintWindow()" title="เปิดในหน้าต่างใหม่ / สั่งพิมพ์ / บันทึก PDF">
             📄 หน้าต่างพิมพ์ / PDF
           </button>
@@ -21383,6 +21384,20 @@ function updateBarcodePreview() {
   if (wrap && currentP) {
     wrap.innerHTML = renderSingleBarcodeLabelHTML(currentP, barcodePrintState.format, true);
   }
+}
+
+// พิมพ์สติ๊กเกอร์บาร์โค้ดด้วยเครื่องพิมพ์เล็ก (57×30 มม.)
+function printBarcodeLabelsMini() {
+  let items = [];
+  if (barcodePrintState.mode === "single") {
+    const p = state.products.find(x => x.id === barcodePrintState.productId) || state.products[0];
+    if (!p) { toast("กรุณาเลือกสินค้า"); return; }
+    items = [{ product: p, qty: barcodePrintState.quantity }];
+  } else {
+    items = getBatchPrintList().map(p => ({ product: p, qty: barcodePrintState.batchType === "by-stock" ? Math.max(1, Number(p.stock_qty) || 1) : 1 }));
+    if (!items.length) { toast("ไม่มีสินค้าในเงื่อนไขการพิมพ์ชุดรวม"); return; }
+  }
+  window.eaMiniPrintProductLabels?.(items);
 }
 
 function printBarcodeLabels() {

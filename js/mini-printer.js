@@ -308,7 +308,7 @@
     } finally { bt.busy = false; setBtn(bt.nextChoose ? '🔵 แตะเพื่อเลือกเครื่องพิมพ์' : `🔵 พิมพ์ตรง${btName() ? ` • ${btName()}` : ' (บลูทูธ)'}`); }
   }
 
-  async function preview(cv, name, title) {
+  async function preview(cv, name, title, labels) {
     // JPEG พื้นขาวทึบ + ชื่อไฟล์ภาษาอังกฤษ (แอป PeriPage นำเข้า PNG/ชื่อไทยแล้วขึ้นหน้าว่าง)
     const flat = document.createElement('canvas'); flat.width = cv.width; flat.height = cv.height;
     const fx = flat.getContext('2d'); fx.fillStyle = '#ffffff'; fx.fillRect(0, 0, flat.width, flat.height); fx.drawImage(cv, 0, 0);
@@ -334,6 +334,7 @@
         ${canShare ? `<button type="button" class="rid-btn ${hasBle() ? '' : 'rid-primary'}" onclick="eaMiniPrintShare()">📤 ส่งไปแอป PeriPage</button>` : ''}
         <button type="button" class="rid-btn ${canShare || hasBle() ? '' : 'rid-primary'}" onclick="eaMiniPrintSave()">💾 บันทึกรูป</button>
       </div>
+      ${labels ? `<div class="rid-hint mp-gap">ใช้สติ๊กเกอร์ 57×30 มม. • วางกระดาษให้ดวงแรกอยู่ที่หัวพิมพ์ • ระยะห่างระหว่างดวง <input type="number" min="0" max="10" step="0.5" value="${gapMm()}" onchange="eaMiniLabelGap(this.value)"> มม. (ถ้าพิมพ์เลื่อนลงทีละนิด ให้ลด • เลื่อนขึ้น ให้เพิ่ม)</div>` : ''}
       ${hasBle() ? `<div class="rid-hint">พิมพ์ตรง: ครั้งแรกเลือกเครื่อง PeriPage จากรายการ (เปิดบลูทูธ + ตำแหน่ง และ <b>ปิดแอป PeriPage ก่อน</b>) • ครั้งต่อไปกดพิมพ์ได้เลย ${btName() ? `<a href="#" onclick="eaMiniPrintBt(true);return false;">เปลี่ยนเครื่อง</a>` : ''}</div>` : ''}
       <div class="rid-hint">${canShare
         ? 'กด "ส่งไปแอป PeriPage" → เลือกแอป PeriPage → กดพิมพ์ • ใช้กระดาษม้วนต่อเนื่อง 57 มม. (สติ๊กเกอร์ 57×30 บิลยาวจะพิมพ์ข้ามดวง)'
@@ -367,7 +368,107 @@
     await preview(drawReservation(r), `booking-${r.res_no}`, `ใบจอง ${r.res_no}`);
   }
 
-  // ปุ่มในหน้าต่าง "ขายสินค้าสำเร็จ"
+  // =========================================================
+  // สติ๊กเกอร์บาร์โค้ด 57×30 มม. (พื้นที่พิมพ์ 48×30 มม. = 384×240 จุด)
+  // ต่อกันเป็นแถบยาว เว้นช่องว่างระหว่างดวงตามที่ตั้งไว้ (ค่าเริ่มต้น 2 มม.)
+  // =========================================================
+  const DOT = 8;                               // 8 จุด = 1 มม. (203 dpi)
+  const LBL_H = 30 * DOT;
+  const GAP_KEY = 'ea_label_gap_mm';
+  const gapMm = () => { let raw = null; try { raw = localStorage.getItem(GAP_KEY); } catch (_) {} const v = Number(raw); return raw !== null && raw !== '' && v >= 0 && v <= 10 ? v : 2; };
+  function fitText(ctx, text, maxW, size, bold, minSize) {
+    let sz = size;
+    do { ctx.font = `${bold ? 800 : 500} ${sz}px ${font()}`; if (ctx.measureText(text).width <= maxW) break; sz -= 1; } while (sz > (minSize || 14));
+    let t = String(text || '');
+    while (ctx.measureText(t).width > maxW && t.length > 1) t = t.slice(0, -2) + '…';
+    return t;
+  }
+  function wrap2(ctx, text, maxW) {
+    const out = []; let cur = '';
+    for (const ch of Array.from(String(text || ''))) { if (ctx.measureText(cur + ch).width > maxW && cur) { out.push(cur); cur = ch; if (out.length === 2) break; } else cur += ch; }
+    if (out.length < 2 && cur) out.push(cur);
+    if (out.length === 2 && Array.from(String(text)).join('').length > out.join('').length) { let l = out[1]; while (ctx.measureText(l + '…').width > maxW && l.length > 1) l = l.slice(0, -1); out[1] = l + '…'; }
+    return out;
+  }
+  function stickerCanvas(o) {
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = LBL_H;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, LBL_H); ctx.fillStyle = '#000'; ctx.textBaseline = 'alphabetic';
+    const P = 10, inner = W - P * 2;
+    let y = 6;
+    if (o.tag) {           // แถบดำ "ของจอง" + ชื่อลูกค้า
+      ctx.font = `800 20px ${font()}`; const tw = ctx.measureText(o.tag).width + 14;
+      ctx.fillRect(P, y, tw, 28); ctx.fillStyle = '#fff'; ctx.fillText(o.tag, P + 7, y + 21); ctx.fillStyle = '#000';
+      const t = fitText(ctx, o.title, inner - tw - 8, 26, true, 18); ctx.fillText(t, P + tw + 8, y + 23);
+      y += 34;
+      ctx.font = `600 20px ${font()}`;
+      wrap2(ctx, o.sub || '', inner).slice(0, 1).forEach(l => { ctx.fillText(l, P, y + 18); y += 22; });
+    } else {
+      if (o.top) { ctx.font = `600 16px ${font()}`; ctx.textAlign = 'center'; ctx.fillText(fitText(ctx, o.top, inner, 16, false, 12), W / 2, y + 14); ctx.textAlign = 'left'; y += 18; }
+      ctx.font = `800 23px ${font()}`;
+      const lines = wrap2(ctx, o.title, inner);
+      lines.forEach(l => { ctx.textAlign = 'center'; ctx.fillText(l, W / 2, y + 21); ctx.textAlign = 'left'; y += 25; });
+      if (lines.length < 2) y += 4;
+    }
+    // บาร์โค้ด
+    const bottomH = 26, bcTop = y + 4, bcH = Math.max(50, LBL_H - bcTop - bottomH - (o.code ? 18 : 2));
+    const okBc = window.eaDrawReservationBarcode?.(ctx, o.barcode, 0, bcTop, W, bcH);
+    ctx.fillStyle = '#000';
+    let by = bcTop + bcH;
+    if (o.code) { ctx.font = `600 16px ui-monospace, monospace`; ctx.textAlign = 'center'; ctx.fillText(o.code, W / 2, by + 15); ctx.textAlign = 'left'; by += 18; }
+    if (!okBc) { ctx.font = `800 26px ui-monospace, monospace`; ctx.textAlign = 'center'; ctx.fillText(o.barcode, W / 2, bcTop + bcH / 2); ctx.textAlign = 'left'; }
+    // แถวล่าง
+    ctx.font = `800 20px ${font()}`;
+    if (o.left) ctx.fillText(fitText(ctx, o.left, inner * 0.62, 20, true, 14), P, LBL_H - 7);
+    if (o.right) { ctx.textAlign = 'right'; ctx.fillText(fitText(ctx, o.right, inner * 0.5, o.rightBig ? 26 : 20, true, 14), W - P, LBL_H - 6); ctx.textAlign = 'left'; }
+    return cv;
+  }
+  function stripCanvas(stickers) {
+    const gap = Math.round(gapMm() * DOT);
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = stickers.length * LBL_H + (stickers.length - 1) * gap;
+    const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, cv.height);
+    stickers.forEach((o, i) => ctx.drawImage(stickerCanvas(o), 0, i * (LBL_H + gap)));
+    return cv;
+  }
+  let stickerJob = null;
+  async function printStickers(stickers, name, title) {
+    if (!stickers.length) { toast('ไม่มีสติ๊กเกอร์ให้พิมพ์'); return; }
+    if (stickers.length > 200) { toast('พิมพ์ได้ครั้งละไม่เกิน 200 ดวง'); stickers = stickers.slice(0, 200); }
+    stickerJob = { stickers, name, title };
+    await fontsReady();
+    await preview(stripCanvas(stickers), name, `${title} • ${stickers.length} ดวง (57×30 มม.)`, true);
+  }
+  function setGap(v) {
+    const n = Math.max(0, Math.min(10, Number(v)));
+    try { localStorage.setItem(GAP_KEY, String(isNaN(n) ? 2 : n)); } catch (_) {}
+    if (stickerJob) run(() => printStickers(stickerJob.stickers, stickerJob.name, stickerJob.title));
+  }
+  // สินค้า: [{product, qty}]
+  function productStickers(items) {
+    const shop = 'เอิร์นนี่ แอดวานซ์';   // หัวสติ๊กเกอร์ (เหมือนหัวกระดาษใบเสร็จ)
+    const out = [];
+    for (const it of items) {
+      const p = it.product; const n = Math.max(1, Math.min(500, Number(it.qty) || 1));
+      const code = String(p.barcode || p.product_code || '000000').trim();
+      for (let k = 0; k < n; k++) out.push({ top: shop, title: p.product_name, barcode: code, code, left: p.product_code || '', right: `฿${money(p.sale_price)}`, rightBig: true });
+    }
+    return out;
+  }
+  function printProductStickers(items, title) { return run(() => printStickers(productStickers(items), `labels-${Date.now()}`, title || 'สติ๊กเกอร์บาร์โค้ดสินค้า')); }
+  // ใบจอง: ดวงละชิ้น
+  function printReservationStickers(id, n) {
+    return run(async () => {
+      const r = (window.eaReservations?.() || []).find(x => x.id === id); if (!r) { toast('ไม่พบใบจอง'); return; }
+      const names = []; (r.items || []).forEach(i => { const c = Math.max(1, Math.ceil(Number(i.qty) || 1)); for (let k = 0; k < c; k++) names.push(i.name); });
+      const total = Math.max(1, Math.min(200, Number(n) || names.length || 1));
+      const pd = new Date(String(r.pickup_date).slice(0, 10) + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+      const bc = window.eaReservationBarcode?.(r) || String(r.res_no).replace(/-/g, '');
+      const list = Array.from({ length: total }, (_, k) => ({ tag: 'ของจอง', title: r.customer_name, sub: names[k % (names.length || 1)] || '', barcode: bc, code: r.res_no, left: `รับ ${pd}`, right: total > 1 ? `${k + 1}/${total}` : '' }));
+      await printStickers(list, `booking-label-${r.res_no}`, `สติ๊กเกอร์ใบจอง ${r.res_no}`);
+    });
+  }
+
+  // ปุ่มในหน้าต่าง "ขายสินค้าสำเร็จ\"
   function addReceiptButton() {
     const row = document.querySelector('#receiptDialog .receipt-action-row');
     if (!row || row.querySelector('.mini-print-btn')) return;
@@ -383,6 +484,7 @@
   Object.assign(window, {
     eaMiniPrintBill: printBill, eaMiniPrintReservation: printReservation,
     eaMiniPrintShare: share, eaMiniPrintSave: save, eaMiniPrintBt: btPrintCurrent,
+    eaMiniPrintProductLabels: printProductStickers, eaMiniPrintReservationLabels: printReservationStickers, eaMiniLabelGap: setGap,
     eaDrawThermalBill: drawBill, eaDrawThermalReservation: drawReservation
   });
 })();

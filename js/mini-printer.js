@@ -13,7 +13,22 @@
   const money = n => Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const qtyTxt = n => { const v = Number(n || 0); return Number.isInteger(v) ? String(v) : v.toLocaleString('th-TH', { maximumFractionDigits: 3 }); };
   const isQr = pm => ['promptpay', 'qr', 'transfer'].includes(String(pm || '').toLowerCase());
-  const toast = (m, ms) => (typeof window.toast === 'function' ? window.toast(m, ms) : console.log(m));
+  // ข้อความแจ้ง: ถ้ามีหน้าต่างซ้อนอยู่ (toast จะถูกบังมองไม่เห็น) → แสดงเป็นกล่องเตือนแทน
+  const toast = (m, ms) => {
+    if (document.querySelector('dialog[open]') && !document.getElementById('miniPrintDialog')?.open) { try { window.alert(m); } catch (_) {} return; }
+    return typeof window.toast === 'function' ? window.toast(m, ms) : console.log(m);
+  };
+  // รอฟอนต์ไม่เกิน 1.5 วินาที (เน็ตงานแฟร์ช้า โหลดฟอนต์ไม่เสร็จ → เดิมกดแล้วเงียบ)
+  const fontsReady = () => Promise.race([Promise.resolve(document.fonts?.ready).catch(() => {}), new Promise(r => setTimeout(r, 1500))]);
+  let busy = false;
+  async function run(fn) {
+    if (busy) return; busy = true;
+    const btns = [...document.querySelectorAll('.mini-print-btn, .ps-done-print, [onclick^="eaMiniPrint"]')];
+    btns.forEach(b => { b.dataset.t = b.textContent; b.textContent = 'กำลังสร้างรูป...'; b.disabled = true; });
+    try { await fn(); }
+    catch (e) { console.error('[mini-printer]', e); try { window.alert(`สร้างรูปใบเสร็จไม่สำเร็จ: ${e?.message || e}`); } catch (_) {} }
+    finally { busy = false; btns.forEach(b => { if (b.dataset.t) b.textContent = b.dataset.t; b.disabled = false; }); }
+  }
   const font = () => (window.getAppFontStack?.() || '"Sarabun","Noto Sans Thai",sans-serif');
 
   // ---------- ตัววาดแบบเรียงบรรทัด (กว้างคงที่ สูงตามเนื้อหา) ----------
@@ -207,16 +222,18 @@
     document.body.appendChild(a); a.click(); a.remove(); toast('💾 บันทึกรูปแล้ว • เปิดแอป PeriPage แล้วเลือกรูปนี้เพื่อพิมพ์', 4000);
   }
 
-  async function printBill(bill) {
-    bill = bill || st()?.lastBill;
+  function printBill(bill) { return run(() => printBillInner(bill)); }
+  function printReservation(id) { return run(() => printReservationInner(id)); }
+  async function printBillInner(bill) {
+    bill = (bill && bill.items) ? bill : st()?.lastBill;
     if (!bill) { toast('ยังไม่มีบิลล่าสุด'); return; }
-    try { await document.fonts?.ready; } catch (_) {}
+    await fontsReady();
     await preview(drawBill(bill), `ใบเสร็จ-${bill.saleNo || 'บิล'}`, `ใบเสร็จ ${bill.saleNo || ''}`);
   }
-  async function printReservation(id) {
+  async function printReservationInner(id) {
     const r = (window.eaReservations?.() || []).find(x => x.id === id);
     if (!r) { toast('ไม่พบใบจอง'); return; }
-    try { await document.fonts?.ready; } catch (_) {}
+    await fontsReady();
     await preview(drawReservation(r), `ใบจอง-${r.res_no}`, `ใบจอง ${r.res_no}`);
   }
 
@@ -228,6 +245,7 @@
     b.type = 'button'; b.className = 'btn btn-secondary mini-print-btn';
     b.textContent = '🧾 พิมพ์เครื่องเล็ก';
     b.onclick = () => printBill();
+    b.setAttribute('data-mini', '1');
     row.appendChild(b);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', addReceiptButton); else addReceiptButton();

@@ -497,6 +497,11 @@
   }
   // ส่ง/บันทึกใบเบิกแล้ว → ทำเครื่องหมายว่าของจองเบิกแล้ว (ไม่ขึ้นซ้ำวันถัดไป)
   function markResvSent() {
+    // เก็บใบเบิกที่ส่งแล้ว ไว้ใช้ "รับของตามใบเบิก" (ครั้งเดียวต่อการเปิดรูป)
+    if (restockImg && !restockImg.reqSaved && restockImg.list?.length) {
+      restockImg.reqSaved = true;
+      window.eaSaveRequisition?.(restockImg.list.map(r => ({ pid: r.id, name: r.name, unit: r.unit, qty: Number(r.qty) })), getRestockNote());
+    }
     const ids = restockImg?.resIds || [];
     if (!ids.length || restockImg.resMarked) return;
     restockImg.resMarked = true;

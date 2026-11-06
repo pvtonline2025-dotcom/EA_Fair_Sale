@@ -6377,6 +6377,7 @@ function renderLowStock(){
     ${connectionNotice()}
 
     <!-- ใบเบิกสินค้าวันนี้ (แก้จำนวนได้ / ส่งเป็นรูปเข้า LINE) -->
+    ${window.eaOpenReceive ? `<div class="rqv-entry"><div><b>📥 ของมาถึงแล้ว?</b> รับเข้าสต็อกตามใบเบิกที่ส่งไป (แก้จำนวนได้)</div><button type="button" class="btn btn-primary" onclick="eaOpenReceive()">รับของตามใบเบิก${window.eaPendingReqCount() ? ` (${window.eaPendingReqCount()} ใบรอรับ)` : ''}</button></div>` : ''}
     <div class="lowstock-restock-wrap hub">${typeof window.renderHubRestockPanel === "function" ? window.renderHubRestockPanel() : ""}</div>
 
     <div style="background:rgba(15,23,42,0.85); border:1px solid #334155; border-radius:12px; padding:12px 16px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
@@ -12228,6 +12229,7 @@ function renderStock(){
         <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
           <button type="button" class="btn btn-light stock-tool-btn" onclick="openBarcodePrintModal()" title="พิมพ์บาร์โค้ด (เลือกสินค้าเดี่ยว หรือพิมพ์ทั้งหมดตามสต็อก)">🖨️ พิมพ์บาร์โค้ด</button>
           <button type="button" class="btn btn-light stock-tool-btn" onclick="openStockAuditModal()" title="ตรวจนับสต็อกจริงและปรับยอด">🔍 ตรวจนับ</button>
+          ${window.eaOpenReceive ? `<button type="button" class="btn btn-light stock-tool-btn" onclick="eaOpenReceive()" title="รับของเข้าสต็อกตามใบเบิกที่ส่งไป (แก้จำนวนได้)">📥 รับตามใบเบิก${window.eaPendingReqCount && window.eaPendingReqCount() ? ` <span class="stock-tool-count">${window.eaPendingReqCount()}</span>` : ''}</button>` : ''}
           ${(lowCount + outCount) > 0 ? `<button type="button" class="btn btn-light stock-tool-btn" onclick="go('lowStock')" title="สินค้าต่ำกว่าเกณฑ์ ${(lowCount + outCount)} รายการ • ทำใบเบิก">📦 ใบเบิก <span class="stock-tool-count">${lowCount + outCount}</span></button>` : ''}
           <button type="button" class="btn btn-primary" onclick="openProductModal()">${G_ICONS.plus} เพิ่มสินค้า</button>
         </div>

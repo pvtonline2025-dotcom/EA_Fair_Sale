@@ -92,6 +92,24 @@
         if (ok) y += h + 4;
         return !!ok;
       },
+      // ลายปิดท้าย ★ ★ ★ ★ ★ (วาดเป็นรูปดาว ไม่ต้องพึ่งฟอนต์)
+      ornament() {
+        y += 22;
+        const n = 5, R = 11, r = 4.6, gap = 36, cx0 = W / 2 - gap * (n - 1) / 2;
+        ctx.save(); ctx.fillStyle = '#000';
+        for (let k = 0; k < n; k++) {
+          const cx = cx0 + k * gap;
+          ctx.beginPath();
+          for (let i = 0; i < 10; i++) {
+            const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r : R;
+            const px = cx + rr * Math.cos(a), py = y + rr * Math.sin(a);
+            i ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+          }
+          ctx.closePath(); ctx.fill();
+        }
+        ctx.restore();
+        y += 14;
+      },
       space(h = 10) { y += h; },
       finish() {
         y += 40;   // เผื่อขอบตัดกระดาษ
@@ -147,9 +165,10 @@
       } else d.text('ชำระด้วยเงินสด', { size: 22 });
     } else d.text('ชำระด้วยการโอน / QR', { size: 22 });
     d.hr();
-    const foot = st()?.settings?.receiptFooterNote;
-    if (foot) d.text(foot, { size: 20, align: 'center' });
-    d.text('ขอบคุณที่อุดหนุนค่ะ', { size: 24, bold: true, align: 'center' });
+    // ท้ายบิล: ขอบคุณ + ดาว 5 ดวง
+    d.space(4);
+    d.text('ขอบคุณที่อุดหนุนค่ะ', { size: 26, bold: true, align: 'center', after: 0 });
+    d.ornament();
     return d.finish();
   }
 

@@ -13507,8 +13507,7 @@ function openStockAuditModal(){
   const hasCounting = state.auditTouched && Object.keys(state.auditTouched).length > 0;
   initPhysicalAuditState(!hasCounting); // ถ้ากำลังนับค้างอยู่ ไม่ล้างยอดนับ
   state.auditSubTab = "count";
-  go("audit");
-  enterAuditFullscreen();
+  go("audit");   // เปิดแบบปกติ (มีแถบเมนูล่าง) • อยากเต็มจอ กดปุ่ม "เต็มจอ" เอง
 }
 
 function toggleAuditBulkMode(forceMode){
@@ -21671,7 +21670,7 @@ function renderSettings(){
         </div>
         <div class="field" style="grid-column: span 2;">
           <label>ข้อความขอบคุณท้ายสลิป</label>
-          <textarea id="receiptFooterNote" rows="2" style="background:#0f172a; color:#f8fafc; border:1px solid #334155; border-radius:8px; padding:8px 12px; font-size:13px; font-family:inherit;" oninput="updateLiveReceiptPreview()">${escapeHtml(state.settings?.receiptFooterNote || '*******************************')}</textarea>
+          <textarea id="receiptFooterNote" rows="2" style="background:#0f172a; color:#f8fafc; border:1px solid #334155; border-radius:8px; padding:8px 12px; font-size:13px; font-family:inherit;" oninput="updateLiveReceiptPreview()">${escapeHtml(state.settings?.receiptFooterNote || 'ขอบคุณที่อุดหนุนสินค้า สามารถเปลี่ยนคืนสินค้าได้ภายใน 7 วัน')}</textarea>
         </div>
         <div class="field">
           <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:700; color:#f8fafc; margin-top:8px;">
@@ -21786,7 +21785,7 @@ async function saveSettings(){
   const promptPayId = el("promptPayId")?.value.trim() || "";
   const shopTaxId = el("shopTaxId")?.value.trim() || "";
   const shopLine = el("shopLine")?.value.trim() || "";
-  const receiptFooterNote = el("receiptFooterNote")?.value.trim() || "*************************";
+  const receiptFooterNote = el("receiptFooterNote")?.value.trim() || "ขอบคุณที่อุดหนุนสินค้า สามารถเปลี่ยนคืนสินค้าได้ภายใน 7 วัน";
   const enableVat = Boolean(el("enableVatInput")?.checked);
   const vatRate = Number(el("vatRateInput")?.value || 7);
   const target = Number(el("targetInput")?.value || 5000);

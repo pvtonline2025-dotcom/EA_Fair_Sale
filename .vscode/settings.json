@@ -28,5 +28,11 @@
         "titleBar.inactiveBackground": "#00331c99",
         "titleBar.inactiveForeground": "#e7e7e799"
     },
-    "peacock.color": "#00331c"
+    "peacock.color": "#00331c",
+    "folder-color.pathColors": [
+        {
+            "folderPath": "Ea_Fair_Sale\\css\\",
+            "color": "foldercolorizer.color_ffd787"
+        }
+    ]
 }

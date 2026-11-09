@@ -9,6 +9,7 @@
   <meta property="og:title" content="EA Fair Sale - ระบบ POS และจัดการสต็อกสินค้า">
   <meta property="og:description" content="ระบบจัดการร้านค้า POS และสต็อกสินค้า PWA (EA Fair Sale) รองรับการขายหน้าร้าน พิมพ์บาร์โค้ด และการทำงานออฟไลน์">
   <link rel="icon" type="image/png" href="assets/icons/logo-192.png">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="EA Fair Sale">
@@ -52,6 +53,7 @@
   <link rel="stylesheet" href="css/light-clean.css">
   <link rel="stylesheet" href="css/clean.css">
   <link rel="stylesheet" href="css/toast-popup.css">
+  <link rel="stylesheet" href="css/phone-scan-clean.css">
   <style id="ea-splash-style">
     #eaSplash{position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
       background:#14080b;color:#fff;
@@ -109,7 +111,7 @@
               <path d="M15 18l-6-6 6-6"/>
             </svg>
           </button>
-          <div class="app-logo">EA</div>
+          <div class="app-logo"><img src="assets/icons/app-emblem.png" alt="EA Fair Sale" width="44" height="44" decoding="async"></div>
           <div class="appbar-title-wrap">
             <h1 id="pageTitle">MENU</h1>
             <p id="pageSubtitle">EA Fair Sale</p>
@@ -750,7 +752,7 @@
         <div id="psCamMsg" class="ps-cam-msg">กำลังเปิดกล้อง...</div>
       </div>
 
-      <button type="button" id="psManualToggle" class="ps-manual-toggle" onclick="togglePhoneManual(true)">⌨️ สแกนไม่ติด? กดพิมพ์รหัส / ชื่อสินค้า</button>
+      <button type="button" id="psManualToggle" class="ps-manual-toggle" onclick="togglePhoneManual(true)">🔍 พิมพ์บาร์โค้ด หรือค้นหาชื่อสินค้า</button>
       <form id="psManualForm" class="ps-manual" onsubmit="event.preventDefault(); phoneScanManual();" hidden>
         <input id="psManualInput" type="search" enterkeyhint="search" autocomplete="off"
                placeholder="พิมพ์บาร์โค้ด / ชื่อสินค้า" oninput="phoneScanSearchInput(this.value)">

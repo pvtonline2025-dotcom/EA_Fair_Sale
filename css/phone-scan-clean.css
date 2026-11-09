@@ -1,0 +1,157 @@
+/* =========================================================
+   Phone scan screen — clean, calm restyle
+   (visual only; overrides phone-scan.css + global clean.css rules)
+   ========================================================= */
+#phoneScanDialog{
+  --ps-bg:#0e131b; --ps-surface:#171e29; --ps-surface-2:#212a38; --ps-border:rgba(255,255,255,.07);
+  --ps-text:#eef2f7; --ps-sub:#8d99aa; --ps-ok:#16a34a; --ps-ok-strong:#15803d; --ps-ok-soft:rgba(34,197,94,.14);
+  --ps-shadow:0 1px 2px rgba(0,0,0,.28); --ps-chip:rgba(56,189,248,.12); --ps-link:#7dd3fc;
+  --ps-err-bg:rgba(239,68,68,.12); --ps-err-fg:#fca5a5; --ps-ring:rgba(255,255,255,.10);
+}
+[data-color-mode="light"] #phoneScanDialog{
+  --ps-bg:#f3f5f8; --ps-surface:#ffffff; --ps-surface-2:#edf0f4; --ps-border:#e5e8ee;
+  --ps-text:#111827; --ps-sub:#6b7280; --ps-ok-soft:#dcfce7;
+  --ps-shadow:0 1px 2px rgba(16,24,40,.06),0 3px 10px rgba(16,24,40,.05);
+  --ps-chip:#e0f2fe; --ps-link:#0369a1; --ps-err-bg:#fef2f2; --ps-err-fg:#dc2626; --ps-ring:#dfe3ea;
+}
+html:not(#_p):not(#_q) body #phoneScanDialog{ background:var(--ps-bg) !important; color:var(--ps-text); }
+html:not(#_p):not(#_q) body #phoneScanDialog :is(button,input,select){ outline:none; }
+html:not(#_p):not(#_q) body #phoneScanDialog :is(button,input,select):focus{ outline:none !important; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-tally:is(:focus,:focus-visible){ box-shadow:none !important; border:0 !important; outline:none !important; }
+
+/* ---------- Header ---------- */
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-head{ padding:12px 16px 10px; gap:10px; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-tally{ border:0 !important; background:transparent !important; box-shadow:none !important; padding:0 2px !important; min-height:44px; gap:1px; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-tally-name{ font-size:12.5px; font-weight:700; letter-spacing:.5px; color:var(--ps-sub); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-tally-line{ font-size:17px; font-weight:800; color:var(--ps-text); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-icon-btn{ width:44px; height:44px; flex:0 0 44px; border:0 !important; border-radius:50% !important;
+  background:var(--ps-surface) !important; color:var(--ps-text) !important; box-shadow:var(--ps-shadow); font-size:18px; }
+
+/* ---------- Camera ---------- */
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-camera{ margin:0 16px; height:30vh; height:30dvh; min-height:190px; border:0 !important; border-radius:24px !important;
+  background:#05070a; box-shadow:0 0 0 0 transparent; transition:box-shadow .15s; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-camera.flash-ok{ box-shadow:0 0 0 4px #22c55e; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-camera.flash-warn{ box-shadow:0 0 0 4px #f59e0b; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-camera.flash-error{ box-shadow:0 0 0 4px #ef4444; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-reticle{ left:14%; right:14%; top:27%; bottom:27%; border:0 !important; border-radius:0 !important;
+  box-shadow:0 0 0 999px rgba(0,0,0,.22);
+  --c:rgba(255,255,255,.95); --l:28px; --w:3px;
+  background:
+    linear-gradient(var(--c),var(--c)) left top/var(--l) var(--w) no-repeat, linear-gradient(var(--c),var(--c)) left top/var(--w) var(--l) no-repeat,
+    linear-gradient(var(--c),var(--c)) right top/var(--l) var(--w) no-repeat, linear-gradient(var(--c),var(--c)) right top/var(--w) var(--l) no-repeat,
+    linear-gradient(var(--c),var(--c)) left bottom/var(--l) var(--w) no-repeat, linear-gradient(var(--c),var(--c)) left bottom/var(--w) var(--l) no-repeat,
+    linear-gradient(var(--c),var(--c)) right bottom/var(--l) var(--w) no-repeat, linear-gradient(var(--c),var(--c)) right bottom/var(--w) var(--l) no-repeat; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-reticle::after{ content:""; position:absolute; left:8%; right:8%; top:50%; height:2px; border-radius:2px;
+  background:linear-gradient(90deg,transparent,rgba(34,197,94,.9),transparent); animation:psScanLine 2.2s ease-in-out infinite; }
+@keyframes psScanLine{ 0%,100%{ transform:translateY(-34px); opacity:.35 } 50%{ transform:translateY(34px); opacity:1 } }
+@media (prefers-reduced-motion:reduce){ html:not(#_p):not(#_q) body #phoneScanDialog .ps-reticle::after{ animation:none; } }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-cam-msg{ background:rgba(8,11,16,.9); color:#cbd5e1; font-size:14px; font-weight:600; line-height:1.6; padding:20px 26px; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-retry{ border-radius:999px !important; height:42px; padding:0 20px; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-feedback{ left:12px; right:12px; bottom:12px; border-radius:14px !important; font-size:15.5px; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-torch{ border-radius:50% !important; background:rgba(0,0,0,.45) !important; }
+
+/* ---------- Search / manual entry ---------- */
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-manual-toggle{ margin:12px 16px 0; height:48px; display:flex; align-items:center; gap:10px; padding:0 16px;
+  border:0 !important; border-radius:14px !important; background:var(--ps-surface) !important; color:var(--ps-sub) !important;
+  box-shadow:var(--ps-shadow); font-size:15px; font-weight:600; text-align:left; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-manual-toggle[hidden]{ display:none; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-manual{ margin:12px 16px 0; gap:8px; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-manual input{ height:48px; border:0 !important; border-radius:14px !important; background:var(--ps-surface) !important;
+  color:var(--ps-text); box-shadow:inset 0 0 0 1.5px var(--ps-ring); padding:0 14px; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-manual-btn{ height:48px; border:0 !important; border-radius:14px !important; background:var(--ps-ok) !important; color:#fff !important; padding:0 18px; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-manual-close{ width:48px; height:48px; flex-basis:48px; border:0 !important; border-radius:50% !important; background:var(--ps-surface) !important; box-shadow:var(--ps-shadow); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-suggest{ margin:8px 16px 0; border:0 !important; border-radius:16px !important; background:var(--ps-surface) !important; box-shadow:0 10px 30px rgba(0,0,0,.25); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-suggest-item{ border-radius:0 !important; border-bottom:1px solid var(--ps-border) !important; padding:10px 16px; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-notice{ margin:10px 16px 0; border:0 !important; border-radius:14px !important; padding:11px 14px; font-size:14px; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-notice.is-error{ background:var(--ps-err-bg); color:var(--ps-err-fg); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-notice.is-warn{ background:rgba(245,158,11,.14); }
+
+/* ---------- Item list ---------- */
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-list{ padding:14px 16px 16px; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-row{ border:0 !important; border-radius:18px !important; background:var(--ps-surface) !important;
+  padding:12px 10px 12px 16px; gap:12px; box-shadow:var(--ps-shadow); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-row + .ps-row{ margin-top:10px; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-row.is-new{ box-shadow:inset 0 0 0 2px #22c55e, var(--ps-shadow); animation:psRowIn .35s ease-out; }
+@keyframes psRowIn{ from{ transform:scale(.97); background:var(--ps-ok-soft) } to{ transform:none } }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-row-name{ font-size:15.5px; font-weight:700; line-height:1.35; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-row-price{ margin-top:4px; font-size:13.5px; color:var(--ps-sub); display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-row-price strong{ color:var(--ps-text); font-weight:800; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-row-edit{ margin-left:0; padding:2px 9px; border-radius:999px; background:var(--ps-chip); color:var(--ps-link); font-size:12px; font-weight:700; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-qty{ gap:2px; padding:4px; border-radius:999px; background:var(--ps-surface-2); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-qty-btn{ width:40px; height:40px; border:0 !important; border-radius:50% !important;
+  background:var(--ps-surface) !important; color:var(--ps-text) !important; box-shadow:var(--ps-shadow); font-size:20px; font-weight:700; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-qty-val{ min-width:30px; font-size:17px; font-weight:800; }
+
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-empty{ gap:6px; color:var(--ps-sub); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-empty-icon{ width:72px; height:72px; margin-bottom:6px; display:grid; place-items:center; border-radius:50%;
+  background:var(--ps-surface); box-shadow:var(--ps-shadow); font-size:30px; color:var(--ps-sub); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-empty > div:not(.ps-empty-icon){ font-size:15.5px; font-weight:700; color:var(--ps-text); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-empty small{ font-size:13.5px; opacity:1; color:var(--ps-sub); }
+
+/* ---------- Footer ---------- */
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-foot{ padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px)); border:0 !important;
+  border-radius:24px 24px 0 0 !important; background:var(--ps-surface) !important; box-shadow:0 -8px 28px rgba(0,0,0,.16); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-summary{ margin-bottom:12px; padding:0 2px; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-summary span{ font-size:14px; color:var(--ps-sub); font-weight:600; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-summary strong{ font-size:28px; font-weight:900; letter-spacing:-.3px; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-foot-actions{ gap:10px; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-clear{ height:56px; padding:0 18px; border:0 !important; border-radius:16px !important;
+  background:var(--ps-err-bg) !important; color:var(--ps-err-fg) !important; font-size:15px; font-weight:700; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-clear[hidden]{ display:none; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-send{ height:56px; border:0 !important; border-radius:16px !important;
+  background:linear-gradient(180deg,#22c55e,#16a34a) !important; color:#fff !important;
+  box-shadow:0 8px 20px rgba(22,163,74,.32); font-size:18px; font-weight:800; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-send:active{ transform:scale(.99); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-send:disabled{ background:var(--ps-surface-2) !important; color:var(--ps-sub) !important; box-shadow:none; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-send-alt{ height:56px; border:0 !important; border-radius:16px !important; background:var(--ps-surface-2) !important; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-send-alt[hidden]{ display:none; }
+
+/* ---------- Bottom sheets ---------- */
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-sheet{ background:rgba(0,0,0,.42); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-sheet-panel{ position:relative; border:0 !important; border-radius:26px 26px 0 0 !important; background:var(--ps-bg) !important;
+  box-shadow:0 -12px 40px rgba(0,0,0,.3); padding-top:10px; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-sheet-panel::before{ content:""; position:absolute; top:8px; left:50%; width:40px; height:4px; margin-left:-20px; border-radius:4px; background:var(--ps-ring); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-sheet-head{ padding:12px 16px 4px 20px; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-sheet-head h3{ font-size:18px; font-weight:800; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-sheet-body{ padding:8px 18px calc(18px + env(safe-area-inset-bottom,0px)); }
+
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-pay-total span{ font-weight:600; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-pay-total strong{ font-size:46px; letter-spacing:-.5px; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-seg{ padding:4px; border-radius:16px !important; background:var(--ps-surface-2) !important; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-seg button{ height:48px; border:0 !important; border-radius:12px !important; background:transparent !important; color:var(--ps-sub) !important; font-weight:700; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-seg button.is-active{ background:var(--ps-surface) !important; color:var(--ps-text) !important; box-shadow:var(--ps-shadow), inset 0 -3px 0 #22c55e; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-quick{ gap:10px; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-quick-btn{ height:52px; border:0 !important; border-radius:14px !important; background:var(--ps-surface) !important;
+  color:var(--ps-text) !important; box-shadow:var(--ps-shadow); font-weight:800; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-quick-btn.is-active{ background:var(--ps-ok-soft) !important; box-shadow:inset 0 0 0 2px #22c55e; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-pay-input input{ height:56px; border:0 !important; border-radius:14px !important; background:var(--ps-surface) !important; box-shadow:inset 0 0 0 1.5px var(--ps-ring); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-pay-change{ border:0 !important; border-radius:16px !important; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-pay-change.is-missing{ background:var(--ps-surface) !important; box-shadow:var(--ps-shadow); font-weight:600; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-pay-confirm{ height:58px; border:0 !important; border-radius:16px !important;
+  background:linear-gradient(180deg,#22c55e,#16a34a) !important; color:#fff !important; box-shadow:0 8px 20px rgba(22,163,74,.3); font-weight:800; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-pay-confirm:disabled{ background:var(--ps-surface-2) !important; color:var(--ps-sub) !important; box-shadow:none; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-billdisc{ border:0 !important; border-radius:16px !important; background:var(--ps-surface) !important; box-shadow:var(--ps-shadow); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-billdisc.is-open{ box-shadow:inset 0 0 0 2px rgba(245,158,11,.6); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-billdisc-row input{ border:0 !important; border-radius:12px !important; box-shadow:inset 0 0 0 1.5px var(--ps-ring); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-billdisc-chips button, html:not(#_p):not(#_q) body #phoneScanDialog .ps-disc-quick button, html:not(#_p):not(#_q) body #phoneScanDialog .ps-disc-reasons button{ border:0 !important; border-radius:999px !important; background:var(--ps-surface-2) !important; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-billdisc-chips button.is-active{ background:#f59e0b !important; color:#111827 !important; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-opt{ border:0 !important; border-radius:16px !important; background:var(--ps-surface) !important; box-shadow:var(--ps-shadow); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-opt.is-active{ background:var(--ps-ok-soft) !important; box-shadow:inset 0 0 0 2px #22c55e; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-disc{ border:0 !important; border-radius:16px !important; box-shadow:var(--ps-shadow); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-disc.is-active{ box-shadow:inset 0 0 0 2px #f59e0b; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-disc-row input, html:not(#_p):not(#_q) body #phoneScanDialog .ps-disc-note, html:not(#_p):not(#_q) body #phoneScanDialog .ps-opt-free input, html:not(#_p):not(#_q) body #phoneScanDialog .ps-field input, html:not(#_p):not(#_q) body #phoneScanDialog .ps-select{
+  border:0 !important; border-radius:12px !important; box-shadow:inset 0 0 0 1.5px var(--ps-ring); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-disc-apply{ border-radius:14px !important; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-qtypick{ border-radius:16px !important; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-qr-full-btn, html:not(#_p):not(#_q) body #phoneScanDialog .ps-btn-secondary{ border:0 !important; border-radius:14px !important; background:var(--ps-surface-2) !important; }
+
+/* Summary sheet */
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-sum-cell, html:not(#_p):not(#_q) body #phoneScanDialog .ps-switch-row{ border:0 !important; border-radius:16px !important; box-shadow:var(--ps-shadow); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-sum-handover{ border:0 !important; border-radius:16px !important; background:var(--ps-ok-soft) !important; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-sum-list{ border:0 !important; border-radius:16px !important; box-shadow:var(--ps-shadow); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-sum-pm{ border-radius:999px !important; }
+
+/* Result screen */
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-done-next{ border-radius:16px !important; background:linear-gradient(180deg,#22c55e,#16a34a) !important; box-shadow:0 8px 20px rgba(22,163,74,.3); }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-done-cancel{ border:0 !important; border-radius:14px !important; background:var(--ps-err-bg) !important; color:var(--ps-err-fg) !important; }
+html:not(#_p):not(#_q) body #phoneScanDialog .ps-done-check{ border-radius:50% !important; background:#16a34a; box-shadow:0 0 0 10px var(--ps-ok-soft); }

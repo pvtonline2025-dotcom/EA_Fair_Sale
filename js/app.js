@@ -22025,4 +22025,8 @@ function render(){
   else if(state.page==="reservations" && typeof window.renderReservations==="function")window.renderReservations();
   else renderSettings();
 }
-loadAll();
+if (typeof window.eaSplashStatus === "function") window.eaSplashStatus("กำลังโหลดข้อมูลร้าน…");
+Promise.resolve()
+  .then(() => loadAll())
+  .catch((err) => console.warn("[startup] loadAll failed:", err))
+  .finally(() => { if (typeof window.eaSplashHide === "function") window.eaSplashHide(); });

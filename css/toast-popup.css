@@ -1,0 +1,63 @@
+/* =========================================================
+   CENTER POPUP NOTIFICATION (replaces the bottom-edge toast)
+   Loaded last so it wins over app.css / layout.css / clean.css.
+   ========================================================= */
+html body #toast.toast{
+  --tp-bg: rgba(17, 24, 39, .97);
+  --tp-fg: #f8fafc;
+  --tp-line: rgba(255,255,255,.10);
+  --tp-accent: #38bdf8;
+  position: fixed !important;
+  top: 50% !important; left: 50% !important; right: auto !important; bottom: auto !important;
+  transform: translate(-50%, -50%) scale(.9) !important;
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  width: max-content; min-width: min(320px, 84vw); max-width: min(460px, 88vw);
+  padding: 24px 26px 22px !important;
+  background: var(--tp-bg) !important; color: var(--tp-fg) !important;
+  border: 1px solid var(--tp-line) !important;
+  border-top: 4px solid var(--tp-accent) !important;
+  border-radius: 20px !important;
+  box-shadow: 0 24px 60px rgba(0,0,0,.45) !important;
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  font-size: 17px !important; font-weight: 700 !important; line-height: 1.5;
+  text-align: center;
+  opacity: 0; pointer-events: none; cursor: pointer;
+  transition: opacity .18s ease, transform .26s cubic-bezier(.2, 1.3, .4, 1) !important;
+  z-index: 2147483600 !important;
+}
+html body #toast.toast.show{
+  opacity: 1; pointer-events: auto;
+  transform: translate(-50%, -50%) scale(1) !important;
+}
+html:not(#_a):not(#_b) body #toast .toast-ico{
+  border-radius: 50% !important;
+  display: grid; place-items: center; flex: none;
+  width: 56px; height: 56px;
+  color: #fff; background: var(--tp-accent);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--tp-accent) 45%, transparent);
+}
+html:not(#_a):not(#_b) body #toast .toast-msg{ border-radius: 0 !important; }
+#toast .toast-msg{ display: block; word-break: break-word; white-space: pre-line; }
+#toast .toast-msg svg{ vertical-align: -3px; }
+
+html body #toast.toast.toast--success{ --tp-accent: #16a34a; }
+html body #toast.toast.toast--error{ --tp-accent: #dc2626; }
+html body #toast.toast.toast--warning{ --tp-accent: #f59e0b; }
+html body #toast.toast.toast--info{ --tp-accent: #2563eb; }
+
+/* Light mode */
+[data-color-mode="light"] body #toast.toast{
+  --tp-bg: rgba(255,255,255,.98);
+  --tp-fg: #0f172a;
+  --tp-line: rgba(15,23,42,.10);
+  box-shadow: 0 24px 60px rgba(15,23,42,.22) !important;
+}
+
+@media (max-width: 600px){
+  html body #toast.toast{ padding: 20px 20px 18px !important; font-size: 15px !important; }
+  html:not(#_a):not(#_b) body #toast .toast-ico{
+  border-radius: 50% !important; width: 46px; height: 46px; }
+}
+@media (prefers-reduced-motion: reduce){
+  html body #toast.toast{ transition: opacity .15s ease !important; }
+}

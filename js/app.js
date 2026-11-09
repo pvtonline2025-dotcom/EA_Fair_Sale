@@ -794,10 +794,36 @@ function saveBillDiscountLocal(){
 }
 function escapeHtml(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
 let toastTimer=null;
+/* ---------- ป๊อปอัพแจ้งเตือนกลางจอ (แทน toast ขอบล่าง) ---------- */
+const TOAST_ICONS={
+  success:'<path d="M20 6 9 17l-5-5"/>',
+  error:'<path d="M18 6 6 18M6 6l12 12"/>',
+  warning:'<path d="M12 5.5v8.5"/><path d="M12 18.6h.01" stroke-width="3.4"/>',
+  info:'<path d="M12 10.5v8"/><path d="M12 5.8h.01" stroke-width="3.4"/>'
+};
+function toastKind(t){
+  const s=String(t||"");
+  if(/❌|⛔|🚫|ผิดพลาด|ไม่สำเร็จ|ล้มเหลว|ไม่ได้|ไม่ถูกต้อง|error|failed/i.test(s))return "error";
+  if(/⚠|❗|‼|หมด|ไม่พอ|เกิน|กรุณา|ไม่พบ|ไม่มี|ออฟไลน์|📴|ยังไม่/i.test(s))return "warning";
+  if(/✅|✔|☑|🎉|สำเร็จ|เรียบร้อย|บันทึก|คัดลอก|ส่งออก|ดาวน์โหลด|รับเข้า|เพิ่ม|ลบแล้ว|อัปเดต|กลับมาเชื่อมต่อ/i.test(s))return "success";
+  return "info";
+}
+// ตัดอิโมจิ/สัญลักษณ์นำหน้าข้อความออก เพราะป๊อปอัพมีไอคอนสถานะให้แล้ว
+function toastCleanText(t){return String(t??"").replace(/^[\s\p{Extended_Pictographic}\uFE0F\u200D\u20E3]+/u,"").trim()||String(t??"")}
 function toast(t,duration=2100){const x=el("toast");if(!x)return;
-  // Modal dialogs live in the browser top layer; move the toast into the top-most open dialog so it stays visible.
+  // Modal dialogs live in the browser top layer; move the popup into the top-most open dialog so it stays visible.
   const host=[...document.querySelectorAll("dialog[open]")].pop()||document.body;if(x.parentElement!==host)host.appendChild(x);
-  x.textContent=t;x.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>x.classList.remove("show"),Math.max(1200,Number(duration)||2100))}
+  const kind=toastKind(t), msg=toastCleanText(t);
+  x.className="toast toast--"+kind;
+  x.innerHTML='<span class="toast-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">'+TOAST_ICONS[kind]+'</svg></span><span class="toast-msg"></span>';
+  x.querySelector(".toast-msg").textContent=msg;
+  x.setAttribute("role",kind==="error"?"alert":"status");
+  if(!x.dataset.bound){x.dataset.bound="1";x.addEventListener("click",()=>{clearTimeout(toastTimer);x.classList.remove("show")});}
+  void x.offsetWidth; // restart the pop-in animation when messages arrive back-to-back
+  x.classList.add("show");clearTimeout(toastTimer);
+  // เวลาแสดง: ตามที่ขอ หรืออย่างน้อยพอให้อ่านข้อความยาวทัน (สูงสุด 6 วินาที)
+  const readMs=Math.min(6000,1300+msg.length*45);
+  toastTimer=setTimeout(()=>x.classList.remove("show"),Math.max(1500,Number(duration)||2100,readMs))}
 function isQrPayment(pm){const v=String(pm||"").toLowerCase();return v==="promptpay"||v==="qr"||v==="transfer"}
 function card(title,body,action=""){return `<section class="card"><div class="card-head"><h2>${title}</h2>${action}</div><div class="card-body">${body}</div></section>`}
 /* ---------- ผู้รับผิดชอบประจำเครื่อง (ติดไปกับทุกบิล) ---------- */

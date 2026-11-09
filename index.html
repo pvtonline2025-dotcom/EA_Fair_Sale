@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, viewport-fit=cover">
-  <meta name="theme-color" content="#0f172a">
+  <meta name="theme-color" content="#14080b">
   <title>EA Fair Sale - ระบบ POS และจัดการสต็อกสินค้า</title>
   <meta name="description" content="ระบบจัดการร้านค้า POS และสต็อกสินค้า PWA (EA Fair Sale) รองรับการขายหน้าร้าน พิมพ์บาร์โค้ด และการทำงานออฟไลน์">
   <meta property="og:title" content="EA Fair Sale - ระบบ POS และจัดการสต็อกสินค้า">
@@ -53,21 +53,22 @@
   <link rel="stylesheet" href="css/clean.css">
   <style id="ea-splash-style">
     #eaSplash{position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;
-      background:radial-gradient(120% 70% at 50% 38%,#4a0d14 0%,#24090d 45%,#14080b 100%);color:#fff;
+      background:#14080b;color:#fff;
       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans Thai",sans-serif;
       padding:env(safe-area-inset-top) 24px env(safe-area-inset-bottom);transition:opacity .45s ease,visibility .45s ease}
     #eaSplash.is-done{opacity:0;visibility:hidden;pointer-events:none}
-    #eaSplash .sp-logo-wrap{position:relative;width:min(58vmin,320px);animation:spIn .7s cubic-bezier(.2,.8,.2,1) both}
+    #eaSplash .sp-logo-wrap{position:relative;width:min(58vmin,320px)}
     #eaSplash .sp-logo-wrap::before{content:"";position:absolute;inset:-18%;border-radius:50%;
-      background:radial-gradient(circle,rgba(255,45,60,.38) 0%,rgba(255,45,60,0) 62%);animation:spGlow 2.4s ease-in-out infinite}
+      background:radial-gradient(circle,rgba(255,45,60,.38) 0%,rgba(255,45,60,0) 62%);opacity:0;animation:spFade .8s .15s ease forwards,spGlow 2.4s .95s ease-in-out infinite}
     #eaSplash .sp-logo{position:relative;display:block;width:100%;height:auto;filter:drop-shadow(0 16px 34px rgba(0,0,0,.6))}
-    #eaSplash .sp-bar{position:relative;width:min(56vw,220px);height:4px;margin-top:36px;border-radius:99px;background:rgba(255,255,255,.12);overflow:hidden;animation:spUp .6s .35s ease both}
+    #eaSplash .sp-bar{position:absolute;top:calc(50% + min(29vmin,160px) + 28px);width:min(56vw,220px);height:4px;border-radius:99px;background:rgba(255,255,255,.12);overflow:hidden;animation:spUp .6s .35s ease both}
     #eaSplash .sp-bar::after{content:"";position:absolute;top:0;bottom:0;left:-40%;width:40%;border-radius:inherit;
       background:linear-gradient(90deg,transparent,#ff3b49,#ffb4b9,#ff3b49,transparent);animation:spRun 1.15s ease-in-out infinite}
-    #eaSplash .sp-status{margin:14px 0 0;min-height:18px;font-size:13px;color:rgba(255,255,255,.55);animation:spUp .6s .4s ease both}
+    #eaSplash .sp-status{position:absolute;top:calc(50% + min(29vmin,160px) + 44px);margin:0;min-height:18px;font-size:13px;color:rgba(255,255,255,.55);animation:spUp .6s .4s ease both}
     #eaSplash .sp-foot{position:absolute;bottom:calc(22px + env(safe-area-inset-bottom));font-size:11px;letter-spacing:2.5px;color:rgba(255,255,255,.32)}
     @keyframes spIn{from{opacity:0;transform:scale(.82)}to{opacity:1;transform:none}}
     @keyframes spUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+    @keyframes spFade{to{opacity:.55}}
     @keyframes spGlow{0%,100%{opacity:.55;transform:scale(.95)}50%{opacity:1;transform:scale(1.05)}}
     @keyframes spRun{from{left:-40%}to{left:100%}}
     @media (prefers-reduced-motion:reduce){#eaSplash *,#eaSplash *::before,#eaSplash *::after{animation:none!important}}

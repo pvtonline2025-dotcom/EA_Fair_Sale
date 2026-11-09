@@ -40,18 +40,26 @@ html:not(#_a):not(#_b) body #toast .toast-msg{ border-radius: 0 !important; }
 #toast .toast-msg{ display: block; word-break: break-word; white-space: pre-line; }
 #toast .toast-msg svg{ vertical-align: -3px; }
 
-html body #toast.toast.toast--success{ --tp-accent: #16a34a; }
-html body #toast.toast.toast--error{ --tp-accent: #dc2626; }
-html body #toast.toast.toast--warning{ --tp-accent: #f59e0b; }
-html body #toast.toast.toast--info{ --tp-accent: #2563eb; }
+/* Solid colour per type so the popup never blends into the app background */
+html body #toast.toast.toast--success{ --tp-accent:#15803d; --tp-bg:linear-gradient(160deg,#22c55e 0%,#15803d 100%); --tp-fg:#ffffff; }
+html body #toast.toast.toast--error  { --tp-accent:#b91c1c; --tp-bg:linear-gradient(160deg,#ef4444 0%,#b91c1c 100%); --tp-fg:#ffffff; }
+html body #toast.toast.toast--warning{ --tp-accent:#b45309; --tp-bg:linear-gradient(160deg,#fcd34d 0%,#f59e0b 100%); --tp-fg:#3b1d00; }
+html body #toast.toast.toast--info   { --tp-accent:#1d4ed8; --tp-bg:linear-gradient(160deg,#3b82f6 0%,#1d4ed8 100%); --tp-fg:#ffffff; }
 
-/* Light mode */
+html body #toast.toast,
 [data-color-mode="light"] body #toast.toast{
-  --tp-bg: rgba(255,255,255,.98);
-  --tp-fg: #0f172a;
-  --tp-line: rgba(15,23,42,.10);
-  box-shadow: 0 24px 60px rgba(15,23,42,.22) !important;
+  background: var(--tp-bg) !important;
+  border: 2px solid rgba(255,255,255,.85) !important;
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--tp-accent) 28%, transparent),
+              0 26px 60px rgba(0,0,0,.5) !important;
 }
+/* icon: white disc with the type colour inside */
+html:not(#_a):not(#_b) body #toast .toast-ico{
+  background: #ffffff !important; color: var(--tp-accent) !important;
+  box-shadow: 0 6px 16px rgba(0,0,0,.22) !important;
+}
+#toast .toast-msg{ text-shadow: 0 1px 1px rgba(0,0,0,.12); }
+html body #toast.toast.toast--warning .toast-msg{ text-shadow: none; }
 
 @media (max-width: 600px){
   html body #toast.toast{ padding: 20px 20px 18px !important; font-size: 15px !important; }
@@ -61,3 +69,18 @@ html body #toast.toast.toast--info{ --tp-accent: #2563eb; }
 @media (prefers-reduced-motion: reduce){
   html body #toast.toast{ transition: opacity .15s ease !important; }
 }
+
+/* clean.css forces a small radius on anything named *toast*; restore the popup's rounded card */
+html:not(#_a):not(#_b) body #toast.toast{ border-radius: 22px !important; }
+
+/* Blurred, slightly dimmed backdrop behind the popup */
+.toast-backdrop{
+  position: fixed; inset: 0;
+  z-index: 2147483590;
+  background: rgba(8, 10, 18, .28);
+  backdrop-filter: blur(6px) saturate(.9); -webkit-backdrop-filter: blur(6px) saturate(.9);
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity .2s ease, visibility .2s ease;
+}
+.toast-backdrop.show{ opacity: 1; visibility: visible; pointer-events: auto; }
+[data-color-mode="light"] .toast-backdrop{ background: rgba(15, 23, 42, .18); }

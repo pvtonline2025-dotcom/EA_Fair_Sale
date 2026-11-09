@@ -1,0 +1,56 @@
+/* =========================================================
+   LIGHT MODE — calm pass
+   Many components were styled for dark mode with translucent
+   black panels and near-black divider lines. On a white page
+   those turn into muddy grey blocks and heavy lines. Light mode
+   only; dark mode is untouched.
+   ========================================================= */
+[data-color-mode="light"]{
+  --lc-page:#f5f7fa;
+  --lc-card:#ffffff;
+  --lc-soft:#f6f8fb;        /* inner panel */
+  --lc-soft-2:#eef2f7;      /* segmented control track */
+  --lc-line:#e6eaf0;        /* dividers */
+  --lc-line-strong:#d9dee6;
+  --lc-text:#0f172a;
+  --lc-sub:#64748b;
+}
+
+/* ---- Translucent dark panels → soft light panels ---- */
+html[data-color-mode="light"] body .all-days-chart-viewport{
+  background:var(--lc-soft) !important; border:1px solid var(--lc-line) !important; box-shadow:none !important;
+}
+html[data-color-mode="light"] body .all-days-metric-pills{
+  background:var(--lc-soft-2) !important; border:0 !important; box-shadow:none !important;
+}
+html[data-color-mode="light"] body .all-days-metric-btn:not(.active){ color:var(--lc-sub) !important; background:transparent !important; }
+html[data-color-mode="light"] body .basket-card-panel{
+  background:var(--lc-soft) !important; border:1px solid var(--lc-line) !important; box-shadow:none !important;
+}
+html[data-color-mode="light"] body .basket-card-panel *{ border-color:var(--lc-line) !important; }
+
+/* ---- Near-black divider lines → hairlines ---- */
+html[data-color-mode="light"] body :is(
+  td, th, .td, .th, tr,
+  .all-days-chart-summary-row, .tdd-sales-sub-metrics,
+  .hub-list-row, .hub-num, .hub-td-name,
+  .low-card-foot, .stock-item-bottom, .stock-move-actions, .stock-pagination-bar,
+  .font-picker, .empty, .print-row
+){
+  border-color:var(--lc-line) !important;
+}
+html[data-color-mode="light"] body #content table{ border-color:var(--lc-line) !important; }
+html[data-color-mode="light"] body #content :is(thead th, thead td, .th){ background:var(--lc-soft) !important; color:var(--lc-sub) !important; }
+
+/* ---- Native <select> options were forced dark ---- */
+html[data-color-mode="light"] body select option{ background-color:#ffffff !important; color:var(--lc-text) !important; }
+
+/* ---- Notification badge ring matches the light header ---- */
+html[data-color-mode="light"] body .bell-badge{ border-color:#ffffff !important; }
+
+/* ---- D3 charts: soft gridlines and readable axis text on light ---- */
+html[data-color-mode="light"] body .all-days-chart-container :is(.tick line, .grid line, .domain){ stroke:var(--lc-line-strong) !important; }
+html[data-color-mode="light"] body .all-days-chart-container .tick text{ fill:var(--lc-sub) !important; }
+
+/* Cash box bill footers */
+html[data-color-mode="light"] body .cbx-bill footer{ border-top-color:var(--lc-line-strong) !important; }

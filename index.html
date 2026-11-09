@@ -92,6 +92,7 @@
         setTimeout(function(){
           var el=document.getElementById('eaSplash'); if(!el) return;
           el.classList.add('is-done');
+          try{ document.dispatchEvent(new Event('ea:splash-done')); }catch(_){}
           setTimeout(function(){ if(el.parentNode) el.parentNode.removeChild(el); },500);
         },wait);
       };

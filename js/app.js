@@ -810,7 +810,16 @@ function toastKind(t){
 }
 // ตัดอิโมจิ/สัญลักษณ์นำหน้าข้อความออก เพราะป๊อปอัพมีไอคอนสถานะให้แล้ว
 function toastCleanText(t){return String(t??"").replace(/^[\s\p{Extended_Pictographic}\uFE0F\u200D\u20E3]+/u,"").trim()||String(t??"")}
-function toast(t,duration=2100){const x=el("toast");if(!x)return;
+// While the launch screen is up, hold popups and show them (in order) once it closes.
+let splashToastQueue=[];
+function splashActive(){const s=document.getElementById("eaSplash");return !!(s&&!s.classList.contains("is-done"))}
+document.addEventListener("ea:splash-done",()=>{
+  const q=splashToastQueue.slice(-3);splashToastQueue=[];  // at most the last 3 messages
+  q.forEach(([t,d],i)=>setTimeout(()=>toast(t,d),250+i*2300));
+});
+function toast(t,duration=2100){
+  if(splashActive()){splashToastQueue.push([t,duration]);return;}
+  const x=el("toast");if(!x)return;
   // Modal dialogs live in the browser top layer; move the popup into the top-most open dialog so it stays visible.
   const host=[...document.querySelectorAll("dialog[open]")].pop()||document.body;if(x.parentElement!==host)host.appendChild(x);
   const kind=toastKind(t), msg=toastCleanText(t);

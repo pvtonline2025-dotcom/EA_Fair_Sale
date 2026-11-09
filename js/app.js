@@ -821,18 +821,24 @@ function toast(t,duration=2100){
   if(splashActive()){splashToastQueue.push([t,duration]);return;}
   const x=el("toast");if(!x)return;
   // Modal dialogs live in the browser top layer; move the popup into the top-most open dialog so it stays visible.
-  const host=[...document.querySelectorAll("dialog[open]")].pop()||document.body;if(x.parentElement!==host)host.appendChild(x);
+  const host=[...document.querySelectorAll("dialog[open]")].pop()||document.body;
+  // blurred backdrop behind the popup (tap anywhere to close)
+  let bd=document.getElementById("toastBackdrop");
+  if(!bd){bd=document.createElement("div");bd.id="toastBackdrop";bd.className="toast-backdrop";bd.setAttribute("aria-hidden","true");
+    bd.addEventListener("click",()=>{clearTimeout(toastTimer);x.classList.remove("show");bd.classList.remove("show")});}
+  if(bd.parentElement!==host)host.appendChild(bd);
+  if(x.parentElement!==host||x.previousElementSibling!==bd)host.appendChild(x);
   const kind=toastKind(t), msg=toastCleanText(t);
   x.className="toast toast--"+kind;
   x.innerHTML='<span class="toast-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">'+TOAST_ICONS[kind]+'</svg></span><span class="toast-msg"></span>';
   x.querySelector(".toast-msg").textContent=msg;
   x.setAttribute("role",kind==="error"?"alert":"status");
-  if(!x.dataset.bound){x.dataset.bound="1";x.addEventListener("click",()=>{clearTimeout(toastTimer);x.classList.remove("show")});}
+  if(!x.dataset.bound){x.dataset.bound="1";x.addEventListener("click",()=>{clearTimeout(toastTimer);x.classList.remove("show");bd.classList.remove("show")});}
   void x.offsetWidth; // restart the pop-in animation when messages arrive back-to-back
-  x.classList.add("show");clearTimeout(toastTimer);
+  x.classList.add("show");bd.classList.add("show");clearTimeout(toastTimer);
   // เวลาแสดง: ตามที่ขอ หรืออย่างน้อยพอให้อ่านข้อความยาวทัน (สูงสุด 6 วินาที)
   const readMs=Math.min(6000,1300+msg.length*45);
-  toastTimer=setTimeout(()=>x.classList.remove("show"),Math.max(1500,Number(duration)||2100,readMs))}
+  toastTimer=setTimeout(()=>{x.classList.remove("show");bd.classList.remove("show")},Math.max(1500,Number(duration)||2100,readMs))}
 function isQrPayment(pm){const v=String(pm||"").toLowerCase();return v==="promptpay"||v==="qr"||v==="transfer"}
 function card(title,body,action=""){return `<section class="card"><div class="card-head"><h2>${title}</h2>${action}</div><div class="card-body">${body}</div></section>`}
 /* ---------- ผู้รับผิดชอบประจำเครื่อง (ติดไปกับทุกบิล) ---------- */

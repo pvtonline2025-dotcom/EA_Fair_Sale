@@ -100,12 +100,46 @@
   }
   // สถานะการเบิกของ (แสดงตอนสแกนใบจอง / ในรายการ)
   function thDateTime(iso) { if (!iso) return ''; const d = new Date(iso); const p = n => String(n).padStart(2, '0'); return `${d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })} ${p(d.getHours())}:${p(d.getMinutes())}`; }
+  // รับของเข้าบูธแล้ว = ทุกรายการมี recv_at (เก็บใน items ของใบจอง → ทุกเครื่องเห็นตรงกัน ไม่ต้องรัน SQL เพิ่ม)
+  function receivedAt(r) {
+    const its = Array.isArray(r?.items) ? r.items : [];
+    if (!its.length || !its.every(i => i.recv_at)) return '';
+    return its.map(i => String(i.recv_at)).sort().pop();
+  }
+  // ยังไม่เบิก → กำลังเบิกสินค้า (ยังไม่มีของที่หน้าร้าน) → มีของแล้ว (รับเข้าบูธแล้ว)
   function reqState(r) {
     if (!r || r.status !== 'booked') return null;
+    const got = receivedAt(r);
+    if (got) return { k: 'ready', short: 'มีของแล้ว', text: `มีของแล้ว • รับเข้าบูธ ${thDateTime(got)}` };
     if (r.requisition_mode === 'none') return { k: 'none', short: 'ไม่ต้องเบิก', text: 'ไม่ต้องเบิกของ (ใช้ของในบูธ / รับที่ร้าน)' };
-    if (r.requisitioned_at) return { k: 'done', short: 'เบิกแล้ว', text: `เบิกของมาแล้ว • ${thDateTime(r.requisitioned_at)}` };
-    if (needsRequisition(r)) return { k: 'due', short: 'ยังไม่เบิก', text: 'ยังไม่ได้เบิกของ • ต้องเบิกแล้ว (อยู่ในรายการใบเบิกรอบนี้)' };
-    return { k: 'later', short: 'ยังไม่ถึงรอบเบิก', text: `ยังไม่ได้เบิกของ • จะขึ้นในใบเบิกวัน ${thDate(addDays(r.pickup_date, -1))}` };
+    if (r.requisitioned_at) return { k: 'transit', short: 'กำลังเบิกสินค้า', text: 'กำลังเบิกสินค้า • ยังไม่มีของที่หน้าร้าน', sub: `ส่งใบเบิกแล้ว ${thDateTime(r.requisitioned_at)} • ของมาถึงแล้วกด "รับของเข้าบูธ"` };
+    if (needsRequisition(r)) return { k: 'due', short: 'ยังไม่เบิก', text: 'ยังไม่ได้เบิกสินค้า • ไม่มีของที่หน้าร้าน', sub: 'อยู่ในรายการใบเบิกรอบนี้ • ส่งใบเบิกแล้วจะเปลี่ยนเป็น "กำลังเบิกสินค้า"' };
+    return { k: 'later', short: 'รอรอบเบิก', text: 'ยังไม่ได้เบิกสินค้า • ยังไม่ถึงรอบเบิก', sub: `จะขึ้นในใบเบิกวัน ${thDate(addDays(r.pickup_date, -1))}` };
+  }
+  async function markReceived(r, on) {
+    const at = new Date().toISOString();
+    const items = (Array.isArray(r.items) ? r.items : []).map(i => { const x = { ...i }; if (on) x.recv_at = at; else delete x.recv_at; return x; });
+    return save({ id: r.id, items });
+  }
+  // รับของเข้าสต็อก (📥 รับตามใบเบิก) → ใบจองที่เบิกแล้วและของที่รับมาครบ → "มีของแล้ว" อัตโนมัติ
+  // แบ่งของให้ใบจองที่นัดรับก่อนได้ก่อน • ใบจองที่มีของสั่งพิเศษ (ไม่มีในระบบ) ต้องกดเองในหน้าใบจอง
+  async function autoReceive(lines) {
+    const avail = new Map();
+    for (const l of (lines || [])) if (l?.pid) avail.set(l.pid, (avail.get(l.pid) || 0) + Number(l.qty || 0));
+    if (!avail.size) return [];
+    const cands = list.filter(r => r.status === 'booked' && r.requisition_mode !== 'none' && r.requisitioned_at && !receivedAt(r)
+      && (r.items || []).length && r.items.every(i => i.product_id))
+      .sort((a, b) => String(a.pickup_date).localeCompare(String(b.pickup_date)) || String(a.created_at || '').localeCompare(String(b.created_at || '')));
+    const done = [];
+    for (const r of cands) {
+      const need = new Map();
+      for (const i of r.items) need.set(i.product_id, (need.get(i.product_id) || 0) + Number(i.qty || 0));
+      if (![...need].every(([pid, q]) => (avail.get(pid) || 0) >= q - 1e-9)) continue;
+      try { await markReceived(r, true); need.forEach((q, pid) => avail.set(pid, avail.get(pid) - q)); done.push(r.res_no); }
+      catch (e) { console.warn('[reservations] auto receive', e); }
+    }
+    if (done.length) afterChange();
+    return done;
   }
   function all() { return list.slice(); }
   function requisitionList() { return list.filter(r => needsRequisition(r)); }
@@ -160,8 +194,9 @@
   }
 
   function reqBadge(r) {
+    if (r.status === 'booked' && receivedAt(r)) return '<span class="rsv-tag ok">📦 มีของแล้ว</span>';
     if (r.requisition_mode === 'none') return '<span class="rsv-tag">ไม่ต้องเบิก</span>';
-    if (r.requisitioned_at) return '<span class="rsv-tag ok">เบิกแล้ว</span>';
+    if (r.requisitioned_at) return r.status === 'booked' ? '<span class="rsv-tag warn">🚚 กำลังเบิกสินค้า</span>' : '<span class="rsv-tag ok">เบิกแล้ว</span>';
     if (r.status !== 'booked') return '';
     if (needsRequisition(r)) return '<span class="rsv-tag warn">อยู่ในใบเบิกวันนี้</span>';
     return `<span class="rsv-tag">จะขึ้นใบเบิก ${thDate(addDays(r.pickup_date, -1))}</span>`;
@@ -440,7 +475,7 @@
     const btn = document.getElementById('rsvSaveBtn'); if (btn) { btn.disabled = true; btn.textContent = 'กำลังบันทึก...'; }
     const payload = {
       customer_name: String(form.customer_name).trim(), customer_phone: String(form.customer_phone || '').trim(),
-      items: form.items.map(i => ({ product_id: i.product_id || null, name: String(i.name).trim(), unit: String(i.unit || '').trim(), qty: Number(i.qty), unit_price: Number(i.unit_price || 0) })),
+      items: form.items.map(i => ({ product_id: i.product_id || null, name: String(i.name).trim(), unit: String(i.unit || '').trim(), qty: Number(i.qty), unit_price: Number(i.unit_price || 0), ...(i.recv_at ? { recv_at: i.recv_at } : {}) })),
       total_amount: total, pickup_date: form.pickup_date, pickup_place: form.pickup_place, requisition_mode: form.requisition_mode, note: form.note || ''
     };
     if (form.editing) payload.id = form.id;
@@ -624,8 +659,14 @@
     const short = r.status === 'booked' ? items.filter(i => { const s = stockOf(i); return s !== null && s < Number(i.qty || 0); }) : [];
     const reqBox = rq ? `
         <div class="rsv-req-box is-${rq.k}">
-          <div class="rsv-req-main">${rq.k === 'done' ? '📦✅' : rq.k === 'none' ? '➖' : rq.k === 'due' ? '⚠️' : '🕒'} ${escapeHtml(rq.text)}</div>
-          ${r.requisition_mode !== 'none' ? `<button type="button" class="rsv-btn rsv-req-toggle" onclick="rsvScanToggleReq('${r.id}')">${r.requisitioned_at ? '↩ ยังไม่ได้เบิก' : '✓ ทำเครื่องหมายว่าเบิกแล้ว'}</button>` : ''}
+          <div class="rsv-req-main">${{ ready: '✅', transit: '🚚', due: '⚠️', later: '🕒', none: '➖' }[rq.k] || ''} ${escapeHtml(rq.text)}</div>
+          ${rq.sub ? `<div class="rsv-req-sub">${escapeHtml(rq.sub)}</div>` : ''}
+          <div class="rsv-req-acts">
+            ${rq.k === 'transit' ? `<button type="button" class="rsv-btn rsv-req-toggle is-main" onclick="rsvScanReceive('${r.id}')">📥 รับของเข้าบูธ</button>` : ''}
+            ${rq.k === 'ready' ? `<button type="button" class="rsv-btn rsv-req-toggle" onclick="rsvScanUnreceive('${r.id}')">↩ ยังไม่ได้รับของ</button>` : ''}
+            ${rq.k === 'due' || rq.k === 'later' ? `<button type="button" class="rsv-btn rsv-req-toggle" onclick="rsvScanToggleReq('${r.id}')">✓ ส่งเบิกแล้ว</button>` : ''}
+            ${rq.k === 'transit' ? `<button type="button" class="rsv-btn rsv-req-toggle" onclick="rsvScanToggleReq('${r.id}')">↩ ยังไม่ได้เบิก</button>` : ''}
+          </div>
           ${short.length ? `<div class="rsv-req-short">ของในบูธยังไม่พอ: ${short.map(i => `${escapeHtml(i.name)} มี ${stockOf(i)} / ต้องใช้ ${Number(i.qty)}`).join(' • ')}</div>` : ''}
         </div>` : '';
     const t = todayIso();
@@ -659,21 +700,57 @@
         ${r.status === 'booked' && phoneMode() ? `<button type="button" class="rsv-btn" onclick="reservationSlip('${r.id}')">🧾 ใบรับมัดจำ</button>` : ''}
       </div>`;
   }
+  // 📥 รับของเข้าบูธ: ของมาตามใบเบิก → รับเข้าสต็อก (ใบจองเปลี่ยนเป็น "มีของแล้ว" ให้เอง) หรือแค่ทำเครื่องหมาย
+  function rsvScanReceive(id) {
+    const r = list.find(x => x.id === id); if (!r) return;
+    let dlg = document.getElementById('rsvRecvAsk');
+    if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'rsvRecvAsk'; dlg.className = 'rsv-dialog rsv-recv-ask'; document.body.appendChild(dlg); }
+    const its = (r.items || []).map(i => `${escapeHtml(i.name)} ×${Number(i.qty)}`).join(', ');
+    dlg.innerHTML = `
+      <div class="rsv-dlg-head"><strong>📥 รับของเข้าบูธ <span>${escapeHtml(r.res_no)}</span></strong>
+        <button type="button" class="rsv-x" onclick="this.closest('dialog').close()" aria-label="ปิด">✕</button></div>
+      <div class="rsv-dlg-body">
+        <div class="rsv-note">${escapeHtml(r.customer_name)} • ${its}</div>
+        ${typeof window.eaOpenReceive === 'function' ? `<button type="button" class="rsv-btn rsv-main rsv-recv-opt" onclick="rsvRecvVia('stock','${r.id}')">📥 รับตามใบเบิก (เพิ่มสต็อกบูธ)<small>ของมากับใบเบิก ยังไม่ได้รับเข้าสต็อก → รับเข้าสต็อก แล้วใบจองนี้ขึ้น "มีของแล้ว" ให้เอง</small></button>` : ''}
+        <button type="button" class="rsv-btn rsv-recv-opt" onclick="rsvRecvVia('mark','${r.id}')">✓ ของอยู่ในบูธแล้ว (ไม่เพิ่มสต็อก)<small>รับเข้าสต็อกไปแล้ว หรือแยกของจองไว้แล้ว → ทำเครื่องหมาย "มีของแล้ว" อย่างเดียว</small></button>
+      </div>`;
+    if (!dlg.open) dlg.showModal();
+  }
+  async function rsvRecvVia(how, id) {
+    document.getElementById('rsvRecvAsk')?.close();
+    const r = list.find(x => x.id === id); if (!r) return;
+    if (how === 'stock') { window.eaOpenReceive?.(); return; }
+    try { await markReceived(r, true); toast(`📦 ใบจอง ${r.res_no}: มีของแล้ว`); afterChange(); }
+    catch (e) { toast(`❌ ${e.message || e}`); }
+  }
+  async function rsvScanUnreceive(id) {
+    const r = list.find(x => x.id === id); if (!r) return;
+    if (!confirm(`เปลี่ยนใบจอง ${r.res_no} เป็น "ยังไม่ได้รับของ"? (สต็อกไม่เปลี่ยน)`)) return;
+    try { await markReceived(r, false); toast('เปลี่ยนเป็นยังไม่ได้รับของแล้ว'); afterChange(); }
+    catch (e) { toast(`❌ ${e.message || e}`); }
+  }
   async function rsvScanToggleReq(id) {
     const r = list.find(x => x.id === id); if (!r) return;
     const on = !r.requisitioned_at;
-    if (!confirm(on ? `ยืนยัน: เบิกของสำหรับใบจอง ${r.res_no} มาแล้ว?` : `เปลี่ยนใบจอง ${r.res_no} เป็น "ยังไม่ได้เบิก"? (ของจะกลับไปขึ้นในใบเบิก)`)) return;
-    try { await save({ id, requisitioned: on }); toast(on ? '📦 บันทึกว่าเบิกของแล้ว' : 'เปลี่ยนเป็นยังไม่ได้เบิกแล้ว'); renderScanView(); if (st()?.page === 'reservations') render(); }
+    if (!confirm(on ? `ยืนยัน: ส่งเบิกของสำหรับใบจอง ${r.res_no} แล้ว? (สถานะจะเป็น "กำลังเบิกสินค้า")` : `เปลี่ยนใบจอง ${r.res_no} เป็น "ยังไม่ได้เบิก"? (ของจะกลับไปขึ้นในใบเบิก)`)) return;
+    try { await save({ id, requisitioned: on }); toast(on ? '🚚 กำลังเบิกสินค้า • ของมาถึงแล้วกด "รับของเข้าบูธ"' : 'เปลี่ยนเป็นยังไม่ได้เบิกแล้ว'); renderScanView(); if (st()?.page === 'reservations') render(); }
     catch (e) { toast(`❌ ${e.message || e}`); }
   }
   // มือถือ: ใส่สินค้าในบิลมือถือ + หักมัดจำ → รับเงิน → checkoutCart (hookCheckout บันทึกว่ารับของแล้ว)
+  function notReadyOk(r) {
+    const q = reqState(r);
+    if (!q || q.k === 'ready' || q.k === 'none') return true;
+    return confirm(`ใบจอง ${r.res_no}: ${q.text}\n\nยังไม่ได้รับของเข้าบูธ • ตรวจว่ามีของครบจริงก่อน\nส่งของให้ลูกค้าต่อหรือไม่?`);
+  }
   function rsvPhonePickup(id) {
     const r = list.find(x => x.id === id); if (!r || r.status !== 'booked') return;
+    if (!notReadyOk(r)) return;
     if (window.eaPhoneLoadReservation?.(r) === false) return;
     document.getElementById('rsvScanDialog')?.close();
   }
   function rsvScanPickup(id) {
     const r = list.find(x => x.id === id); if (!r) return;
+    if (r.status === 'booked' && !notReadyOk(r)) return;
     const allBooth = (r.items || []).length && r.items.every(i => i.product_id && (st()?.products || []).some(p => p.id === i.product_id));
     if (r.pickup_place !== 'shop' && allBooth && !isDeal(r)) document.getElementById('rsvScanDialog')?.close();
     reservationPickup(id);
@@ -949,7 +1026,7 @@
     rsvPaySet, rsvPayClose, rsvPayConfirm, rsvQty, rsvLine, rsvRemove, rsvDepPct,
     reservationSlip, rsvSlipShare, rsvSlipSave, rsvSlipCopy, reservationPickup, reservationPickupCancel,
     reservationCancel, reservationToggleReq, reservationStickers, rsvStkGo, rsvScanPickup, rsvPhonePickup, rsvDepositQr, rsvScanToggleReq,
-    eaReservationReqState: reqState,
+    eaReservationReqState: reqState, eaReservationsAutoReceive: autoReceive, rsvScanReceive, rsvRecvVia, rsvScanUnreceive,
     eaOpenReservationView: openScanView, eaReservationRemaining: remaining,
     eaReservationScan: reservationScan, eaReservationBarcode: barcodeText, eaDrawReservationBarcode: drawBarcode, eaOpenReservationByNo: openByNo,
     eaReservations: all, eaReservationRequisitions: requisitionList, eaMarkReservationsRequisitioned: markRequisitioned,

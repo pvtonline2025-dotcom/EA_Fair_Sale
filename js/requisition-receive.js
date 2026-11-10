@@ -172,11 +172,15 @@
     }
     window.saveLocalState?.();
     try { window.eaQuietRefresh?.(); } catch (_) {}
+    // ใบจองที่เบิกไว้ และของที่รับมาครบ → "มีของแล้ว"
+    let rsvReady = [];
+    try { rsvReady = (await window.eaReservationsAutoReceive?.(ok.map(r => ({ pid: r.pid, qty: Number(r.qty) })))) || []; } catch (_) {}
+    const rsvTxt = rsvReady.length ? ` • 📦 ใบจองมีของแล้ว ${rsvReady.length} ใบ (${rsvReady.join(', ')})` : '';
     if (fail.length) {
-      toast(`⚠️ รับเข้าแล้ว ${ok.length} • ไม่สำเร็จ ${fail.length} (${fail[0].e.message})`, 7000);
+      toast(`⚠️ รับเข้าแล้ว ${ok.length} • ไม่สำเร็จ ${fail.length} (${fail[0].e.message})${rsvTxt}`, 7000);
       form.rows = form.rows.filter(r => !ok.includes(r)); render();
     } else {
-      toast(`✅ รับเข้าสต็อกแล้ว ${ok.length} รายการ${req ? ` • ${req.status === 'received' ? 'ใบเบิกรับครบแล้ว' : 'ใบเบิกยังค้างรับบางรายการ'}` : ''}`, 5000);
+      toast(`✅ รับเข้าสต็อกแล้ว ${ok.length} รายการ${req ? ` • ${req.status === 'received' ? 'ใบเบิกรับครบแล้ว' : 'ใบเบิกยังค้างรับบางรายการ'}` : ''}${rsvTxt}`, rsvTxt ? 7000 : 5000);
       $('reqRecvDialog')?.close();
       if (s?.page === 'stock' || s?.page === 'lowStock') window.render?.();
     }

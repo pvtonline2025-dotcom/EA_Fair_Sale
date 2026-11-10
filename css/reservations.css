@@ -194,12 +194,20 @@ dialog.rsv-dialog.is-phone .rsv-sugg { max-height: 46vh; }
 .mp-release { min-height: 40px; }
 .rsv-req-box { display: grid; gap: 8px; padding: 12px 14px; margin-bottom: 10px; border-radius: 4px; border: 2px solid; }
 .rsv-req-main { font-size: 18px; font-weight: 800; line-height: 1.35; }
-.rsv-req-box.is-done { border-color: #10b981; background: rgba(16, 185, 129, .12); color: #059669; }
+.rsv-req-box.is-ready { border-color: #10b981; background: rgba(16, 185, 129, .12); color: #059669; }
+.rsv-req-box.is-transit { border-color: #f59e0b; background: rgba(245, 158, 11, .12); color: #d97706; }
 .rsv-req-box.is-due { border-color: #ef4444; background: rgba(239, 68, 68, .12); color: #dc2626; }
-.rsv-req-box.is-later { border-color: #f59e0b; background: rgba(245, 158, 11, .12); color: #b45309; }
+.rsv-req-box.is-later { border-color: #64748b; background: rgba(100, 116, 139, .12); color: #94a3b8; }
 .rsv-req-box.is-none { border-color: #94a3b8; background: rgba(148, 163, 184, .12); color: #64748b; }
 .rsv-req-toggle { justify-self: start; min-height: 42px; padding: 0 14px !important; font-size: 14px; color: inherit !important; border: 1.5px solid currentColor !important; background: transparent !important; }
 .rsv-req-short { font-size: 14px; font-weight: 700; color: #dc2626; }
 .rsv-stock { display: block; font-size: 13px; font-weight: 700; margin-top: 2px; }
 .rsv-stock.ok { color: #059669; }
 .rsv-stock.bad { color: #dc2626; }
+.rsv-req-sub { font-size: 14px; font-weight: 600; opacity: .9; }
+.rsv-req-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.rsv-req-acts:empty { display: none; }
+.rsv-req-toggle.is-main { background: #f59e0b !important; border-color: #f59e0b !important; color: #111827 !important; font-weight: 800; font-size: 15px; }
+.rsv-recv-ask { max-width: min(94vw, 520px); }
+.rsv-recv-opt { white-space: normal !important; height: auto !important; display: grid !important; gap: 4px; width: 100%; min-height: 64px; padding: 12px 14px !important; text-align: left; font-size: 16px; font-weight: 800; }
+.rsv-recv-opt small { font-size: 13px; font-weight: 500; opacity: .85; line-height: 1.4; white-space: normal; overflow-wrap: anywhere; }

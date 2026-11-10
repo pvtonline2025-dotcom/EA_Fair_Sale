@@ -98,6 +98,49 @@
     if (r.requisition_mode === 'now') return true;
     return String(r.pickup_date) <= addDays(onDate || todayIso(), 1);   // ก่อนวันนัด 1 วัน (หรือเลยมาแล้ว)
   }
+  // สถานะการเบิกของ (แสดงตอนสแกนใบจอง / ในรายการ)
+  function thDateTime(iso) { if (!iso) return ''; const d = new Date(iso); const p = n => String(n).padStart(2, '0'); return `${d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })} ${p(d.getHours())}:${p(d.getMinutes())}`; }
+  // รับของเข้าบูธแล้ว = ทุกรายการมี recv_at (เก็บใน items ของใบจอง → ทุกเครื่องเห็นตรงกัน ไม่ต้องรัน SQL เพิ่ม)
+  function receivedAt(r) {
+    const its = Array.isArray(r?.items) ? r.items : [];
+    if (!its.length || !its.every(i => i.recv_at)) return '';
+    return its.map(i => String(i.recv_at)).sort().pop();
+  }
+  // ยังไม่เบิก → กำลังเบิกสินค้า (ยังไม่มีของที่หน้าร้าน) → มีของแล้ว (รับเข้าบูธแล้ว)
+  function reqState(r) {
+    if (!r || r.status !== 'booked') return null;
+    const got = receivedAt(r);
+    if (got) return { k: 'ready', short: 'มีของแล้ว', text: `มีของแล้ว • รับเข้าบูธ ${thDateTime(got)}` };
+    if (r.requisition_mode === 'none') return { k: 'none', short: 'ไม่ต้องเบิก', text: 'ไม่ต้องเบิกของ (ใช้ของในบูธ / รับที่ร้าน)' };
+    if (r.requisitioned_at) return { k: 'transit', short: 'กำลังเบิกสินค้า', text: 'กำลังเบิกสินค้า • ยังไม่มีของที่หน้าร้าน', sub: `ส่งใบเบิกแล้ว ${thDateTime(r.requisitioned_at)} • ของมาถึงแล้วกด "รับของเข้าบูธ"` };
+    if (needsRequisition(r)) return { k: 'due', short: 'ยังไม่เบิก', text: 'ยังไม่ได้เบิกสินค้า • ไม่มีของที่หน้าร้าน', sub: 'อยู่ในรายการใบเบิกรอบนี้ • ส่งใบเบิกแล้วจะเปลี่ยนเป็น "กำลังเบิกสินค้า"' };
+    return { k: 'later', short: 'รอรอบเบิก', text: 'ยังไม่ได้เบิกสินค้า • ยังไม่ถึงรอบเบิก', sub: `จะขึ้นในใบเบิกวัน ${thDate(addDays(r.pickup_date, -1))}` };
+  }
+  async function markReceived(r, on) {
+    const at = new Date().toISOString();
+    const items = (Array.isArray(r.items) ? r.items : []).map(i => { const x = { ...i }; if (on) x.recv_at = at; else delete x.recv_at; return x; });
+    return save({ id: r.id, items });
+  }
+  // รับของเข้าสต็อก (📥 รับตามใบเบิก) → ใบจองที่เบิกแล้วและของที่รับมาครบ → "มีของแล้ว" อัตโนมัติ
+  // แบ่งของให้ใบจองที่นัดรับก่อนได้ก่อน • ใบจองที่มีของสั่งพิเศษ (ไม่มีในระบบ) ต้องกดเองในหน้าใบจอง
+  async function autoReceive(lines) {
+    const avail = new Map();
+    for (const l of (lines || [])) if (l?.pid) avail.set(l.pid, (avail.get(l.pid) || 0) + Number(l.qty || 0));
+    if (!avail.size) return [];
+    const cands = list.filter(r => r.status === 'booked' && r.requisition_mode !== 'none' && r.requisitioned_at && !receivedAt(r)
+      && (r.items || []).length && r.items.every(i => i.product_id))
+      .sort((a, b) => String(a.pickup_date).localeCompare(String(b.pickup_date)) || String(a.created_at || '').localeCompare(String(b.created_at || '')));
+    const done = [];
+    for (const r of cands) {
+      const need = new Map();
+      for (const i of r.items) need.set(i.product_id, (need.get(i.product_id) || 0) + Number(i.qty || 0));
+      if (![...need].every(([pid, q]) => (avail.get(pid) || 0) >= q - 1e-9)) continue;
+      try { await markReceived(r, true); need.forEach((q, pid) => avail.set(pid, avail.get(pid) - q)); done.push(r.res_no); }
+      catch (e) { console.warn('[reservations] auto receive', e); }
+    }
+    if (done.length) afterChange();
+    return done;
+  }
   function all() { return list.slice(); }
   function requisitionList() { return list.filter(r => needsRequisition(r)); }
   async function markRequisitioned(ids, on = true) {
@@ -151,8 +194,9 @@
   }
 
   function reqBadge(r) {
+    if (r.status === 'booked' && receivedAt(r)) return '<span class="rsv-tag ok">📦 มีของแล้ว</span>';
     if (r.requisition_mode === 'none') return '<span class="rsv-tag">ไม่ต้องเบิก</span>';
-    if (r.requisitioned_at) return '<span class="rsv-tag ok">เบิกแล้ว</span>';
+    if (r.requisitioned_at) return r.status === 'booked' ? '<span class="rsv-tag warn">🚚 กำลังเบิกสินค้า</span>' : '<span class="rsv-tag ok">เบิกแล้ว</span>';
     if (r.status !== 'booked') return '';
     if (needsRequisition(r)) return '<span class="rsv-tag warn">อยู่ในใบเบิกวันนี้</span>';
     return `<span class="rsv-tag">จะขึ้นใบเบิก ${thDate(addDays(r.pickup_date, -1))}</span>`;
@@ -189,7 +233,7 @@
               <button type="button" class="rsv-btn rsv-main" onclick="reservationPickup('${r.id}')">✅ ลูกค้ามารับ</button>
               <button type="button" class="rsv-btn" onclick="reservationSlip('${r.id}')">🧾 ใบรับมัดจำ</button>
               <button type="button" class="rsv-btn" onclick="eaMiniPrintReservation('${r.id}')">🖨️ พิมพ์เครื่องเล็ก</button>
-              <button type="button" class="rsv-btn" onclick="reservationStickers('${r.id}')">🏷️ สติ๊กเกอร์บาร์โค้ด</button>
+              <button type="button" class="rsv-btn" onclick="reservationStickers('${r.id}')">🏷️ ป้ายสินค้าสั่งจอง</button>
               <button type="button" class="rsv-btn" onclick="openReservationForm('${r.id}')">แก้ไข</button>
               ${r.requisition_mode !== 'none' ? `<button type="button" class="rsv-btn" onclick="reservationToggleReq('${r.id}')">${r.requisitioned_at ? 'ยังไม่เบิก' : 'เบิกแล้ว'}</button>` : ''}
               <button type="button" class="rsv-btn rsv-danger" onclick="reservationCancel('${r.id}')">ยกเลิก</button>` : `
@@ -431,7 +475,7 @@
     const btn = document.getElementById('rsvSaveBtn'); if (btn) { btn.disabled = true; btn.textContent = 'กำลังบันทึก...'; }
     const payload = {
       customer_name: String(form.customer_name).trim(), customer_phone: String(form.customer_phone || '').trim(),
-      items: form.items.map(i => ({ product_id: i.product_id || null, name: String(i.name).trim(), unit: String(i.unit || '').trim(), qty: Number(i.qty), unit_price: Number(i.unit_price || 0) })),
+      items: form.items.map(i => ({ product_id: i.product_id || null, name: String(i.name).trim(), unit: String(i.unit || '').trim(), qty: Number(i.qty), unit_price: Number(i.unit_price || 0), ...(i.recv_at ? { recv_at: i.recv_at } : {}) })),
       total_amount: total, pickup_date: form.pickup_date, pickup_place: form.pickup_place, requisition_mode: form.requisition_mode, note: form.note || ''
     };
     if (form.editing) payload.id = form.id;
@@ -608,6 +652,23 @@
     const dlg = document.getElementById('rsvScanDialog'); const r = scanId && list.find(x => x.id === scanId);
     if (!dlg || !r) return;
     const items = Array.isArray(r.items) ? r.items : [];
+    const rq = reqState(r);
+    const prods = st()?.products || [];
+    // ของในบูธพอส่งไหม (เฉพาะสินค้าที่มีในระบบ)
+    const stockOf = i => { const p = i.product_id && prods.find(x => x.id === i.product_id); return p ? Number(p.stock_qty || 0) : null; };
+    const short = r.status === 'booked' ? items.filter(i => { const s = stockOf(i); return s !== null && s < Number(i.qty || 0); }) : [];
+    const reqBox = rq ? `
+        <div class="rsv-req-box is-${rq.k}">
+          <div class="rsv-req-main">${{ ready: '✅', transit: '🚚', due: '⚠️', later: '🕒', none: '➖' }[rq.k] || ''} ${escapeHtml(rq.text)}</div>
+          ${rq.sub ? `<div class="rsv-req-sub">${escapeHtml(rq.sub)}</div>` : ''}
+          <div class="rsv-req-acts">
+            ${rq.k === 'transit' ? `<button type="button" class="rsv-btn rsv-req-toggle is-main" onclick="rsvScanReceive('${r.id}')">📥 รับของเข้าบูธ</button>` : ''}
+            ${rq.k === 'ready' ? `<button type="button" class="rsv-btn rsv-req-toggle" onclick="rsvScanUnreceive('${r.id}')">↩ ยังไม่ได้รับของ</button>` : ''}
+            ${rq.k === 'due' || rq.k === 'later' ? `<button type="button" class="rsv-btn rsv-req-toggle" onclick="rsvScanToggleReq('${r.id}')">✓ ส่งเบิกแล้ว</button>` : ''}
+            ${rq.k === 'transit' ? `<button type="button" class="rsv-btn rsv-req-toggle" onclick="rsvScanToggleReq('${r.id}')">↩ ยังไม่ได้เบิก</button>` : ''}
+          </div>
+          ${short.length ? `<div class="rsv-req-short">ของในบูธยังไม่พอ: ${short.map(i => `${escapeHtml(i.name)} มี ${stockOf(i)} / ต้องใช้ ${Number(i.qty)}`).join(' • ')}</div>` : ''}
+        </div>` : '';
     const t = todayIso();
     const allBooth = items.length && items.every(i => i.product_id && (st()?.products || []).some(p => p.id === i.product_id));
     const posFlow = r.pickup_place !== 'shop' && allBooth && !isDeal(r);
@@ -619,10 +680,11 @@
         <button type="button" class="rsv-x" onclick="document.getElementById('rsvScanDialog').close()" aria-label="ปิด">✕</button></div>
       <div class="rsv-dlg-body">
         ${status}
+        ${reqBox}
         <div class="rsv-scan-cust"><b>${escapeHtml(r.customer_name)}</b>${r.customer_phone ? ` <a href="tel:${escapeHtml(r.customer_phone)}">📞 ${escapeHtml(r.customer_phone)}</a>` : ''}
           <span>นัดรับ ${thDate(r.pickup_date)} • ${r.pickup_place === 'shop' ? 'ร้าน/โกดัง' : 'บูธ'}</span></div>
         <div class="rsv-scan-h">สินค้าที่ต้องส่งให้ลูกค้า</div>
-        <div class="rsv-scan-items">${items.map(i => `<div class="rsv-scan-item"><span>${escapeHtml(i.name)}</span><b>${Number(i.qty)} ${escapeHtml(i.unit || '')}</b></div>`).join('')}</div>
+        <div class="rsv-scan-items">${items.map(i => { const s = r.status === 'booked' ? stockOf(i) : null; return `<div class="rsv-scan-item"><span>${escapeHtml(i.name)}${s !== null ? `<small class="rsv-stock ${s >= Number(i.qty || 0) ? 'ok' : 'bad'}">ในบูธมี ${s}</small>` : ''}</span><b>${Number(i.qty)} ${escapeHtml(i.unit || '')}</b></div>`; }).join('')}</div>
         ${r.note ? `<div class="rsv-note">📝 ${escapeHtml(r.note)}</div>` : ''}
         <div class="rsv-sum"><span>${isDeal(r) ? 'ราคาตกลง' : 'ยอดเต็ม'}</span><strong>฿${money(r.total_amount)}</strong></div>
         <div class="rsv-sum"><span>มัดจำแล้ว (${isQr(r.deposit_method) ? 'โอน' : 'สด'})</span><strong>−฿${money(r.deposit_amount)}</strong></div>
@@ -631,21 +693,64 @@
         ${r.status === 'booked' && posFlow && phoneMode() ? '<div class="rsv-hint">กด "ลูกค้ามารับ" → สินค้าเข้าบิลในมือถือ หักมัดจำให้อัตโนมัติ แล้วรับเงินคงค้างตามปกติ (ตัดสต็อกให้)</div>' : ''}
       </div>
       <div class="rsv-dlg-foot">
-        <button type="button" class="rsv-btn" onclick="reservationStickers('${r.id}')">🏷️ สติ๊กเกอร์</button>
+        <button type="button" class="rsv-btn" onclick="reservationStickers('${r.id}')">🏷️ ป้ายของจอง</button>
         <button type="button" class="rsv-btn" onclick="eaMiniPrintReservation('${r.id}')">🖨️ พิมพ์ใบจอง</button>
         ${r.status === 'booked' && !(posFlow && phoneMode()) ? `<button type="button" class="rsv-btn rsv-main" onclick="rsvScanPickup('${r.id}')">✅ ส่งของ + รับเงิน ฿${money(remaining(r))}</button>` : ''}
         ${r.status === 'booked' && posFlow && phoneMode() && typeof window.eaPhoneLoadReservation === 'function' ? `<button type="button" class="rsv-btn rsv-main" onclick="rsvPhonePickup('${r.id}')">✅ ลูกค้ามารับ • เก็บอีก ฿${money(remaining(r))}</button>` : ''}
         ${r.status === 'booked' && phoneMode() ? `<button type="button" class="rsv-btn" onclick="reservationSlip('${r.id}')">🧾 ใบรับมัดจำ</button>` : ''}
       </div>`;
   }
+  // 📥 รับของเข้าบูธ: ของมาตามใบเบิก → รับเข้าสต็อก (ใบจองเปลี่ยนเป็น "มีของแล้ว" ให้เอง) หรือแค่ทำเครื่องหมาย
+  function rsvScanReceive(id) {
+    const r = list.find(x => x.id === id); if (!r) return;
+    let dlg = document.getElementById('rsvRecvAsk');
+    if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'rsvRecvAsk'; dlg.className = 'rsv-dialog rsv-recv-ask'; document.body.appendChild(dlg); }
+    const its = (r.items || []).map(i => `${escapeHtml(i.name)} ×${Number(i.qty)}`).join(', ');
+    dlg.innerHTML = `
+      <div class="rsv-dlg-head"><strong>📥 รับของเข้าบูธ <span>${escapeHtml(r.res_no)}</span></strong>
+        <button type="button" class="rsv-x" onclick="this.closest('dialog').close()" aria-label="ปิด">✕</button></div>
+      <div class="rsv-dlg-body">
+        <div class="rsv-note">${escapeHtml(r.customer_name)} • ${its}</div>
+        ${typeof window.eaOpenReceive === 'function' ? `<button type="button" class="rsv-btn rsv-main rsv-recv-opt" onclick="rsvRecvVia('stock','${r.id}')">📥 รับตามใบเบิก (เพิ่มสต็อกบูธ)<small>ของมากับใบเบิก ยังไม่ได้รับเข้าสต็อก → รับเข้าสต็อก แล้วใบจองนี้ขึ้น "มีของแล้ว" ให้เอง</small></button>` : ''}
+        <button type="button" class="rsv-btn rsv-recv-opt" onclick="rsvRecvVia('mark','${r.id}')">✓ ของอยู่ในบูธแล้ว (ไม่เพิ่มสต็อก)<small>รับเข้าสต็อกไปแล้ว หรือแยกของจองไว้แล้ว → ทำเครื่องหมาย "มีของแล้ว" อย่างเดียว</small></button>
+      </div>`;
+    if (!dlg.open) dlg.showModal();
+  }
+  async function rsvRecvVia(how, id) {
+    document.getElementById('rsvRecvAsk')?.close();
+    const r = list.find(x => x.id === id); if (!r) return;
+    if (how === 'stock') { window.eaOpenReceive?.(); return; }
+    try { await markReceived(r, true); toast(`📦 ใบจอง ${r.res_no}: มีของแล้ว`); afterChange(); }
+    catch (e) { toast(`❌ ${e.message || e}`); }
+  }
+  async function rsvScanUnreceive(id) {
+    const r = list.find(x => x.id === id); if (!r) return;
+    if (!confirm(`เปลี่ยนใบจอง ${r.res_no} เป็น "ยังไม่ได้รับของ"? (สต็อกไม่เปลี่ยน)`)) return;
+    try { await markReceived(r, false); toast('เปลี่ยนเป็นยังไม่ได้รับของแล้ว'); afterChange(); }
+    catch (e) { toast(`❌ ${e.message || e}`); }
+  }
+  async function rsvScanToggleReq(id) {
+    const r = list.find(x => x.id === id); if (!r) return;
+    const on = !r.requisitioned_at;
+    if (!confirm(on ? `ยืนยัน: ส่งเบิกของสำหรับใบจอง ${r.res_no} แล้ว? (สถานะจะเป็น "กำลังเบิกสินค้า")` : `เปลี่ยนใบจอง ${r.res_no} เป็น "ยังไม่ได้เบิก"? (ของจะกลับไปขึ้นในใบเบิก)`)) return;
+    try { await save({ id, requisitioned: on }); toast(on ? '🚚 กำลังเบิกสินค้า • ของมาถึงแล้วกด "รับของเข้าบูธ"' : 'เปลี่ยนเป็นยังไม่ได้เบิกแล้ว'); renderScanView(); if (st()?.page === 'reservations') render(); }
+    catch (e) { toast(`❌ ${e.message || e}`); }
+  }
   // มือถือ: ใส่สินค้าในบิลมือถือ + หักมัดจำ → รับเงิน → checkoutCart (hookCheckout บันทึกว่ารับของแล้ว)
+  function notReadyOk(r) {
+    const q = reqState(r);
+    if (!q || q.k === 'ready' || q.k === 'none') return true;
+    return confirm(`ใบจอง ${r.res_no}: ${q.text}\n\nยังไม่ได้รับของเข้าบูธ • ตรวจว่ามีของครบจริงก่อน\nส่งของให้ลูกค้าต่อหรือไม่?`);
+  }
   function rsvPhonePickup(id) {
     const r = list.find(x => x.id === id); if (!r || r.status !== 'booked') return;
+    if (!notReadyOk(r)) return;
     if (window.eaPhoneLoadReservation?.(r) === false) return;
     document.getElementById('rsvScanDialog')?.close();
   }
   function rsvScanPickup(id) {
     const r = list.find(x => x.id === id); if (!r) return;
+    if (r.status === 'booked' && !notReadyOk(r)) return;
     const allBooth = (r.items || []).length && r.items.every(i => i.product_id && (st()?.products || []).some(p => p.id === i.product_id));
     if (r.pickup_place !== 'shop' && allBooth && !isDeal(r)) document.getElementById('rsvScanDialog')?.close();
     reservationPickup(id);
@@ -660,11 +765,12 @@
     let dlg = document.getElementById('rsvStkDialog');
     if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'rsvStkDialog'; dlg.className = 'rsv-stk-dialog'; document.body.appendChild(dlg); }
     dlg.innerHTML = `
-      <div class="rsv-stk-head"><strong>🏷️ สติ๊กเกอร์บาร์โค้ด ${escapeHtml(r.res_no)}</strong><button type="button" class="rsv-x" onclick="document.getElementById('rsvStkDialog').close()" aria-label="ปิด">✕</button></div>
+      <div class="rsv-stk-head"><strong>🏷️ ป้ายสินค้าสั่งจอง ${escapeHtml(r.res_no)}</strong><button type="button" class="rsv-x" onclick="document.getElementById('rsvStkDialog').close()" aria-label="ปิด">✕</button></div>
       <div class="rsv-stk-body">
         <label>จำนวนดวง (ติดที่ม้วน/ของแต่ละชิ้น)</label>
         <input id="rsvStkN" type="number" inputmode="numeric" min="1" max="72" value="${def}">
         <div class="rsv-stk-act">
+          <div class="rsv-hint">ป้ายสินค้าสั่งจอง: แถบดำ "สินค้าสั่งจอง • ห้ามขาย" + ชื่อลูกค้า • <b>ไม่พิมพ์ราคา</b> (ราคาตามที่ตกลงในใบจอง) • บาร์โค้ดเป็นเลขใบจอง สแกนแล้วเปิดใบจอง</div>
           ${window.eaMiniPrintReservationLabels ? `<button type="button" class="rsv-btn rsv-main" onclick="rsvStkGo('${r.id}','mini')">🖨️ เครื่องเล็ก 57×30 มม.</button>` : ''}
           <button type="button" class="rsv-btn" onclick="rsvStkGo('${r.id}','a4')">📄 กระดาษ A4 (ดวง 4.2×3 ซม.)</button>
         </div>
@@ -685,12 +791,17 @@
     items.forEach(i => { const c = Math.max(1, Math.ceil(Number(i.qty) || 1)); for (let k = 0; k < c; k++) names.push(i.name); });
     const svg = barcodeSvg(barcodeText(r));
     if (!svg) { toast('โหลดตัวสร้างบาร์โค้ดไม่สำเร็จ'); return; }
+    const ph = String(r.customer_phone || '').replace(/\D/g, '').slice(-4);
+    const pd = new Date(String(r.pickup_date).slice(0, 10) + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
+    // ป้ายสินค้าสั่งจอง: กรอบดำหนา + แถบ "สินค้าสั่งจอง ห้ามขาย" • ไม่มีราคา • บาร์โค้ด = เลขใบจอง
     const cells = Array.from({ length: n }, (_, k) => `
       <div class="st">
-        <div class="top"><span class="tag">ของจอง</span><span class="c">${escapeHtml(r.customer_name)}</span></div>
+        <div class="band">★ สินค้าสั่งจอง • ห้ามขาย ★</div>
+        <div class="top"><span class="c">${escapeHtml(r.customer_name)}</span>${ph ? `<span class="ph">โทร …${escapeHtml(ph)}</span>` : ''}</div>
         <div class="i">${escapeHtml(names[k % (names.length || 1)] || '')}</div>
         <div class="bc">${svg}</div>
-        <div class="bot"><span class="no">${escapeHtml(r.res_no)}</span><span class="d">รับ ${escapeHtml(new Date(String(r.pickup_date).slice(0, 10) + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }))}${n > 1 ? ` ${k + 1}/${n}` : ''}</span></div>
+        <div class="no">${escapeHtml(r.res_no)}</div>
+        <div class="bot"><span class="d">รับ ${escapeHtml(pd)}</span><span class="np">ราคาตามใบจอง</span><span>${n > 1 ? `${k + 1}/${n}` : ''}</span></div>
       </div>`).join('');
     const html = `<!doctype html><html lang="th"><head><meta charset="utf-8"><title>สติ๊กเกอร์ ${escapeHtml(r.res_no)}</title>
       <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -704,15 +815,17 @@
         .bar .p { background: #10b981; color: #fff; } .bar .x { background: #4b5563; color: #fff; }
         .page { width: 210mm; min-height: 297mm; margin: 16px auto; padding-top: 5mm; background: #fff; }
         .sheet { width: 177mm; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 42mm); grid-auto-rows: 30mm; gap: 2mm 3mm; }
-        .st { width: 42mm; height: 30mm; overflow: hidden; display: flex; flex-direction: column; padding: 1.4mm 1.8mm 1.2mm; border: 0.3mm dashed #cbd5e1; page-break-inside: avoid; line-height: 1.12; }
-        .top { display: flex; align-items: center; gap: 1mm; min-width: 0; }
-        .tag { flex: none; background: #000; color: #fff; font-size: 5.5pt; font-weight: 800; padding: .2mm 1mm; }
+        .st { width: 42mm; height: 30mm; overflow: hidden; display: flex; flex-direction: column; padding: 0 1.4mm .8mm; border: .7mm solid #000; page-break-inside: avoid; line-height: 1.12; }
+        .band { margin: 0 -1.4mm; padding: .5mm 0 .6mm; background: #000; color: #fff; text-align: center; font-size: 6.3pt; font-weight: 800; white-space: nowrap; letter-spacing: .1pt; }
+        .top { display: flex; align-items: baseline; justify-content: space-between; gap: 1mm; min-width: 0; margin-top: .5mm; }
         .c { font-size: 7.5pt; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .i { font-size: 6pt; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; margin-top: .3mm; height: 4.4mm; }
-        .bc { flex: 1; display: flex; align-items: center; padding: .6mm 1.5mm; } .bc svg { width: 100%; height: 11mm; display: block; }
-        .bot { display: flex; justify-content: space-between; gap: 1mm; font-size: 6pt; font-weight: 800; white-space: nowrap; }
-        .no { font-family: ui-monospace, monospace; font-size: 5.5pt; }
-        @media print { html { background: #fff; } .bar { display: none; } .page { margin: 0; padding: 0; min-height: 0; width: auto; } .st { border-color: transparent; } }
+        .ph { flex: none; font-size: 5.5pt; font-weight: 700; }
+        .i { font-size: 6pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; height: 2.6mm; }
+        .bc { flex: 1; display: flex; align-items: center; padding: .3mm .5mm 0; min-height: 0; } .bc svg { width: 100%; height: 8.6mm; display: block; }
+        .no { text-align: center; font-family: ui-monospace, monospace; font-size: 5pt; font-weight: 700; }
+        .bot { display: flex; justify-content: space-between; align-items: baseline; gap: 1mm; font-size: 6pt; font-weight: 800; white-space: nowrap; }
+        .np { font-size: 5pt; font-weight: 600; }
+        @media print { html { background: #fff; } .bar { display: none; } .page { margin: 0; padding: 0; min-height: 0; width: auto; } }
         @media screen and (max-width: 820px) { .page { zoom: .5; } }
       </style></head><body>
       <div class="bar"><button class="p" onclick="window.print()">🖨️ พิมพ์สติ๊กเกอร์บาร์โค้ด (A4 • 4.2×3 ซม.)</button><button class="x" onclick="window.close()">ปิด</button></div>
@@ -920,7 +1033,8 @@
     rsvTab, rsvSearch, rsvField, rsvSet, rsvQuery, rsvAdd, rsvAddFirst, rsvAddCustom, rsvText,
     rsvPaySet, rsvPayClose, rsvPayConfirm, rsvQty, rsvLine, rsvRemove, rsvDepPct,
     reservationSlip, rsvSlipShare, rsvSlipSave, rsvSlipCopy, reservationPickup, reservationPickupCancel,
-    reservationCancel, reservationToggleReq, reservationStickers, rsvStkGo, rsvScanPickup, rsvPhonePickup, rsvDepositQr,
+    reservationCancel, reservationToggleReq, reservationStickers, rsvStkGo, rsvScanPickup, rsvPhonePickup, rsvDepositQr, rsvScanToggleReq,
+    eaReservationReqState: reqState, eaReservationsAutoReceive: autoReceive, rsvScanReceive, rsvRecvVia, rsvScanUnreceive,
     eaOpenReservationView: openScanView, eaReservationRemaining: remaining,
     eaReservationScan: reservationScan, eaReservationBarcode: barcodeText, eaDrawReservationBarcode: drawBarcode, eaOpenReservationByNo: openByNo,
     eaReservations: all, eaReservationRequisitions: requisitionList, eaMarkReservationsRequisitioned: markRequisitioned,

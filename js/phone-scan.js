@@ -116,13 +116,27 @@
       return;
     }
     showCamMsg('กำลังเปิดกล้อง...');
+    const myRun = ++camRun;
     try {
-      reader = new ZXingBrowser.BrowserMultiFormatReader();
-      controls = await reader.decodeFromConstraints(
-        { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
-        video,
-        (result) => { if (result) onCode(result.getText()); }
-      );
+      const stream = await openStream();
+      if (myRun !== camRun) { stream.getTracks().forEach(t => t.stop()); return; }
+      video.srcObject = stream;
+      try { await video.play(); } catch (_) {}
+      await tuneTrack(stream.getVideoTracks()[0]);
+      // ตัวอ่าน: ① Android ตัวอ่านในเครื่อง ② ZXing-C++ (WebAssembly ฝากในแอป) ③ ZXing JS เดิม
+      // ZXing JS อ่านป้ายใบจองไม่ออกเมื่อมีไอคอน/กรอบดำข้างบาร์โค้ด • ZXing-C++ อ่านได้ทั้งป้าย
+      const det = (await nativeDetector()) || (await wasmDetector());
+      if (myRun !== camRun) return;
+      if (det) startNativeLoop(det, video, myRun);
+      else {
+        // TRY_HARDER (3) + จำกัดชนิดบาร์โค้ด (2) → อ่านป้ายที่มีของรอบข้างได้ดีขึ้น
+        let hints;
+        try { const F = ZXingBrowser.BarcodeFormat; hints = new Map([[3, true], [2, [F.CODE_128, F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_39, F.ITF, F.QR_CODE]]]); } catch (_) {}
+        reader = new ZXingBrowser.BrowserMultiFormatReader(hints);
+        controls = await reader.decodeFromStream(stream, video, (result) => { if (result) onCode(result.getText()); });
+      }
+      const sw = $('psCamSwitch');
+      if (sw) sw.hidden = camList.length < 2;
       const msg = $('psCamMsg');
       if (msg) msg.hidden = true;
       const torchBtn = $('psTorchBtn');
@@ -138,12 +152,120 @@
   }
 
   function stopCamera() {
+    camRun++;
+    clearTimeout(detectTimer); detectTimer = null;
     try { controls?.stop(); } catch (e) {}
     controls = null;
     reader = null;
     const video = $('psVideo');
     try { video?.srcObject?.getTracks?.().forEach(t => t.stop()); } catch (e) {}
     if (video) video.srcObject = null;
+  }
+
+  // ---------- เลือกกล้อง / โฟกัส / ตัวอ่าน (แก้ Android สแกนยาก) ----------
+  // Android หลายรุ่นมีกล้องหลังหลายตัว เบราว์เซอร์มักเลือกกล้องมุมกว้าง (โฟกัสใกล้ไม่ได้) → ภาพบาร์โค้ดเบลอ
+  const CAM_KEY = 'ea_phone_cam_id';
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  let camList = [], camRun = 0, detectTimer = null;
+  async function listBackCams() {
+    try {
+      const all = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+      const back = all.filter(d => !/front|user|selfie|หน้า/i.test(d.label));
+      camList = back.length ? back : all;
+    } catch (_) { camList = []; }
+    return camList;
+  }
+  function bestCam() {
+    const saved = lsGet(CAM_KEY, '');
+    if (saved && camList.some(d => d.deviceId === saved)) return saved;
+    const main = camList.find(d => /camera2 0\b|camera 0\b/i.test(d.label))
+      || camList.find(d => /back|rear|environment|หลัง/i.test(d.label) && !/wide|ultra|tele|depth|macro|infrared|\bir\b/i.test(d.label))
+      || camList[0];
+    return main?.deviceId || '';
+  }
+  const HI = { width: { ideal: 1920 }, height: { ideal: 1080 } };
+  async function openStream() {
+    let stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, ...HI }, audio: false });
+    if (isAndroid) {
+      await listBackCams();          // ชื่อกล้องอ่านได้หลังอนุญาตกล้องแล้ว
+      const want = bestCam();
+      const cur = stream.getVideoTracks()[0]?.getSettings?.().deviceId;
+      if (want && want !== cur) {
+        try {
+          const s2 = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: want }, ...HI }, audio: false });
+          stream.getTracks().forEach(t => t.stop()); stream = s2;
+        } catch (_) { /* ใช้กล้องเดิมต่อ */ }
+      }
+    }
+    return stream;
+  }
+  // โฟกัสอัตโนมัติต่อเนื่อง + ซูมเล็กน้อย (ถือห่างได้ ไม่ต้องจ่อใกล้จนโฟกัสไม่ทัน)
+  async function tuneTrack(track) {
+    if (!track?.getCapabilities) return;
+    let caps = {}; try { caps = track.getCapabilities() || {}; } catch (_) {}
+    const adv = {};
+    if (Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')) adv.focusMode = 'continuous';
+    if (isAndroid && caps.zoom && caps.zoom.max >= 2) adv.zoom = Math.min(caps.zoom.max, Math.max(caps.zoom.min || 1, 1.5));
+    if (Object.keys(adv).length) { try { await track.applyConstraints({ advanced: [adv] }); } catch (_) {} }
+  }
+  async function nativeDetector() {
+    if (!isAndroid || !('BarcodeDetector' in window)) return null;
+    try {
+      const sup = await window.BarcodeDetector.getSupportedFormats();
+      const want = ['code_128', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_39', 'itf', 'qr_code'].filter(f => sup.includes(f));
+      if (!want.includes('code_128')) return null;
+      return new window.BarcodeDetector({ formats: want });
+    } catch (_) { return null; }
+  }
+  // ZXing-C++ (WebAssembly) ผ่าน barcode-detector • ไฟล์อยู่ในแอป (assets/vendor) ใช้ได้ตอนออฟไลน์
+  const BD_JS = 'assets/vendor/barcode-detector-3.0.8.js', BD_WASM = 'assets/vendor/zxing_reader-2.2.4.wasm';
+  let wasmDet = null, wasmFailed = false;
+  function loadScript(src) {
+    return new Promise((ok, bad) => { const s = document.createElement('script'); s.src = src; s.async = true; s.onload = ok; s.onerror = bad; document.head.appendChild(s); });
+  }
+  async function wasmDetector() {
+    if (wasmDet) return wasmDet;
+    if (wasmFailed || typeof WebAssembly !== 'object') return null;
+    try {
+      if (!window.BarcodeDetectionAPI) await loadScript(BD_JS);
+      const API = window.BarcodeDetectionAPI;
+      API.setZXingModuleOverrides({ locateFile: (path, prefix) => path.endsWith('.wasm') ? new URL(BD_WASM, location.href).href : prefix + path });
+      const det = new API.BarcodeDetector({ formats: ['code_128', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_39', 'itf', 'qr_code'] });
+      // อุ่นเครื่อง: โหลด wasm ก่อนเริ่มสแกน (ไม่เกิน 10 วินาที)
+      const c = document.createElement('canvas'); c.width = c.height = 8;
+      await Promise.race([det.detect(c), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 10000))]);
+      wasmDet = det; return det;
+    } catch (e) { console.warn('[phone-scan] wasm detector', e); wasmFailed = true; return null; }
+  }
+  function startNativeLoop(det, video, run) {
+    // ย่อภาพไม่เกิน 1280 px ก่อนอ่าน (เร็วพอบนมือถือรุ่นเล็ก)
+    const cv = document.createElement('canvas'), cx = cv.getContext('2d', { willReadFrequently: true });
+    const frame = () => {
+      const vw = video.videoWidth, vh = video.videoHeight;
+      if (!vw || !vh) return null;
+      const k = Math.min(1, 1280 / Math.max(vw, vh));
+      cv.width = Math.round(vw * k); cv.height = Math.round(vh * k);
+      cx.drawImage(video, 0, 0, cv.width, cv.height);
+      return cv;
+    };
+    const tick = async () => {
+      if (run !== camRun) return;
+      if (!paused && video.readyState >= 2) {
+        try { const f = frame(); const r = f ? await det.detect(f) : []; if (r && r.length && run === camRun) onCode(r[0].rawValue); } catch (_) {}
+      }
+      if (run === camRun) detectTimer = setTimeout(tick, 100);
+    };
+    tick();
+  }
+  // 🔄 สลับกล้อง (Android ที่มีกล้องหลังหลายตัว) → จำกล้องที่เลือกไว้
+  function switchPhoneScanCamera() {
+    if (camList.length < 2) return;
+    const cur = videoTrack()?.getSettings?.().deviceId || bestCam();
+    const i = camList.findIndex(d => d.deviceId === cur);
+    const next = camList[(i + 1) % camList.length];
+    lsSet(CAM_KEY, next.deviceId);
+    notice(`กล้อง ${(i + 1) % camList.length + 1}/${camList.length}${next.label ? ` • ${next.label}` : ''} • เลือกตัวที่ภาพบาร์โค้ดคมที่สุด`, 'info');
+    startCamera();
   }
 
   function showCamMsg(text, withRetry) {
@@ -1508,6 +1630,7 @@
     eaPhoneLoadReservation: loadReservationToBill,
     openPhoneInstall,
     hidePhoneInstallHint,
+    switchPhoneScanCamera,
     eaPromptPayQrSvg: promptPayQrFor
   });
 

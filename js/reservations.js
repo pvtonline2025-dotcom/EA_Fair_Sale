@@ -769,18 +769,27 @@
       <div class="rsv-stk-body">
         <label>จำนวนดวง (ติดที่ม้วน/ของแต่ละชิ้น)</label>
         <input id="rsvStkN" type="number" inputmode="numeric" min="1" max="72" value="${def}">
+        <label>ความยาวป้าย (ตามกระดาษสติ๊กเกอร์)</label>
+        <div class="rsv-chips rsv-stk-len">${[30, 40, 50, 100].map(m => `<button type="button" class="${stkMm() === m ? 'is-on' : ''}" onclick="rsvStkLen(${m}, this)">${m === 100 ? 'แนวนอน 100 มม.' : `57×${m} มม.`}</button>`).join('')}</div>
         <div class="rsv-stk-act">
           <div class="rsv-hint">ป้ายสินค้าสั่งจอง: แถบดำ "สินค้าสั่งจอง • ห้ามขาย" + ชื่อลูกค้า • <b>ไม่พิมพ์ราคา</b> (ราคาตามที่ตกลงในใบจอง) • บาร์โค้ดเป็นเลขใบจอง สแกนแล้วเปิดใบจอง</div>
-          ${window.eaMiniPrintReservationLabels ? `<button type="button" class="rsv-btn rsv-main" onclick="rsvStkGo('${r.id}','mini')">🖨️ เครื่องเล็ก 57×30 มม.</button>` : ''}
-          <button type="button" class="rsv-btn" onclick="rsvStkGo('${r.id}','a4')">📄 กระดาษ A4 (ดวง 4.2×3 ซม.)</button>
+          ${window.eaMiniPrintReservationLabels ? `<button type="button" class="rsv-btn rsv-main" onclick="rsvStkGo('${r.id}','mini')">🖨️ เครื่องเล็ก (สติ๊กเกอร์ม้วน)</button>` : ''}
+          <button type="button" class="rsv-btn" onclick="rsvStkGo('${r.id}','a4')">📄 กระดาษ A4 (ดวงกว้าง 4.2 ซม.)</button>
         </div>
       </div>`;
     if (!dlg.open) dlg.showModal();
   }
+  // ความยาวป้ายของจอง (จำไว้ในเครื่อง) ค่าเริ่มต้น 40 มม.
+  const STK_MM_KEY = 'ea_rsv_label_mm';
+  function stkMm() { const v = Number(lsGet(STK_MM_KEY, '40')); return [30, 40, 50, 100].includes(v) ? v : 40; }
+  function rsvStkLen(m, btn) {
+    lsSet(STK_MM_KEY, String(m));
+    btn?.parentNode?.querySelectorAll('button').forEach(b => b.classList.toggle('is-on', b === btn));
+  }
   function rsvStkGo(id, mode) {
     const n = Math.max(1, Math.min(72, parseInt(document.getElementById('rsvStkN')?.value, 10) || 1));
     document.getElementById('rsvStkDialog')?.close();
-    if (mode === 'mini') window.eaMiniPrintReservationLabels?.(id, n);
+    if (mode === 'mini') window.eaMiniPrintReservationLabels?.(id, n, stkMm());
     else reservationStickersA4(id, n);
   }
   function reservationStickersA4(id, n) {
@@ -794,7 +803,21 @@
     const ph = String(r.customer_phone || '').replace(/\D/g, '').slice(-4);
     const pd = new Date(String(r.pickup_date).slice(0, 10) + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
     // ป้ายสินค้าสั่งจอง: กรอบดำหนา + แถบ "สินค้าสั่งจอง ห้ามขาย" • ไม่มีราคา • บาร์โค้ด = เลขใบจอง
-    const cells = Array.from({ length: n }, (_, k) => `
+    const land = stkMm() === 100;   // แนวนอน 10×4.5 ซม. (2 ดวงต่อแถว)
+    const IC_CART = '<svg viewBox="0 0 24 24"><path fill="#fff" d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49A1.003 1.003 0 0 0 20 4H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z"/><circle cx="17.5" cy="6.5" r="4.6" fill="#fff" stroke="#000" stroke-width=".6"/><path d="M15.4 6.6l1.5 1.5 2.9-3" fill="none" stroke="#000" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const IC_PHONE = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="12"/><path fill="#fff" transform="translate(4.6 4.6) scale(.62)" d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>';
+    const IC_BOX = '<svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.8" stroke-linejoin="round"><path d="M12 2.5l9 4.5v10l-9 4.5-9-4.5V7z"/><path d="M3 7l9 4.5L21 7M12 11.5v10"/></svg>';
+    const IC_CLIP = '<svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="18" rx="2"/><rect x="8.5" y="2" width="7" height="4" rx="1" fill="#fff"/><path d="M8.5 13.5l2.5 2.5 5-5"/></svg>';
+    const cells = land ? Array.from({ length: n }, (_, k) => {
+      const item = names[k % (names.length || 1)] || '';
+      const fs = item.length > 70 ? 7 : item.length > 45 ? 8 : item.length > 28 ? 9.5 : 11;
+      return `
+      <div class="st land">
+        <div class="band"><i class="hz"></i>★ สินค้าสั่งจอง • ห้ามขาย ★<i class="hz"></i></div>
+        <div class="r1"><div class="c">${escapeHtml(r.customer_name)}</div>${ph ? `<div class="pp">${IC_PHONE}โทร. …${escapeHtml(ph)}</div>` : ''}</div>
+        <div class="r2"><div class="ib">${IC_CART}</div><div class="bcw"><div class="bc">${svg}</div><div class="cp">${escapeHtml(r.res_no)}${n > 1 ? `<small>${k + 1}/${n}</small>` : ''}</div></div></div>
+        <div class="r3"><div class="ip">${IC_BOX}<span style="font-size:${fs}pt">${escapeHtml(item)}</span></div><div class="dt">${IC_CLIP}<span class="lb">รับสินค้า :</span><b>${escapeHtml(pd)}</b></div></div>
+      </div>`; }).join('') : Array.from({ length: n }, (_, k) => `
       <div class="st">
         <div class="band">★ สินค้าสั่งจอง • ห้ามขาย ★</div>
         <div class="top"><span class="c">${escapeHtml(r.customer_name)}</span>${ph ? `<span class="ph">โทร …${escapeHtml(ph)}</span>` : ''}</div>
@@ -814,21 +837,44 @@
         .bar button { height: 44px; padding: 0 18px; border-radius: 4px; border: 0; font: 700 15px "Sarabun", sans-serif; cursor: pointer; }
         .bar .p { background: #10b981; color: #fff; } .bar .x { background: #4b5563; color: #fff; }
         .page { width: 210mm; min-height: 297mm; margin: 16px auto; padding-top: 5mm; background: #fff; }
-        .sheet { width: 177mm; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 42mm); grid-auto-rows: 30mm; gap: 2mm 3mm; }
-        .st { width: 42mm; height: 30mm; overflow: hidden; display: flex; flex-direction: column; padding: 0 1.4mm .8mm; border: .7mm solid #000; page-break-inside: avoid; line-height: 1.12; }
+        .sheet { width: 177mm; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 42mm); grid-auto-rows: ${stkMm()}mm; gap: 2mm 3mm; }
+        .st { width: 42mm; height: ${stkMm()}mm; overflow: hidden; display: flex; flex-direction: column; padding: 0 1.4mm .8mm; border: .7mm solid #000; page-break-inside: avoid; line-height: 1.12; }
         .band { margin: 0 -1.4mm; padding: .5mm 0 .6mm; background: #000; color: #fff; text-align: center; font-size: 6.3pt; font-weight: 800; white-space: nowrap; letter-spacing: .1pt; }
         .top { display: flex; align-items: baseline; justify-content: space-between; gap: 1mm; min-width: 0; margin-top: .5mm; }
         .c { font-size: 7.5pt; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .ph { flex: none; font-size: 5.5pt; font-weight: 700; }
         .i { font-size: 6pt; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; height: 2.6mm; }
-        .bc { flex: 1; display: flex; align-items: center; padding: .3mm .5mm 0; min-height: 0; } .bc svg { width: 100%; height: 8.6mm; display: block; }
+        .bc { flex: 1; display: flex; align-items: center; padding: .3mm .5mm 0; min-height: 0; } .bc svg { width: 100%; height: ${stkMm() === 50 ? 22 : stkMm() === 40 ? 15 : 8.6}mm; display: block; }
+        ${stkMm() >= 40 ? '.band { font-size: 7pt; padding: .9mm 0 1mm; } .c { font-size: 8.5pt; } .i { font-size: 6.6pt; height: auto; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; } .bot { font-size: 6.6pt; }' : ''}
         .no { text-align: center; font-family: ui-monospace, monospace; font-size: 5pt; font-weight: 700; }
         .bot { display: flex; justify-content: space-between; align-items: baseline; gap: 1mm; font-size: 6pt; font-weight: 800; white-space: nowrap; }
         .np { font-size: 5pt; font-weight: 600; }
+        ${land ? `.sheet { width: 203mm; grid-template-columns: repeat(2, 100mm); grid-auto-rows: 48mm; }
+        .st.land { width: 100mm; height: 48mm; display: flex; flex-direction: column; padding: 0 2mm 1.4mm; border: .8mm solid #000; border-radius: 3mm; }
+        .st.land .band { display: flex; align-items: center; justify-content: center; gap: 3mm; margin: 0 -2mm; padding: 1.2mm 0 1.4mm; font-size: 12.5pt; border-radius: 2mm 2mm 0 0; }
+        .st.land .hz { width: 12mm; height: 3.2mm; background: repeating-linear-gradient(-60deg, #fff 0 .9mm, #000 .9mm 2.2mm); }
+        .st.land .r1 { display: flex; align-items: center; gap: 2mm; padding: 1mm 0; border-bottom: .35mm solid #000; min-height: 9mm; }
+        .st.land .r1 .c { flex: 1; font-size: 13pt; white-space: normal; line-height: 1.05; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .st.land .pp { flex: none; display: flex; align-items: center; gap: 1.2mm; padding: .6mm 2.4mm .6mm .8mm; border: .35mm solid #000; border-radius: 9mm; font-size: 10pt; font-weight: 800; border-left: .35mm solid #000; }
+        .st.land .pp svg { width: 5mm; height: 5mm; }
+        .st.land .r2 { display: flex; align-items: stretch; gap: 2mm; padding: 1.2mm 0; border-bottom: .35mm solid #000; }
+        .st.land .ib { flex: none; width: 15mm; height: 15mm; background: #000; border-radius: 2.4mm; display: grid; place-items: center; }
+        .st.land .ib svg { width: 11.5mm; height: 11.5mm; }
+        .st.land .bcw { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .8mm; padding-left: 2mm; border-left: .5mm solid #000; }
+        .st.land .bc { padding: 0; } .st.land .bc svg { height: 8.5mm; }
+        .st.land .cp { position: relative; text-align: center; border: .35mm solid #000; border-radius: 5mm; font: 800 10pt ui-monospace, monospace; padding: .3mm 0; }
+        .st.land .cp small { position: absolute; right: 2.5mm; top: .5mm; font: 800 8pt "Sarabun", sans-serif; }
+        .st.land .r3 { flex: 1; min-height: 0; display: flex; align-items: stretch; gap: 2mm; padding-top: 1.2mm; }
+        .st.land .ip { flex: 1; min-width: 0; display: flex; align-items: center; gap: 1.5mm; padding: .6mm 1.6mm; border: .35mm solid #000; border-radius: 2mm; }
+        .st.land .ip svg { flex: none; width: 5.5mm; height: 5.5mm; }
+        .st.land .ip span { font-weight: 700; line-height: 1.12; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+        .st.land .dt { flex: none; display: flex; align-items: center; gap: 1.2mm; padding-left: 2mm; border-left: .5mm solid #000; }
+        .st.land .dt svg { width: 5.5mm; height: 5.5mm; } .st.land .dt .lb { font-size: 8.5pt; font-weight: 800; }
+        .st.land .dt b { background: #000; color: #fff; border-radius: 1.6mm; padding: .8mm 2mm; font-size: 12pt; }` : ''}
         @media print { html { background: #fff; } .bar { display: none; } .page { margin: 0; padding: 0; min-height: 0; width: auto; } }
         @media screen and (max-width: 820px) { .page { zoom: .5; } }
       </style></head><body>
-      <div class="bar"><button class="p" onclick="window.print()">🖨️ พิมพ์สติ๊กเกอร์บาร์โค้ด (A4 • 4.2×3 ซม.)</button><button class="x" onclick="window.close()">ปิด</button></div>
+      <div class="bar"><button class="p" onclick="window.print()">🖨️ พิมพ์สติ๊กเกอร์บาร์โค้ด (A4 • ${land ? 'แนวนอน 10×4.8' : `4.2×${stkMm() / 10}`} ซม.)</button><button class="x" onclick="window.close()">ปิด</button></div>
       <div class="page"><div class="sheet">${cells}</div></div>
       <script>(document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(function () { if (window.__eaAutoPrint) setTimeout(function () { window.focus(); window.print(); }, 200); });<\/script>
       </body></html>`;
@@ -1033,7 +1079,7 @@
     rsvTab, rsvSearch, rsvField, rsvSet, rsvQuery, rsvAdd, rsvAddFirst, rsvAddCustom, rsvText,
     rsvPaySet, rsvPayClose, rsvPayConfirm, rsvQty, rsvLine, rsvRemove, rsvDepPct,
     reservationSlip, rsvSlipShare, rsvSlipSave, rsvSlipCopy, reservationPickup, reservationPickupCancel,
-    reservationCancel, reservationToggleReq, reservationStickers, rsvStkGo, rsvScanPickup, rsvPhonePickup, rsvDepositQr, rsvScanToggleReq,
+    reservationCancel, reservationToggleReq, reservationStickers, rsvStkGo, rsvStkLen, rsvScanPickup, rsvPhonePickup, rsvDepositQr, rsvScanToggleReq,
     eaReservationReqState: reqState, eaReservationsAutoReceive: autoReceive, rsvScanReceive, rsvRecvVia, rsvScanUnreceive,
     eaOpenReservationView: openScanView, eaReservationRemaining: remaining,
     eaReservationScan: reservationScan, eaReservationBarcode: barcodeText, eaDrawReservationBarcode: drawBarcode, eaOpenReservationByNo: openByNo,

@@ -288,26 +288,30 @@
     });
     await gattSetup(dev);
   }
-  // ส่งข้อมูลแบบ "รอเครื่องพิมพ์ตอบรับ" ทุกก้อน (ถ้าเครื่องรองรับ) → ข้อมูลไม่หาย
-  // เดิมส่งรัวแบบไม่รอ: งานยาว (ป้าย 100 มม. ~38 KB) หน่วยความจำเครื่องพิมพ์ล้น ข้อมูลหาย → ภาพเลื่อน/ซ้อนกัน
+  // ส่งข้อมูลก้อนละ 100 ไบต์ (ขนาดที่เครื่องพิมพ์เล็กรับได้) แบบเว้นจังหวะ ไม่ให้หน่วยความจำเครื่องพิมพ์ล้น
+  // • เดิมส่งรัว (ทุก 12 มิลลิวินาที): งานยาว ป้าย 100 มม. ~38 KB ข้อมูลหาย → ครึ่งหลังของป้ายเลื่อน/ซ้อนกัน
+  // • v2.0.13 ลองส่งแบบรอตอบรับก้อนใหญ่ 180 ไบต์ → บางเครื่องไม่รองรับ เชื่อมต่อ/พิมพ์ไม่ได้ → เลิกใช้
   const SLOW_KEY = 'ea_bt_slow';
   const slowOn = () => { try { return localStorage.getItem(SLOW_KEY) === '1'; } catch (_) { return false; } };
   function setSlow(on) { try { localStorage.setItem(SLOW_KEY, on ? '1' : '0'); } catch (_) {} }
-  const rspMode = () => !!(bt.ch?.properties?.write && (bt.ch.writeValueWithResponse || bt.ch.writeValue));
+  // ใช้แบบรอตอบรับ เฉพาะเครื่องที่ไม่มีโหมดส่งไม่รอ (เหมือนเดิมก่อน v2.0.13)
+  const rspMode = () => !bt.ch?.properties?.writeWithoutResponse;
+  const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('เครื่องพิมพ์ไม่ตอบสนอง')), ms))]);
   async function btWrite(bytes) {
     const rsp = rspMode(), slow = slowOn();
-    const size = rsp ? (slow ? 100 : 180) : (slow ? 60 : 90);
-    const delay = rsp ? (slow ? 8 : 0) : (slow ? 45 : 28);
+    const size = slow ? 60 : 100;
+    const delay = rsp ? (slow ? 10 : 4) : (slow ? 45 : 28);
     for (let i = 0; i < bytes.length; i += size) {
       const part = bytes.subarray(i, Math.min(i + size, bytes.length));
       let tries = 0;
       for (;;) {
+        if (!bt.ch) throw new Error('การเชื่อมต่อเครื่องพิมพ์หลุดระหว่างพิมพ์');
         try {
-          if (rsp) { if (bt.ch.writeValueWithResponse) await bt.ch.writeValueWithResponse(part); else await bt.ch.writeValue(part); }
-          else if (bt.ch.writeValueWithoutResponse) await bt.ch.writeValueWithoutResponse(part);
-          else await bt.ch.writeValue(part);
+          if (!rsp && bt.ch.writeValueWithoutResponse) await withTimeout(bt.ch.writeValueWithoutResponse(part), 5000);
+          else if (bt.ch.writeValueWithResponse) await withTimeout(bt.ch.writeValueWithResponse(part), 5000);
+          else await withTimeout(bt.ch.writeValue(part), 5000);
           break;
-        } catch (e) { if (++tries > 3) throw e; await sleep(150); }
+        } catch (e) { if (++tries > 3) throw e; await sleep(200); }
       }
       if (delay) await sleep(delay);
     }
@@ -325,7 +329,7 @@
     await sleep(30);
     // ส่งทีละช่วง แล้วพักให้เครื่องพิมพ์พิมพ์ช่วงนั้นเสร็จก่อน (หน่วยความจำเครื่องไม่ล้น)
     const block = slowOn() ? 128 : 200;
-    const msPerRow = rspMode() ? (slowOn() ? 3 : 1.6) : (slowOn() ? 5 : 3.2);
+    const msPerRow = slowOn() ? 5 : 3;
     for (let y = 0; y < h; y += block) {
       const rows = Math.min(block, h - y);
       await btWrite(hexb('10fffe01000000000000000000000000'));
@@ -384,7 +388,8 @@
       document.getElementById('miniPrintDialog')?.close();
     } catch (e) {
       if (e?.name === 'NotFoundError') { setBtn('🔵 พิมพ์ตรง (บลูทูธ)'); return; }   // กดยกเลิกการเลือกเครื่อง
-      try { window.alert(`พิมพ์ไม่สำเร็จ: ${e?.message || e}\n\n• เปิดบลูทูธ/ตำแหน่ง และเปิดเครื่องพิมพ์\n• ปิดแอป PeriPage ก่อน (เครื่องพิมพ์ต่อได้ทีละแอป)`); } catch (_) {}
+      btRelease(false);   // ตัดการเชื่อมต่อที่ค้าง → แตะพิมพ์ใหม่จะต่อใหม่ตั้งแต่ต้น
+      try { window.alert(`พิมพ์ไม่สำเร็จ: ${e?.message || e}\n\n• ปิดแอป PeriPage ก่อน (เครื่องพิมพ์ต่อได้ทีละแอป)\n• มือถือเครื่องอื่นอาจต่อค้างอยู่ → ให้เครื่องนั้นกด "ปล่อยเครื่องพิมพ์"\n• ปิด-เปิดเครื่องพิมพ์ แล้วแตะ "พิมพ์ตรง" อีกครั้ง\n• ยังไม่ได้ → แตะ "เปลี่ยนเครื่อง" แล้วเลือกเครื่องพิมพ์ใหม่`); } catch (_) {}
     } finally { bt.busy = false; setBtn(bt.nextChoose ? '🔵 แตะเพื่อเลือกเครื่องพิมพ์' : `🔵 พิมพ์ตรง${btName() ? ` • ${btName()}` : ' (บลูทูธ)'}`); refreshBtUi(); }
   }
 

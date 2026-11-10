@@ -222,6 +222,13 @@
   const BT_KEY = 'ea_bt_printer';
   // ใช้เครื่องพิมพ์ร่วมกันหลายมือถือ: พิมพ์เสร็จแล้วตัดบลูทูธ ให้เครื่องอื่นต่อได้ (ค่าเริ่มต้น = เปิด)
   const RELEASE_KEY = 'ea_bt_release';
+  // ความเข้มการพิมพ์ (พิมพ์ตรงบลูทูธ): สติ๊กเกอร์แท่งบาร์โค้ดลาม/ตัน → "จาง" • ซีด ขาด → "เข้ม"
+  const DENS_KEY = 'ea_print_density';
+  const density = () => { try { const v = localStorage.getItem(DENS_KEY); return ['0', '1', '2'].includes(v) ? v : '1'; } catch (_) { return '1'; } };
+  function setDensity(v, btn) {
+    try { localStorage.setItem(DENS_KEY, String(v)); } catch (_) {}
+    btn?.parentNode?.querySelectorAll('button').forEach(b => b.classList.toggle('is-on', b === btn));
+  }
   const releaseOn = () => { try { return localStorage.getItem(RELEASE_KEY) !== '0'; } catch (_) { return true; } };
   const bt = { device: null, ch: null, busy: false, svc: '', chr: '', listen: null, releaseTimer: null };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -306,7 +313,7 @@
       const i = (y * w + x) * 4;
       if (px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114 < 128) data[y * bpr + (x >> 3)] |= 0x80 >> (x & 7);
     }
-    await btWrite(hexb('10ff100001'));                 // ความเข้มปกติ
+    await btWrite(hexb('10ff10000' + density()));      // ความเข้ม 0 จาง / 1 ปกติ / 2 เข้ม
     await sleep(30);
     for (let y = 0; y < h; y += 255) {
       const rows = Math.min(255, h - y);
@@ -379,7 +386,7 @@
       for (let i = 0; i < d.length; i += 4) { const v = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) < 170 ? 0 : 255; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
       fx.putImageData(im, 0, 0);
     } catch (_) {}
-    const blob = await new Promise(res => flat.toBlob(res, 'image/jpeg', 0.95));
+    const blob = await new Promise(res => flat.toBlob(res, 'image/jpeg', 1));   // คุณภาพสูงสุด: ขอบแท่งบาร์โค้ดคม
     if (cur?.url) URL.revokeObjectURL(cur.url);
     const file = new File([blob], `${String(name).replace(/[^A-Za-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'receipt'}.jpg`, { type: 'image/jpeg' });
     cur = { blob, file, url: URL.createObjectURL(blob), canvas: flat };
@@ -397,6 +404,8 @@
       </div>
       ${labels ? `<div class="rid-hint mp-gap">ใช้สติ๊กเกอร์ 57×${labels === true ? 30 : labels} มม. • วางกระดาษให้ดวงแรกอยู่ที่หัวพิมพ์ • ระยะห่างระหว่างดวง <input type="number" min="0" max="10" step="0.5" value="${gapMm()}" onchange="eaMiniLabelGap(this.value)"> มม. (ถ้าพิมพ์เลื่อนลงทีละนิด ให้ลด • เลื่อนขึ้น ให้เพิ่ม)</div>` : ''}
       ${hasBle() ? `<div class="rid-hint">พิมพ์ตรง: ครั้งแรกเลือกเครื่อง PeriPage จากรายการ (เปิดบลูทูธ + ตำแหน่ง และ <b>ปิดแอป PeriPage ก่อน</b>) • ครั้งต่อไปกดพิมพ์ได้เลย ${btName() ? `<a href="#" onclick="eaMiniPrintBt(true);return false;">เปลี่ยนเครื่อง</a>` : ''}</div>
+      <div class="rid-hint mp-dens">ความเข้มการพิมพ์ <span class="mp-seg">${[['0', 'จาง'], ['1', 'ปกติ'], ['2', 'เข้ม']].map(([v, t]) => `<button type="button" class="${density() === v ? 'is-on' : ''}" onclick="eaMiniPrintDensity('${v}', this)">${t}</button>`).join('')}</span>
+        <small>แท่งบาร์โค้ดลาม/ติดกัน → จาง • ซีด/ขาด → เข้ม</small></div>
       <div class="rid-hint mp-share">
         <label><input type="checkbox" ${releaseOn() ? 'checked' : ''} onchange="eaMiniPrintSetRelease(this.checked)"> ใช้เครื่องพิมพ์ร่วมกันหลายมือถือ (พิมพ์เสร็จปล่อยเครื่องพิมพ์ให้เครื่องอื่นทันที)</label>
         <span class="mp-bt-row"><span id="mpBtState"></span><button type="button" class="rid-btn mp-release" onclick="eaMiniPrintRelease()">⏏ ปล่อยเครื่องพิมพ์</button></span>
@@ -801,7 +810,7 @@
   Object.assign(window, {
     eaMiniPrintBill: printBill, eaMiniPrintReservation: printReservation,
     eaMiniPrintShare: share, eaMiniPrintSave: save, eaMiniPrintBt: btPrintCurrent,
-    eaMiniPrintRelease: () => btRelease(true), eaMiniPrintSetRelease: setRelease,
+    eaMiniPrintRelease: () => btRelease(true), eaMiniPrintSetRelease: setRelease, eaMiniPrintDensity: setDensity,
     eaMiniPrintProductLabels: printProductStickers, eaMiniPrintReservationLabels: printReservationStickers, eaMiniLabelGap: setGap,
     eaDrawThermalBill: drawBill, eaDrawThermalReservation: drawReservation
   });

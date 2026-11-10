@@ -591,19 +591,35 @@
 
   // ---------- บาร์โค้ดใบจอง (CODE128) ----------
   // เก็บเลขใบจองแบบไม่มีขีด (R261105111212) ให้แท่งบาร์กว้าง อ่านง่าย • ไม่ใช่ลิงก์ → สแกนได้เฉพาะในแอป
-  function barcodeText(r) { return String(r.res_no || '').replace(/-/g, ''); }
+  // บาร์โค้ดใบจอง = ตัวเลขล้วน (Code128 แบบตัวเลข 2 หลักต่อแท่ง → แท่งกว้างขึ้น ~50% บนป้ายเครื่องเล็ก)
+  // เลขใบจองที่พิมพ์ใต้บาร์โค้ดยังเป็น R261110-150018 เหมือนเดิม • ป้ายเก่า (มี R) ยังสแกนได้
+  function barcodeText(r) { return String(r.res_no || '').replace(/\D/g, ''); }
   function barcodeCanvas(text, moduleW, h) {
     if (typeof window.JsBarcode !== 'function') return null;
     try { const c = document.createElement('canvas'); window.JsBarcode(c, text, { format: 'CODE128', width: moduleW, height: h, margin: 0, displayValue: false, background: '#ffffff', lineColor: '#000000' }); return c; } catch (_) { return null; }
   }
   // วาดบาร์โค้ดกึ่งกลางพื้นที่ (x..x+w) • ขนาดแท่งเป็นจำนวนเต็ม พิกเซลคมชัด เว้นขอบเงียบ ≥ 10 แท่ง
+  // พิมพ์ความร้อน: หมึกลาม → แท่งอ้วนขึ้น ช่องว่างแคบตัน สแกนไม่ติด
+  // → วาดแท่งเองทีละแท่ง ตรงจุดพิมพ์พอดี (ไม่ย่อ/ขยายรูป) และลดความกว้างแท่งลง 1 จุด เมื่อแท่งกว้าง ≥ 3 จุด
+  function barRuns(text) {
+    const one = barcodeCanvas(text, 1, 1); if (!one) return null;
+    const d = one.getContext('2d').getImageData(0, 0, one.width, 1).data;
+    const runs = []; let cur = null;
+    for (let i = 0; i < one.width; i++) {
+      const black = d[i * 4] < 128;
+      if (!cur || cur.black !== black) { cur = { black, n: 0 }; runs.push(cur); }
+      cur.n++;
+    }
+    return { runs, mods: one.width };
+  }
   function drawBarcode(ctx, text, x, y, w, h) {
-    const one = barcodeCanvas(text, 1, 10); if (!one) return false;
-    const mods = one.width;
-    const scale = Math.max(1, Math.floor(w / (mods + 20)));
-    const c = barcodeCanvas(text, scale, h); if (!c) return false;
+    const b = barRuns(text); if (!b) return false;
+    const scale = Math.max(1, Math.floor(w / (b.mods + 20)));     // ขอบเงียบ ≥ 10 แท่งต่อข้าง
+    const thin = scale >= 3 ? 1 : 0;                              // ชดเชยหมึกลาม
     ctx.fillStyle = '#fff'; ctx.fillRect(x, y, w, h);
-    ctx.drawImage(c, Math.round(x + (w - c.width) / 2), y);
+    ctx.fillStyle = '#000';
+    let px = Math.round(x + (w - b.mods * scale) / 2);
+    for (const r of b.runs) { const rw = r.n * scale; if (r.black) ctx.fillRect(px, Math.round(y), rw - thin, Math.round(h)); px += rw; }
     return true;
   }
   function barcodeSvg(text) {
@@ -621,6 +637,9 @@
     const t = String(raw || '').trim();
     let m = /^RSV:(\S+)$/i.exec(t); if (m) return m[1];
     m = /^R(\d{6})-?(\d{4,})$/.exec(t); if (m) return `R${m[1]}-${m[2]}`;
+    // ตัวเลขล้วน: เปิดใบจองเฉพาะเมื่อตรงกับใบจองที่มีอยู่จริง (ไม่ชนกับบาร์โค้ดสินค้า)
+    m = /^(\d{6})(\d{4,8})$/.exec(t);
+    if (m) { const no = `R${m[1]}-${m[2]}`; if (list.some(x => x.res_no === no)) return no; }
     return null;
   }
   // เรียกจากตัวสแกนทุกจุด: เป็น QR ใบจอง → เปิดหน้าใบจอง แล้วคืนค่า true

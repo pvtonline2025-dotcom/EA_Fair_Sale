@@ -211,3 +211,11 @@ dialog.rsv-dialog.is-phone .rsv-sugg { max-height: 46vh; }
 .rsv-recv-ask { max-width: min(94vw, 520px); }
 .rsv-recv-opt { white-space: normal !important; height: auto !important; display: grid !important; gap: 4px; width: 100%; min-height: 64px; padding: 12px 14px !important; text-align: left; font-size: 16px; font-weight: 800; }
 .rsv-recv-opt small { font-size: 13px; font-weight: 500; opacity: .85; line-height: 1.4; white-space: normal; overflow-wrap: anywhere; }
+.rsv-stk-len button { flex: 1; }
+.rsv-stk-len button.is-on { background: #7c3aed; border-color: #7c3aed; color: #fff !important; }
+.mp-dens { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.mp-dens small { flex-basis: 100%; opacity: .8; }
+.mp-seg { display: inline-flex; border: 1px solid #94a3b8; border-radius: 4px; overflow: hidden; }
+.mp-seg button { min-height: 38px; padding: 0 14px; border: 0; border-left: 1px solid #94a3b8; background: transparent; color: inherit; font: inherit; font-weight: 700; cursor: pointer; }
+.mp-seg button:first-child { border-left: 0; }
+.mp-seg button.is-on { background: #2563eb; color: #fff; }

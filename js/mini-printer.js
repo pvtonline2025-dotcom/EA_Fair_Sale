@@ -288,20 +288,28 @@
     });
     await gattSetup(dev);
   }
+  // ส่งข้อมูลแบบ "รอเครื่องพิมพ์ตอบรับ" ทุกก้อน (ถ้าเครื่องรองรับ) → ข้อมูลไม่หาย
+  // เดิมส่งรัวแบบไม่รอ: งานยาว (ป้าย 100 มม. ~38 KB) หน่วยความจำเครื่องพิมพ์ล้น ข้อมูลหาย → ภาพเลื่อน/ซ้อนกัน
+  const SLOW_KEY = 'ea_bt_slow';
+  const slowOn = () => { try { return localStorage.getItem(SLOW_KEY) === '1'; } catch (_) { return false; } };
+  function setSlow(on) { try { localStorage.setItem(SLOW_KEY, on ? '1' : '0'); } catch (_) {} }
+  const rspMode = () => !!(bt.ch?.properties?.write && (bt.ch.writeValueWithResponse || bt.ch.writeValue));
   async function btWrite(bytes) {
-    const size = 100, delay = 12, noRsp = bt.ch.properties.writeWithoutResponse;
+    const rsp = rspMode(), slow = slowOn();
+    const size = rsp ? (slow ? 100 : 180) : (slow ? 60 : 90);
+    const delay = rsp ? (slow ? 8 : 0) : (slow ? 45 : 28);
     for (let i = 0; i < bytes.length; i += size) {
       const part = bytes.subarray(i, Math.min(i + size, bytes.length));
       let tries = 0;
       for (;;) {
         try {
-          if (noRsp && bt.ch.writeValueWithoutResponse) await bt.ch.writeValueWithoutResponse(part);
-          else if (bt.ch.writeValueWithResponse) await bt.ch.writeValueWithResponse(part);
+          if (rsp) { if (bt.ch.writeValueWithResponse) await bt.ch.writeValueWithResponse(part); else await bt.ch.writeValue(part); }
+          else if (bt.ch.writeValueWithoutResponse) await bt.ch.writeValueWithoutResponse(part);
           else await bt.ch.writeValue(part);
           break;
-        } catch (e) { if (++tries > 3) throw e; await sleep(120); }
+        } catch (e) { if (++tries > 3) throw e; await sleep(150); }
       }
-      await sleep(delay);
+      if (delay) await sleep(delay);
     }
   }
   const hexb = h => new Uint8Array(h.match(/../g).map(b => parseInt(b, 16)));
@@ -315,12 +323,16 @@
     }
     await btWrite(hexb('10ff10000' + density()));      // ความเข้ม 0 จาง / 1 ปกติ / 2 เข้ม
     await sleep(30);
-    for (let y = 0; y < h; y += 255) {
-      const rows = Math.min(255, h - y);
+    // ส่งทีละช่วง แล้วพักให้เครื่องพิมพ์พิมพ์ช่วงนั้นเสร็จก่อน (หน่วยความจำเครื่องไม่ล้น)
+    const block = slowOn() ? 128 : 200;
+    const msPerRow = rspMode() ? (slowOn() ? 3 : 1.6) : (slowOn() ? 5 : 3.2);
+    for (let y = 0; y < h; y += block) {
+      const rows = Math.min(block, h - y);
       await btWrite(hexb('10fffe01000000000000000000000000'));
       await sleep(20);
       await btWrite(new Uint8Array([0x1d, 0x76, 0x30, 0x00, bpr & 0xff, bpr >> 8, rows & 0xff, rows >> 8]));
       await btWrite(data.subarray(y * bpr, (y + rows) * bpr));
+      if (y + rows < h) await sleep(Math.round(rows * msPerRow));
     }
     await btWrite(new Uint8Array([0x1b, 0x4a, 80]));   // ป้อนกระดาษเผื่อฉีก
   }
@@ -405,7 +417,8 @@
       ${labels ? `<div class="rid-hint mp-gap">ใช้สติ๊กเกอร์ 57×${labels === true ? 30 : labels} มม. • วางกระดาษให้ดวงแรกอยู่ที่หัวพิมพ์ • ระยะห่างระหว่างดวง <input type="number" min="0" max="10" step="0.5" value="${gapMm()}" onchange="eaMiniLabelGap(this.value)"> มม. (ถ้าพิมพ์เลื่อนลงทีละนิด ให้ลด • เลื่อนขึ้น ให้เพิ่ม)</div>` : ''}
       ${hasBle() ? `<div class="rid-hint">พิมพ์ตรง: ครั้งแรกเลือกเครื่อง PeriPage จากรายการ (เปิดบลูทูธ + ตำแหน่ง และ <b>ปิดแอป PeriPage ก่อน</b>) • ครั้งต่อไปกดพิมพ์ได้เลย ${btName() ? `<a href="#" onclick="eaMiniPrintBt(true);return false;">เปลี่ยนเครื่อง</a>` : ''}</div>
       <div class="rid-hint mp-dens">ความเข้มการพิมพ์ <span class="mp-seg">${[['0', 'จาง'], ['1', 'ปกติ'], ['2', 'เข้ม']].map(([v, t]) => `<button type="button" class="${density() === v ? 'is-on' : ''}" onclick="eaMiniPrintDensity('${v}', this)">${t}</button>`).join('')}</span>
-        <small>แท่งบาร์โค้ดลาม/ติดกัน → จาง • ซีด/ขาด → เข้ม</small></div>
+        <small>แท่งบาร์โค้ดลาม/ติดกัน → จาง • ซีด/ขาด → เข้ม</small>
+        <label class="mp-slow"><input type="checkbox" ${slowOn() ? 'checked' : ''} onchange="eaMiniPrintSlow(this.checked)"> ส่งข้อมูลช้า (ติ๊กถ้าพิมพ์ออกมาเพี้ยน ภาพเลื่อน/ซ้อน หรือขาดกลางป้าย)</label></div>
       <div class="rid-hint mp-share">
         <label><input type="checkbox" ${releaseOn() ? 'checked' : ''} onchange="eaMiniPrintSetRelease(this.checked)"> ใช้เครื่องพิมพ์ร่วมกันหลายมือถือ (พิมพ์เสร็จปล่อยเครื่องพิมพ์ให้เครื่องอื่นทันที)</label>
         <span class="mp-bt-row"><span id="mpBtState"></span><button type="button" class="rid-btn mp-release" onclick="eaMiniPrintRelease()">⏏ ปล่อยเครื่องพิมพ์</button></span>
@@ -810,7 +823,7 @@
   Object.assign(window, {
     eaMiniPrintBill: printBill, eaMiniPrintReservation: printReservation,
     eaMiniPrintShare: share, eaMiniPrintSave: save, eaMiniPrintBt: btPrintCurrent,
-    eaMiniPrintRelease: () => btRelease(true), eaMiniPrintSetRelease: setRelease, eaMiniPrintDensity: setDensity,
+    eaMiniPrintRelease: () => btRelease(true), eaMiniPrintSetRelease: setRelease, eaMiniPrintDensity: setDensity, eaMiniPrintSlow: setSlow,
     eaMiniPrintProductLabels: printProductStickers, eaMiniPrintReservationLabels: printReservationStickers, eaMiniLabelGap: setGap,
     eaDrawThermalBill: drawBill, eaDrawThermalReservation: drawReservation
   });

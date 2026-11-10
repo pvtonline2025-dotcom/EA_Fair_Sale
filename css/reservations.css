@@ -177,3 +177,13 @@ dialog.rsv-dialog.is-phone .rsv-sugg { max-height: 46vh; }
   .rsv-scan-dialog .rsv-dlg-foot { grid-template-columns: 1fr 1fr; }
   .rsv-scan-dialog .rsv-dlg-foot .rsv-main { grid-column: 1 / -1; order: -1; }
 }
+.rsv-depqr { margin-top: 8px; display: grid; gap: 6px; justify-items: center; text-align: center; }
+.rsv-depqr-tap { padding: 10px; border: 0; border-radius: 6px; background: #fff; cursor: pointer; line-height: 0; }
+.rsv-depqr-tap svg, .rsv-depqr-tap img { width: min(62vw, 230px); height: auto; display: block; }
+.rsv-depqr-cap { font-size: 14px; color: var(--text-main, #f8fafc); }
+[data-color-mode="light"] .rsv-depqr-cap { color: #0f172a; }
+.rsv-depqr-cap b { font-size: 17px; }
+.rsv-depqr-hint, .rsv-depqr-warn { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 4px; border: 1px dashed var(--card-border, #475569); font-size: 13.5px; font-weight: 600; }
+.rsv-depqr-warn { border-color: #f59e0b; color: #f59e0b; }
+[data-color-mode="light"] .rsv-depqr-warn { color: #b45309; }
+.rsv-qrfull-code svg, .rsv-qrfull-code img { width: min(78vw, 360px); height: auto; display: block; }

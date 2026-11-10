@@ -1,5 +1,5 @@
 // EA Fair Sale - Service Worker with Background Sync & Offline Support
-const CACHE_NAME = 'ea-fair-sale-v110';
+const CACHE_NAME = 'ea-fair-sale-v112';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -78,6 +78,11 @@ const STATIC_ASSETS = [
   '/assets/icons/apple-touch-icon.png?v=20261110',
   '/assets/icons/splash-logo.webp?v=20261110',
   '/assets/icons/app-emblem.png?v=20261110',
+  '/assets/manifest-cashier.json?v=20261110',
+  '/assets/icons/cashier-192.png?v=20261110',
+  '/assets/icons/cashier-512.png?v=20261110',
+  '/assets/icons/cashier-maskable-512.png?v=20261110',
+  '/assets/icons/cashier-apple-touch.png?v=20261110',
   // CDN libraries (pinned versions) so the POS still opens offline
   'https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js',

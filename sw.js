@@ -1,5 +1,5 @@
 // EA Fair Sale - Service Worker with Background Sync & Offline Support
-const CACHE_NAME = 'ea-fair-sale-v122';
+const CACHE_NAME = 'ea-fair-sale-v123';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -79,6 +79,8 @@ const STATIC_ASSETS = [
   '/assets/icons/splash-logo.webp?v=20261110',
   '/assets/icons/app-emblem.png?v=20261110',
   '/assets/manifest-cashier.json?v=20261110',
+  '/assets/vendor/barcode-detector-3.0.8.js',
+  '/assets/vendor/zxing_reader-2.2.4.wasm',
   '/assets/icons/cashier-192.png?v=20261110',
   '/assets/icons/cashier-512.png?v=20261110',
   '/assets/icons/cashier-maskable-512.png?v=20261110',

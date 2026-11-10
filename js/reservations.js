@@ -615,7 +615,7 @@
   function drawBarcode(ctx, text, x, y, w, h) {
     const b = barRuns(text); if (!b) return false;
     const scale = Math.max(1, Math.floor(w / (b.mods + 20)));     // ขอบเงียบ ≥ 10 แท่งต่อข้าง
-    const thin = scale >= 3 ? 1 : 0;                              // ชดเชยหมึกลาม
+    const thin = 0;   // ไม่ลดความกว้างแท่ง: ตัวสแกนกล้องมือถือ (ZXing) อ่านแท่งที่สัดส่วนผิดเพี้ยนไม่ออก • หมึกลาม → ใช้ความเข้ม "จาง" แทน
     ctx.fillStyle = '#fff'; ctx.fillRect(x, y, w, h);
     ctx.fillStyle = '#000';
     let px = Math.round(x + (w - b.mods * scale) / 2);

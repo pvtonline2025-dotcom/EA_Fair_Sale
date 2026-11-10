@@ -98,6 +98,15 @@
     if (r.requisition_mode === 'now') return true;
     return String(r.pickup_date) <= addDays(onDate || todayIso(), 1);   // ก่อนวันนัด 1 วัน (หรือเลยมาแล้ว)
   }
+  // สถานะการเบิกของ (แสดงตอนสแกนใบจอง / ในรายการ)
+  function thDateTime(iso) { if (!iso) return ''; const d = new Date(iso); const p = n => String(n).padStart(2, '0'); return `${d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })} ${p(d.getHours())}:${p(d.getMinutes())}`; }
+  function reqState(r) {
+    if (!r || r.status !== 'booked') return null;
+    if (r.requisition_mode === 'none') return { k: 'none', short: 'ไม่ต้องเบิก', text: 'ไม่ต้องเบิกของ (ใช้ของในบูธ / รับที่ร้าน)' };
+    if (r.requisitioned_at) return { k: 'done', short: 'เบิกแล้ว', text: `เบิกของมาแล้ว • ${thDateTime(r.requisitioned_at)}` };
+    if (needsRequisition(r)) return { k: 'due', short: 'ยังไม่เบิก', text: 'ยังไม่ได้เบิกของ • ต้องเบิกแล้ว (อยู่ในรายการใบเบิกรอบนี้)' };
+    return { k: 'later', short: 'ยังไม่ถึงรอบเบิก', text: `ยังไม่ได้เบิกของ • จะขึ้นในใบเบิกวัน ${thDate(addDays(r.pickup_date, -1))}` };
+  }
   function all() { return list.slice(); }
   function requisitionList() { return list.filter(r => needsRequisition(r)); }
   async function markRequisitioned(ids, on = true) {
@@ -608,6 +617,17 @@
     const dlg = document.getElementById('rsvScanDialog'); const r = scanId && list.find(x => x.id === scanId);
     if (!dlg || !r) return;
     const items = Array.isArray(r.items) ? r.items : [];
+    const rq = reqState(r);
+    const prods = st()?.products || [];
+    // ของในบูธพอส่งไหม (เฉพาะสินค้าที่มีในระบบ)
+    const stockOf = i => { const p = i.product_id && prods.find(x => x.id === i.product_id); return p ? Number(p.stock_qty || 0) : null; };
+    const short = r.status === 'booked' ? items.filter(i => { const s = stockOf(i); return s !== null && s < Number(i.qty || 0); }) : [];
+    const reqBox = rq ? `
+        <div class="rsv-req-box is-${rq.k}">
+          <div class="rsv-req-main">${rq.k === 'done' ? '📦✅' : rq.k === 'none' ? '➖' : rq.k === 'due' ? '⚠️' : '🕒'} ${escapeHtml(rq.text)}</div>
+          ${r.requisition_mode !== 'none' ? `<button type="button" class="rsv-btn rsv-req-toggle" onclick="rsvScanToggleReq('${r.id}')">${r.requisitioned_at ? '↩ ยังไม่ได้เบิก' : '✓ ทำเครื่องหมายว่าเบิกแล้ว'}</button>` : ''}
+          ${short.length ? `<div class="rsv-req-short">ของในบูธยังไม่พอ: ${short.map(i => `${escapeHtml(i.name)} มี ${stockOf(i)} / ต้องใช้ ${Number(i.qty)}`).join(' • ')}</div>` : ''}
+        </div>` : '';
     const t = todayIso();
     const allBooth = items.length && items.every(i => i.product_id && (st()?.products || []).some(p => p.id === i.product_id));
     const posFlow = r.pickup_place !== 'shop' && allBooth && !isDeal(r);
@@ -619,10 +639,11 @@
         <button type="button" class="rsv-x" onclick="document.getElementById('rsvScanDialog').close()" aria-label="ปิด">✕</button></div>
       <div class="rsv-dlg-body">
         ${status}
+        ${reqBox}
         <div class="rsv-scan-cust"><b>${escapeHtml(r.customer_name)}</b>${r.customer_phone ? ` <a href="tel:${escapeHtml(r.customer_phone)}">📞 ${escapeHtml(r.customer_phone)}</a>` : ''}
           <span>นัดรับ ${thDate(r.pickup_date)} • ${r.pickup_place === 'shop' ? 'ร้าน/โกดัง' : 'บูธ'}</span></div>
         <div class="rsv-scan-h">สินค้าที่ต้องส่งให้ลูกค้า</div>
-        <div class="rsv-scan-items">${items.map(i => `<div class="rsv-scan-item"><span>${escapeHtml(i.name)}</span><b>${Number(i.qty)} ${escapeHtml(i.unit || '')}</b></div>`).join('')}</div>
+        <div class="rsv-scan-items">${items.map(i => { const s = r.status === 'booked' ? stockOf(i) : null; return `<div class="rsv-scan-item"><span>${escapeHtml(i.name)}${s !== null ? `<small class="rsv-stock ${s >= Number(i.qty || 0) ? 'ok' : 'bad'}">ในบูธมี ${s}</small>` : ''}</span><b>${Number(i.qty)} ${escapeHtml(i.unit || '')}</b></div>`; }).join('')}</div>
         ${r.note ? `<div class="rsv-note">📝 ${escapeHtml(r.note)}</div>` : ''}
         <div class="rsv-sum"><span>${isDeal(r) ? 'ราคาตกลง' : 'ยอดเต็ม'}</span><strong>฿${money(r.total_amount)}</strong></div>
         <div class="rsv-sum"><span>มัดจำแล้ว (${isQr(r.deposit_method) ? 'โอน' : 'สด'})</span><strong>−฿${money(r.deposit_amount)}</strong></div>
@@ -637,6 +658,13 @@
         ${r.status === 'booked' && posFlow && phoneMode() && typeof window.eaPhoneLoadReservation === 'function' ? `<button type="button" class="rsv-btn rsv-main" onclick="rsvPhonePickup('${r.id}')">✅ ลูกค้ามารับ • เก็บอีก ฿${money(remaining(r))}</button>` : ''}
         ${r.status === 'booked' && phoneMode() ? `<button type="button" class="rsv-btn" onclick="reservationSlip('${r.id}')">🧾 ใบรับมัดจำ</button>` : ''}
       </div>`;
+  }
+  async function rsvScanToggleReq(id) {
+    const r = list.find(x => x.id === id); if (!r) return;
+    const on = !r.requisitioned_at;
+    if (!confirm(on ? `ยืนยัน: เบิกของสำหรับใบจอง ${r.res_no} มาแล้ว?` : `เปลี่ยนใบจอง ${r.res_no} เป็น "ยังไม่ได้เบิก"? (ของจะกลับไปขึ้นในใบเบิก)`)) return;
+    try { await save({ id, requisitioned: on }); toast(on ? '📦 บันทึกว่าเบิกของแล้ว' : 'เปลี่ยนเป็นยังไม่ได้เบิกแล้ว'); renderScanView(); if (st()?.page === 'reservations') render(); }
+    catch (e) { toast(`❌ ${e.message || e}`); }
   }
   // มือถือ: ใส่สินค้าในบิลมือถือ + หักมัดจำ → รับเงิน → checkoutCart (hookCheckout บันทึกว่ารับของแล้ว)
   function rsvPhonePickup(id) {
@@ -920,7 +948,8 @@
     rsvTab, rsvSearch, rsvField, rsvSet, rsvQuery, rsvAdd, rsvAddFirst, rsvAddCustom, rsvText,
     rsvPaySet, rsvPayClose, rsvPayConfirm, rsvQty, rsvLine, rsvRemove, rsvDepPct,
     reservationSlip, rsvSlipShare, rsvSlipSave, rsvSlipCopy, reservationPickup, reservationPickupCancel,
-    reservationCancel, reservationToggleReq, reservationStickers, rsvStkGo, rsvScanPickup, rsvPhonePickup, rsvDepositQr,
+    reservationCancel, reservationToggleReq, reservationStickers, rsvStkGo, rsvScanPickup, rsvPhonePickup, rsvDepositQr, rsvScanToggleReq,
+    eaReservationReqState: reqState,
     eaOpenReservationView: openScanView, eaReservationRemaining: remaining,
     eaReservationScan: reservationScan, eaReservationBarcode: barcodeText, eaDrawReservationBarcode: drawBarcode, eaOpenReservationByNo: openByNo,
     eaReservations: all, eaReservationRequisitions: requisitionList, eaMarkReservationsRequisitioned: markRequisitioned,

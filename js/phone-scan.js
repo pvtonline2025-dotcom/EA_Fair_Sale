@@ -1378,6 +1378,7 @@
           <button type="button" class="ps-rsv-card ${late ? 'is-late' : ''} ${isToday ? 'is-today' : ''} is-${escapeHtml(r.status)}" onclick="eaOpenReservationView('${escapeHtml(r.id)}')">
             <span class="ps-rsv-top"><b>${escapeHtml(r.customer_name)}</b><span class="ps-rsv-date">${r.status === 'picked_up' ? 'รับแล้ว' : r.status === 'cancelled' ? 'ยกเลิก' : `รับ ${escapeHtml(thShortDate(r.pickup_date))}${late ? ' (เลย)' : isToday ? ' (วันนี้)' : ''}`}</span></span>
             <span class="ps-rsv-items">${escapeHtml(its.map(i => `${i.name} ×${Number(i.qty)}`).join(', '))}</span>
+            ${(() => { const q = window.eaReservationReqState?.(r); return q ? `<span class="ps-rsv-req is-${q.k}">${q.k === 'done' ? '📦 ' : ''}${escapeHtml(q.short)}</span>` : ''; })()}
             <span class="ps-rsv-bot"><span>${escapeHtml(r.res_no)}${r.customer_phone ? ` • ${escapeHtml(r.customer_phone)}` : ''}</span>${r.status === 'booked' ? `<span>มัดจำ ฿${money(r.deposit_amount)} • ค้าง <b>฿${money(remain(r))}</b></span>` : ''}</span>
           </button>`;
         }).join('') : `<div class="ps-empty-small">${q ? 'ไม่พบใบจอง' : rsvView.tab === 'today' ? 'วันนี้ไม่มีลูกค้านัดรับของ' : 'ยังไม่มีใบจอง'}</div>`}

@@ -1,5 +1,5 @@
 // EA Fair Sale - Service Worker with Background Sync & Offline Support
-const CACHE_NAME = 'ea-fair-sale-v108';
+const CACHE_NAME = 'ea-fair-sale-v109';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -72,12 +72,12 @@ const STATIC_ASSETS = [
   '/images/btn-low-stock.png',
   '/images/btn-export.png',
   '/images/btn-setting.png',
-  '/assets/icons/logo-192.png',
-  '/assets/icons/logo-512.png',
-  '/assets/icons/logo-maskable-512.png',
-  '/assets/icons/apple-touch-icon.png',
-  '/assets/icons/splash-logo.webp',
-  '/assets/icons/app-emblem.png',
+  '/assets/icons/logo-192.png?v=20261110',
+  '/assets/icons/logo-512.png?v=20261110',
+  '/assets/icons/logo-maskable-512.png?v=20261110',
+  '/assets/icons/apple-touch-icon.png?v=20261110',
+  '/assets/icons/splash-logo.webp?v=20261110',
+  '/assets/icons/app-emblem.png?v=20261110',
   // CDN libraries (pinned versions) so the POS still opens offline
   'https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js',
@@ -94,7 +94,10 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return Promise.all(STATIC_ASSETS.map(async (asset) => {
-        try { await cache.add(asset); }
+        // cache:'reload' bypasses the browser HTTP cache so a new deploy never
+        // precaches yesterday's logo/JS/CSS.
+        const sameOrigin = asset.startsWith('/');
+        try { await cache.add(sameOrigin ? new Request(asset, { cache: 'reload' }) : asset); }
         catch (err) { console.warn('[SW] Optional asset not cached:', asset, err); }
       }));
     }).then(() => self.skipWaiting())
@@ -164,9 +167,10 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-first (with timeout) for the app's own JS/CSS so a new deploy takes
-  // effect on the very next load; fall back to cache when offline / slow.
-  if (url.origin === self.location.origin && (url.pathname.endsWith('.js') || url.pathname.endsWith('.css'))) {
+  // Network-first (with timeout) for ALL of the app's own files (JS, CSS, logos,
+  // images, manifest) so a new deploy - including a replaced logo that keeps the
+  // same file name - shows on the very first load; fall back to cache offline.
+  if (url.origin === self.location.origin) {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME);
       try {

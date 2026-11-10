@@ -255,14 +255,12 @@ try { window.__eaCountMode = /[?&]count=/.test(location.search); } catch (_) {}
     stopCam();
     const msg = $('pcCamMsg');
     const show = t => { if (msg) { msg.hidden = false; msg.innerHTML = t; } };
-    if (!window.ZXingBrowser) { show('โหลดตัวสแกนไม่สำเร็จ • พิมพ์ค้นหาด้านล่างแทนได้'); return; }
+    if (!window.eaScanEngine?.available() && !window.ZXingBrowser) { show('โหลดตัวสแกนไม่สำเร็จ • พิมพ์ค้นหาด้านล่างแทนได้'); return; }
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) { show('กล้องใช้ได้เฉพาะเว็บ HTTPS • พิมพ์ค้นหาด้านล่างแทนได้'); return; }
     show('กำลังเปิดกล้อง...');
     try {
-      reader = new ZXingBrowser.BrowserMultiFormatReader();
-      controls = await reader.decodeFromConstraints(
-        { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
-        $('pcVideo'), (res) => { if (res) onCode(res.getText()); });
+      // ตัวสแกนกลาง (js/scan-engine.js): ตัวอ่านในเครื่อง / ZXing-C++
+      controls = await window.eaScanEngine.start($('pcVideo'), (code) => { if (code) onCode(code); });
       if (msg) msg.hidden = true;
     } catch (err) {
       show(`${err?.name === 'NotAllowedError' ? 'ไม่ได้รับอนุญาตให้ใช้กล้อง' : 'เปิดกล้องไม่ได้'} <button type="button" onclick="phoneCountCamera()">เปิดกล้องอีกครั้ง</button>`);

@@ -28,6 +28,12 @@ if (configured && !window.supabase) {
   console.error("Supabase library not loaded correctly from CDN.");
 }
 
+// ข้อความราคาเฉพาะงาน: พิมพ์บนใบเสร็จ (ทุกแบบ) และป้ายบาร์โค้ดที่มีราคา • เปลี่ยนงาน → แก้บรรทัดนี้ ("" = ไม่พิมพ์)
+const EA_EVENT_PRICE_NOTE = "ราคานี้เฉพาะในงาน เกษตรกำแพงแสน ปี 69";
+window.EA_EVENT_PRICE_NOTE = EA_EVENT_PRICE_NOTE;
+const LBL_NOTE_STYLE = "display:block; width:100%; text-align:center; font-weight:800; line-height:1.15; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#000;";
+function lblPriceNote(sizePt){ return EA_EVENT_PRICE_NOTE && barcodePrintState.showPrice ? `<div class="lbl-note" style="${LBL_NOTE_STYLE} font-size:${sizePt}pt;">${escapeHtml(EA_EVENT_PRICE_NOTE)}</div>` : ""; }
+
 const TERMINAL_KEY = "ea_fairsale_terminal";
 const CART_KEY = "ea_fairsale_cart";
 const BILL_DISCOUNT_KEY = "ea_fairsale_bill_discount";
@@ -6832,7 +6838,7 @@ function updateCartDOMOnly(){
 }
 
 async function startCartLiveScanner(){
-  if(!window.ZXingBrowser){
+  if(!window.eaScanEngine?.available() && !window.ZXingBrowser){
     toast("โหลด Barcode Scanner ไม่สำเร็จ");
     return;
   }
@@ -6847,13 +6853,11 @@ async function startCartLiveScanner(){
   cartLiveZoomVal = 1.0;
 
   try {
-    cartScannerReader = new ZXingBrowser.BrowserMultiFormatReader();
-    cartScannerControls = await cartScannerReader.decodeFromConstraints(
-      { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+    // ตัวสแกนกลาง (js/scan-engine.js): ตัวอ่านในเครื่อง / ZXing-C++ → อ่านไวและแม่นกว่า ZXing JS เดิม
+    cartScannerControls = await window.eaScanEngine.start(
       video,
-      (result) => {
-        if(!result) return;
-        const code = result.getText();
+      (code) => {
+        if(!code) return;
         const now = Date.now();
         if(code === lastCartScannedCode && (now - lastCartScannedAt < 900)) return;
         lastCartScannedCode = code;
@@ -8091,6 +8095,8 @@ function generateInvoicePrintHTML(bill){
       </div>
 
       <div class="print-divider">--------------------------------</div>
+
+      ${EA_EVENT_PRICE_NOTE ? `<div class="print-event-note" style="margin:6px 0; padding:4px 6px; border:1.5px solid #000; border-radius:4px; text-align:center; font-weight:800; font-size:12px; color:#000;">${escapeHtml(EA_EVENT_PRICE_NOTE)}</div>` : ''}
 
       <div class="print-footer">
         <div style="font-weight:700;">${escapeHtml(footerNote)}</div>
@@ -9354,7 +9360,7 @@ async function initScannerBatteryMonitor(){
 }
 
 async function startScanner(){
-  if(!window.ZXingBrowser){toast("โหลด Barcode Scanner ไม่สำเร็จ");return}
+  if(!window.eaScanEngine?.available() && !window.ZXingBrowser){toast("โหลด Barcode Scanner ไม่สำเร็จ");return}
   const dialog=el("scannerDialog"),video=el("scannerVideo"),status=el("scannerStatus");
   dialog.showModal();
   status.textContent="กำลังขอสิทธิ์กล้อง...";
@@ -9403,10 +9409,10 @@ async function startScanner(){
   updateBatchScanQueueUI();
 
   try{
-    scannerReader=new ZXingBrowser.BrowserMultiFormatReader();
-    scannerControls=await scannerReader.decodeFromConstraints({video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720}},audio:false},video,(result)=>{
-      if(!result)return;
-      const code=result.getText(),now=Date.now();
+    // ตัวสแกนกลาง (js/scan-engine.js) • ซูมใช้ตัวปรับในหน้าต่างเดิม
+    scannerControls=await window.eaScanEngine.start(video,(code)=>{
+      if(!code)return;
+      const now=Date.now();
       if(code===lastScannedCode && now-lastScannedAt<1100)return;
       lastScannedCode=code;
       lastScannedAt=now;
@@ -21146,6 +21152,7 @@ function renderSingleBarcodeLabelHTML(product, format = "thermal-50x30", isPrevi
             </div>
           ` : ''}
         </div>
+        ${lblPriceNote(7)}
       </div>
     `;
   }
@@ -21162,6 +21169,7 @@ function renderSingleBarcodeLabelHTML(product, format = "thermal-50x30", isPrevi
         ${barcodePrintState.showCode ? `<span class="lbl-code">${escapeHtml(p.product_code)}</span>` : '<span></span>'}
         ${barcodePrintState.showPrice ? `<span class="lbl-price">฿${money(p.sale_price)}</span>` : ''}
       </div>
+      ${lblPriceNote(format === 'thermal-42x30' ? 4.6 : 5.4)}
     </div>
   `;
 }
@@ -21188,6 +21196,7 @@ function buildAllBarcodeLabelsPrintHTML(itemsList, format) {
               ${barcodePrintState.showCode ? `<span class="lbl-code">${escapeHtml(p.product_code)}</span>` : '<span></span>'}
               ${barcodePrintState.showPrice ? `<span class="lbl-price">฿${money(p.sale_price)}</span>` : ''}
             </div>
+            ${lblPriceNote(format === "a4-grid-36" ? 4.8 : 5.6)}
           </div>
         `);
       }

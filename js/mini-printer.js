@@ -165,6 +165,18 @@
       } else d.text('ชำระด้วยเงินสด', { size: 22 });
     } else d.text('ชำระด้วยการโอน / QR', { size: 22 });
     d.hr();
+    // ราคาเฉพาะงาน (ตั้งที่ EA_EVENT_PRICE_NOTE ใน app.js)
+    if (window.EA_EVENT_PRICE_NOTE) {
+      // ข้อความยาว → แบ่ง 2 บรรทัดที่ช่องว่างใกล้กลางข้อความ (ไม่ตัดกลางคำ)
+      const t = String(window.EA_EVENT_PRICE_NOTE).trim();
+      let parts = [t];
+      if (t.length > 22) {
+        const sp = [...t.matchAll(/ /g)].map(m => m.index);
+        if (sp.length) { const mid = sp.reduce((a, i) => Math.abs(i - t.length / 2) < Math.abs(a - t.length / 2) ? i : a); parts = [t.slice(0, mid), t.slice(mid + 1)]; }
+      }
+      parts.forEach((ln, k) => d.text(ln, { size: 23, bold: true, align: 'center', after: k === parts.length - 1 ? 4 : 0 }));
+      d.hr();
+    }
     // ท้ายบิล: ขอบคุณ + ดาว 5 ดวง
     d.space(4);
     d.text('ขอบคุณที่อุดหนุนค่ะ', { size: 26, bold: true, align: 'center', after: 0 });
@@ -747,16 +759,19 @@
       if (lines.length < 2) y += 4;
     }
     // บาร์โค้ด
-    const bottomH = 26, bcTop = y + 4, bcH = Math.max(50, LBL_H - bcTop - bottomH - (o.code ? 18 : 2));
+    const noteH = o.note ? 18 : 0;
+    const bottomH = 26 + noteH, bcTop = y + 4, bcH = Math.max(46, LBL_H - bcTop - bottomH - (o.code ? 18 : 2));
     const okBc = window.eaDrawReservationBarcode?.(ctx, o.barcode, 0, bcTop, W, bcH);
     ctx.fillStyle = '#000';
     let by = bcTop + bcH;
     if (o.code) { ctx.font = `600 16px ui-monospace, monospace`; ctx.textAlign = 'center'; ctx.fillText(o.code, W / 2, by + 15); ctx.textAlign = 'left'; by += 18; }
     if (!okBc) { ctx.font = `800 26px ui-monospace, monospace`; ctx.textAlign = 'center'; ctx.fillText(o.barcode, W / 2, bcTop + bcH / 2); ctx.textAlign = 'left'; }
-    // แถวล่าง
+    // แถวล่าง (+ บรรทัดราคาเฉพาะงาน)
+    const by2 = LBL_H - noteH;
     ctx.font = `800 20px ${font()}`;
-    if (o.left) ctx.fillText(fitText(ctx, o.left, inner * 0.62, 20, true, 14), P, LBL_H - 7);
-    if (o.right) { ctx.textAlign = 'right'; ctx.fillText(fitText(ctx, o.right, inner * 0.5, o.rightBig ? 26 : 20, true, 14), W - P, LBL_H - 6); ctx.textAlign = 'left'; }
+    if (o.left) ctx.fillText(fitText(ctx, o.left, inner * 0.62, 20, true, 14), P, by2 - 7);
+    if (o.right) { ctx.textAlign = 'right'; ctx.fillText(fitText(ctx, o.right, inner * 0.5, o.rightBig ? 26 : 20, true, 14), W - P, by2 - 6); ctx.textAlign = 'left'; }
+    if (o.note) { ctx.textAlign = 'center'; ctx.fillText(fitText(ctx, o.note, inner, 17, true, 12), W / 2, LBL_H - 3); ctx.textAlign = 'left'; }
     return cv;
   }
   function stripCanvas(stickers) {
@@ -789,7 +804,7 @@
     for (const it of items) {
       const p = it.product; const n = Math.max(1, Math.min(500, Number(it.qty) || 1));
       const code = String(p.barcode || p.product_code || '000000').trim();
-      for (let k = 0; k < n; k++) out.push({ top: shop, title: p.product_name, barcode: code, code, left: p.product_code || '', right: `฿${money(p.sale_price)}`, rightBig: true });
+      for (let k = 0; k < n; k++) out.push({ top: shop, title: p.product_name, barcode: code, code, left: p.product_code || '', right: `฿${money(p.sale_price)}`, rightBig: true, note: window.EA_EVENT_PRICE_NOTE || '' });
     }
     return out;
   }

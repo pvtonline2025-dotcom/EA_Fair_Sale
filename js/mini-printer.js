@@ -456,7 +456,49 @@
     if (out.length === 2 && Array.from(String(text)).join('').length > out.join('').length) { let l = out[1]; while (ctx.measureText(l + '…').width > maxW && l.length > 1) l = l.slice(0, -1); out[1] = l + '…'; }
     return out;
   }
+  // ป้ายสินค้าสั่งจอง: กรอบดำหนา + แถบดำ "สินค้าสั่งจอง ห้ามขาย" + ชื่อลูกค้า • ไม่มีราคา (ราคาตามที่ตกลงในใบจอง)
+  // บาร์โค้ด = เลขใบจอง (ไม่ใช่บาร์โค้ดสินค้า) → สแกนแล้วเปิดใบจอง ขายปนกับของหน้าร้านไม่ได้
+  function reservedStickerCanvas(o) {
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = LBL_H;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, LBL_H); ctx.fillStyle = '#000'; ctx.textBaseline = 'alphabetic';
+    const F = 5;                                  // กรอบดำหนา (ป้ายปกติไม่มีกรอบ)
+    ctx.fillRect(0, 0, W, F); ctx.fillRect(0, LBL_H - F, W, F); ctx.fillRect(0, 0, F, LBL_H); ctx.fillRect(W - F, 0, F, LBL_H);
+    const P = F + 8, inner = W - P * 2;
+    // แถบดำหัวป้าย
+    const bandH = 40;
+    ctx.fillRect(0, 0, W, bandH);
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+    ctx.fillText(fitText(ctx, '★ สินค้าสั่งจอง • ห้ามขาย ★', inner, 25, true, 16), W / 2, 30);
+    ctx.textAlign = 'left'; ctx.fillStyle = '#000';
+    // ชื่อลูกค้า + เบอร์ท้าย
+    let y = bandH + 4;
+    ctx.font = `800 22px ${font()}`;
+    const ph = o.phone ? `โทร …${String(o.phone).replace(/\D/g, '').slice(-4)}` : '';
+    const phW = ph ? (ctx.font = `700 17px ${font()}`, ctx.measureText(ph).width + 8) : 0;
+    ctx.fillText(fitText(ctx, o.title, inner - phW, 22, true, 15), P, y + 20);
+    if (ph) { ctx.font = `700 17px ${font()}`; ctx.textAlign = 'right'; ctx.fillText(ph, W - P, y + 19); ctx.textAlign = 'left'; }
+    y += 24;
+    // ชื่อสินค้า
+    ctx.fillText(fitText(ctx, o.sub || '', inner, 18, false, 13), P, y + 17);
+    y += 21;
+    // บาร์โค้ดใบจอง
+    const footH = 24, codeH = 16, bcTop = y + 2, bcH = Math.max(40, LBL_H - F - footH - codeH - bcTop);
+    const okBc = window.eaDrawReservationBarcode?.(ctx, o.barcode, F + 4, bcTop, W - (F + 4) * 2, bcH);
+    ctx.fillStyle = '#000';
+    if (!okBc) { ctx.font = `800 24px ui-monospace, monospace`; ctx.textAlign = 'center'; ctx.fillText(o.barcode, W / 2, bcTop + bcH / 2 + 8); ctx.textAlign = 'left'; }
+    ctx.font = `700 14px ui-monospace, monospace`; ctx.textAlign = 'center'; ctx.fillText(o.code || '', W / 2, bcTop + bcH + 13); ctx.textAlign = 'left';
+    // แถวล่าง: วันนัดรับ • (ไม่มีราคา) • ลำดับดวง
+    const fy = LBL_H - F - 6;
+    ctx.font = `800 18px ${font()}`;
+    ctx.fillText(fitText(ctx, o.left || '', inner * 0.42, 18, true, 13), P, fy);
+    ctx.font = `600 14px ${font()}`; ctx.textAlign = 'center'; ctx.fillText('ราคาตามใบจอง', W / 2 + 18, fy - 1);
+    if (o.right) { ctx.font = `800 18px ${font()}`; ctx.textAlign = 'right'; ctx.fillText(o.right, W - P, fy); }
+    ctx.textAlign = 'left';
+    return cv;
+  }
   function stickerCanvas(o) {
+    if (o.kind === 'reserved') return reservedStickerCanvas(o);
     const cv = document.createElement('canvas'); cv.width = W; cv.height = LBL_H;
     const ctx = cv.getContext('2d');
     ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, LBL_H); ctx.fillStyle = '#000'; ctx.textBaseline = 'alphabetic';
@@ -529,8 +571,8 @@
       const total = Math.max(1, Math.min(200, Number(n) || names.length || 1));
       const pd = new Date(String(r.pickup_date).slice(0, 10) + 'T00:00:00').toLocaleDateString('th-TH', { day: 'numeric', month: 'short' });
       const bc = window.eaReservationBarcode?.(r) || String(r.res_no).replace(/-/g, '');
-      const list = Array.from({ length: total }, (_, k) => ({ tag: 'ของจอง', title: r.customer_name, sub: names[k % (names.length || 1)] || '', barcode: bc, code: r.res_no, left: `รับ ${pd}`, right: total > 1 ? `${k + 1}/${total}` : '' }));
-      await printStickers(list, `booking-label-${r.res_no}`, `สติ๊กเกอร์ใบจอง ${r.res_no}`);
+      const list = Array.from({ length: total }, (_, k) => ({ kind: 'reserved', title: r.customer_name, phone: r.customer_phone || '', sub: names[k % (names.length || 1)] || '', barcode: bc, code: r.res_no, left: `รับ ${pd}`, right: total > 1 ? `${k + 1}/${total}` : '' }));
+      await printStickers(list, `booking-label-${r.res_no}`, `ป้ายสินค้าสั่งจอง ${r.res_no}`);
     });
   }
 

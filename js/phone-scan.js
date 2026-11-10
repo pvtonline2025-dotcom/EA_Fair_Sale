@@ -30,6 +30,10 @@
   let noticeTimer = null;
   let feedbackTimer = null;
   let pay = { method: 'cash', received: '' };
+  const RSV_PENDING_KEY = 'ea_phone_pending_rsv';
+  let pendingRsv = (() => { try { return JSON.parse(localStorage.getItem(RSV_PENDING_KEY) || 'null'); } catch (e) { return null; } })();   // ใบจองที่ลูกค้ามารับ กำลังคิดเงินในบิลนี้
+  function setPendingRsv(v) { pendingRsv = v || null; lsSet(RSV_PENDING_KEY, JSON.stringify(pendingRsv)); }
+  let rsvView = { tab: 'today', q: '' };
 
   const $ = (id) => document.getElementById(id);
 
@@ -64,7 +68,7 @@
     const dlg = $('phoneScanDialog');
     if (!dlg) return;
     try { if (typeof stopScanner === 'function') stopScanner(); } catch (e) {}
-    hideSheet('psPay'); hideSheet('psSummary'); hideSheet('psDone'); hideSheet('psWeight'); hideSheet('psPrice');
+    hideSheet('psPay'); hideSheet('psSummary'); hideSheet('psDone'); hideSheet('psWeight'); hideSheet('psPrice'); hideSheet('psRsv');
     renderList();
     renderTally();
     if (!dlg.open) dlg.showModal();
@@ -92,8 +96,10 @@
 
   function showSheet(id) { const s = $(id); if (s) s.hidden = false; paused = true; }
   function hideSheet(id) { const s = $(id); if (s) s.hidden = true; }
-  function anySheetOpen() { return ['psPay', 'psSummary', 'psDone', 'psWeight', 'psPrice'].some(id => $(id) && !$(id).hidden); }
-  function resumeIfIdle() { if (!anySheetOpen()) paused = false; }
+  function anySheetOpen() { return ['psPay', 'psSummary', 'psDone', 'psWeight', 'psPrice', 'psRsv'].some(id => $(id) && !$(id).hidden); }
+  // ฟอร์ม/หน้าใบจอง (dialog ซ้อนบนหน้าคิดเงิน) เปิดอยู่ → หยุดรับบาร์โค้ดจากกล้อง
+  function rsvDialogOpen() { return ['rsvFormDialog', 'rsvSlipDialog', 'rsvScanDialog', 'rsvPayDialog', 'rsvStkDialog'].some(id => $(id)?.open); }
+  function resumeIfIdle() { if (!anySheetOpen() && !rsvDialogOpen()) paused = false; }
 
   // ---------------------------------------------------------
   // Camera
@@ -539,6 +545,7 @@
   function clearPhoneScan() {
     if (!items.length) return;
     if (!confirm('ล้างรายการทั้งหมดในบิลนี้?')) return;
+    setPendingRsv(null);
     items = [];
     saveItems();
     renderList();
@@ -568,6 +575,12 @@
   function renderList(highlightId) {
     const list = $('psList');
     if (!list) return;
+    if (pendingRsv && !items.length) setPendingRsv(null);
+    let bar = $('psRsvBar');
+    if (pendingRsv) {
+      if (!bar) { bar = document.createElement('div'); bar.id = 'psRsvBar'; bar.className = 'ps-rsv-bar'; list.parentNode.insertBefore(bar, list); }
+      bar.innerHTML = `<span>📅 รับของใบจอง <b>${escapeHtml(pendingRsv.res_no)}</b> • ${escapeHtml(pendingRsv.customer)} • หักมัดจำ ฿${money(pendingRsv.deposit)}</span><button type="button" onclick="cancelPhoneReservationPickup()">ยกเลิก</button>`;
+    } else if (bar) bar.remove();
     if (!items.length) {
       list.innerHTML = `
         <div class="ps-empty">
@@ -879,6 +892,7 @@
     syncPrices();
     renderList();
     pay = { method: 'cash', received: '', disc: 0, discNote: '', discOpen: false };
+    if (pendingRsv) { pay.disc = Math.min(pendingRsv.deposit, totals().amount); pay.discNote = `หักมัดจำ ใบจอง ${pendingRsv.res_no}`; }
     renderPay();
     showSheet('psPay');
   }
@@ -1097,6 +1111,8 @@
       : { type: 'none', value: 0, note: '' };
     st.paymentMethod = pay.method;
     st.receivedCash = pay.method === 'cash' ? (rec || total) : 0;
+    const rsvPicked = pendingRsv;
+    st.pendingReservation = rsvPicked ? { ...rsvPicked } : null;
 
     try {
       await checkoutCart();
@@ -1110,6 +1126,7 @@
 
     const ok = st.cart.length === 0 && st.lastBill && st.lastBill !== prevBill;
     busy = false;
+    if (!ok) st.pendingReservation = null;
     if (!ok) {
       st.cart = prevCart || [];
       try { saveCartLocal(); } catch (e) {}
@@ -1120,6 +1137,7 @@
 
     const bill = st.lastBill;
     items = [];
+    setPendingRsv(null);
     saveItems();
     renderList();
     hideSheet('psPay');
@@ -1130,7 +1148,7 @@
       title: pay.method === 'cash' ? 'รับเงินสดแล้ว' : 'รับเงินโอน/QR แล้ว',
       label: pay.method === 'cash' ? 'เงินทอน' : 'ยอดที่รับ',
       big: `฿${money(pay.method === 'cash' ? bill.change : bill.total)}`,
-      meta: `บิล ${bill.saleNo} · ยอด ฿${money(bill.total)}${pay.method === 'cash' ? ` · รับมา ฿${money(bill.received)}` : ''}`,
+      meta: `บิล ${bill.saleNo} · ยอด ฿${money(bill.total)}${pay.method === 'cash' ? ` · รับมา ฿${money(bill.received)}` : ''}${rsvPicked ? ` · ใบจอง ${rsvPicked.res_no} รับของแล้ว` : ''}`,
       offline: /^S\d/.test(String(bill.saleNo || '')),
       canPrint: true,
       canCancel: false
@@ -1211,6 +1229,143 @@
   }
 
   // ---------------------------------------------------------
+  // ใบสั่งจอง (มือถือ)
+  // ---------------------------------------------------------
+  // QR พร้อมเพย์สำหรับยอดใดก็ได้ (ใช้ในฟอร์มใบจอง: มัดจำ)
+  function promptPayQrFor(amount) {
+    const pp = promptPayTarget();
+    return { svg: pp.clean ? promptPayQrSvg(pp.clean, r2(amount)) : '', raw: pp.raw };
+  }
+
+  // 📅 สั่งจอง: สินค้าที่สแกนไว้ในบิลนี้ → เป็นรายการในใบจอง (withItems=false = ใบเปล่า)
+  function phoneReserve(withItems = true) {
+    if (busy) return;
+    if (typeof window.openReservationForm !== 'function') { notice('ระบบใบจองยังโหลดไม่เสร็จ ลองอีกครั้ง', 'warn'); return; }
+    if (withItems && pendingRsv) { notice('บิลนี้เป็นการรับของใบจอง • กดยกเลิกที่แถบด้านบนก่อน', 'warn'); return; }
+    ensureStaffName();
+    const pre = [];
+    if (withItems) {
+      for (const it of items) {
+        const price = r2(it.price);
+        const note = optNote(it);
+        const ex = pre.find(x => x.product_id === it.product_id && x.unit_price === price);
+        if (ex) ex.qty += it.qty;
+        else pre.push({ product_id: it.product_id, name: note ? `${it.product_name} (${note})` : it.product_name, unit: it.unit || 'ชิ้น', qty: it.qty, unit_price: price });
+      }
+    }
+    paused = true;
+    window.openReservationForm(null, {
+      items: pre,
+      onSaved: () => {
+        if (pre.length) { items = []; saveItems(); renderList(); }   // ของในบิลย้ายไปอยู่ในใบจองแล้ว
+        if (!$('psRsv')?.hidden) renderRsvList();
+        waitRsvDialogs();
+      },
+      onClose: () => { lastCode = ''; waitRsvDialogs(); }
+    });
+  }
+  // กลับมาสแกนต่อเมื่อปิดหน้าต่างใบจองทั้งหมดแล้ว (ใบรับมัดจำเปิดตามหลังการบันทึก)
+  function waitRsvDialogs() {
+    let n = 0;
+    const tick = () => { if (rsvDialogOpen() && n++ < 600) { setTimeout(tick, 500); return; } lastCode = ''; resumeIfIdle(); };
+    setTimeout(tick, 900);
+  }
+
+  // ลูกค้ามารับของที่จองไว้: ใส่สินค้าเข้าบิลมือถือ + หักมัดจำ แล้วรับเงินคงค้าง
+  function loadReservationToBill(r) {
+    if (!r || busy) return false;
+    if (items.length && !confirm('บิลนี้มีสินค้าค้างอยู่ จะล้างแล้วใช้รายการจากใบจองนี้?')) return false;
+    const next = [];
+    for (const i of (Array.isArray(r.items) ? r.items : [])) {
+      const p = products().find(x => x.id === i.product_id);
+      if (!p) { notice(`ไม่พบสินค้า "${i.name}" ในระบบแล้ว`, 'error'); return false; }
+      const unitPrice = r2(i.unit_price);
+      const custom = Math.abs(unitPrice - Number(p.sale_price || 0)) > 0.0001;
+      next.push({
+        product_id: p.id, product_name: p.product_name, barcode: p.barcode || '', unit: p.unit || p.unit_name || 'ชิ้น',
+        price: unitPrice, stock: Number(p.stock_qty || 0), qty: Number(i.qty) || 1,
+        opt: custom ? `custom:${unitPrice}` : '', ...(custom ? { disc_note: `ใบจอง ${r.res_no}` } : {})
+      });
+    }
+    if (!next.length) return false;
+    const short = next.find(it => it.qty > it.stock);
+    if (short) notice(`${short.product_name}: สต็อกในระบบเหลือ ${short.stock} (จอง ${short.qty}) • ตรวจของก่อนส่ง`, 'warn');
+    items = next;
+    setPendingRsv({ id: r.id, res_no: r.res_no, customer: r.customer_name, deposit: Number(r.deposit_amount || 0), deposit_amount: Number(r.deposit_amount || 0), deposit_method: r.deposit_method });
+    saveItems();
+    hideSheet('psRsv');
+    renderList();
+    openPhonePay();
+    return true;
+  }
+  function cancelPhoneReservationPickup() {
+    if (!pendingRsv) return;
+    if (!confirm(`ยกเลิกการรับของใบจอง ${pendingRsv.res_no}? (รายการในบิลจะถูกล้าง)`)) return;
+    setPendingRsv(null); items = []; saveItems(); renderList();
+  }
+
+  // รายการใบจองในมือถือ
+  function openPhoneReservations() {
+    renderRsvList();
+    showSheet('psRsv');
+    window.eaReservationsLoad?.(true).then(() => { if (!$('psRsv')?.hidden) renderRsvList(); });
+  }
+  function closePhoneReservations() { hideSheet('psRsv'); resumeIfIdle(); }
+  function setPhoneRsvTab(t) { rsvView.tab = t; renderRsvList(); }
+  let rsvSearchTimer = null;
+  function phoneRsvSearch(v) {
+    rsvView.q = String(v || '');
+    clearTimeout(rsvSearchTimer);
+    rsvSearchTimer = setTimeout(() => { renderRsvList(); const n = $('psRsvQ'); if (n) { n.focus(); const l = n.value.length; try { n.setSelectionRange(l, l); } catch (_) {} } }, 250);
+  }
+  function thShortDate(iso) {
+    if (!iso) return '-';
+    return new Date(String(iso).slice(0, 10) + 'T00:00:00').toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' });
+  }
+  function renderRsvList() {
+    const box = $('psRsvBody');
+    if (!box) return;
+    const all = window.eaReservations?.() || [];
+    const today = todayISO();
+    const me = terminalName().trim().toUpperCase();
+    const mineToday = all.filter(r => r.deposit_date === today && String(r.deposit_terminal || '').trim().toUpperCase() === me);
+    const booked = all.filter(r => r.status === 'booked');
+    const tabs = [
+      ['today', 'รับวันนี้', booked.filter(r => r.pickup_date <= today).length],
+      ['booked', 'รอรับทั้งหมด', booked.length],
+      ['mine', 'เครื่องนี้จองวันนี้', mineToday.length]
+    ];
+    let rows = rsvView.tab === 'today' ? booked.filter(r => r.pickup_date <= today)
+      : rsvView.tab === 'mine' ? mineToday.slice().reverse() : booked;
+    const q = rsvView.q.trim().toLowerCase();
+    if (q) rows = all.filter(r => `${r.res_no} ${r.customer_name} ${r.customer_phone}`.toLowerCase().includes(q));
+    const dep = mineToday.filter(r => Number(r.deposit_amount) > 0);
+    const depCash = r2(dep.filter(r => !isQr(r.deposit_method)).reduce((a, r) => a + Number(r.deposit_amount), 0));
+    const depQr = r2(dep.filter(r => isQr(r.deposit_method)).reduce((a, r) => a + Number(r.deposit_amount), 0));
+    const remain = r => r2(Number(r.total_amount || 0) - Number(r.deposit_amount || 0));
+    box.innerHTML = `
+      <button type="button" class="ps-rsv-new" onclick="phoneReserve(false)">＋ สร้างใบจองใหม่</button>
+      ${dep.length ? `<div class="ps-rsv-dep">มัดจำที่เครื่องนี้รับวันนี้ ${dep.length} ใบ • เงินสด <b>฿${money(depCash)}</b> • โอน <b>฿${money(depQr)}</b>
+        <small>เงินสดมัดจำเก็บแยกใน "ซองมัดจำ" ไม่รวมกับเงินขาย</small></div>` : ''}
+      <input id="psRsvQ" class="ps-rsv-q" type="search" placeholder="ค้นหา ชื่อ / เบอร์ / เลขใบจอง" value="${escapeHtml(rsvView.q)}" oninput="phoneRsvSearch(this.value)">
+      ${q ? '' : `<div class="ps-rsv-tabs">${tabs.map(([k, t, n]) => `<button type="button" class="${rsvView.tab === k ? 'is-on' : ''}" onclick="setPhoneRsvTab('${k}')">${t} <b>${n}</b></button>`).join('')}</div>`}
+      <div class="ps-rsv-list">
+        ${rows.length ? rows.slice(0, 80).map(r => {
+          const late = r.status === 'booked' && r.pickup_date < today;
+          const isToday = r.status === 'booked' && r.pickup_date === today;
+          const its = Array.isArray(r.items) ? r.items : [];
+          return `
+          <button type="button" class="ps-rsv-card ${late ? 'is-late' : ''} ${isToday ? 'is-today' : ''} is-${escapeHtml(r.status)}" onclick="eaOpenReservationView('${escapeHtml(r.id)}')">
+            <span class="ps-rsv-top"><b>${escapeHtml(r.customer_name)}</b><span class="ps-rsv-date">${r.status === 'picked_up' ? 'รับแล้ว' : r.status === 'cancelled' ? 'ยกเลิก' : `รับ ${escapeHtml(thShortDate(r.pickup_date))}${late ? ' (เลย)' : isToday ? ' (วันนี้)' : ''}`}</span></span>
+            <span class="ps-rsv-items">${escapeHtml(its.map(i => `${i.name} ×${Number(i.qty)}`).join(', '))}</span>
+            <span class="ps-rsv-bot"><span>${escapeHtml(r.res_no)}${r.customer_phone ? ` • ${escapeHtml(r.customer_phone)}` : ''}</span>${r.status === 'booked' ? `<span>มัดจำ ฿${money(r.deposit_amount)} • ค้าง <b>฿${money(remain(r))}</b></span>` : ''}</span>
+          </button>`;
+        }).join('') : `<div class="ps-empty-small">${q ? 'ไม่พบใบจอง' : rsvView.tab === 'today' ? 'วันนี้ไม่มีลูกค้านัดรับของ' : 'ยังไม่มีใบจอง'}</div>`}
+      </div>
+      <div class="ps-rsv-hint">แตะใบจองเพื่อดูรายละเอียด / รับของ / ส่งใบรับมัดจำ • ลูกค้านำบาร์โค้ดใบจองมาให้สแกนที่กล้องได้เลย</div>`;
+  }
+
+  // ---------------------------------------------------------
   function init() {
     const dlg = $('phoneScanDialog');
     if (!dlg) return;
@@ -1220,7 +1375,7 @@
       e.preventDefault();   // staff cannot leave the cashier screen by accident
       if ($('psQrFull') && !$('psQrFull').hidden) { closeQrFull(); return; }
       if (anySheetOpen()) {
-        hideSheet('psPay'); hideSheet('psSummary'); hideSheet('psDone'); hideSheet('psWeight'); hideSheet('psPrice');
+        hideSheet('psPay'); hideSheet('psSummary'); hideSheet('psDone'); hideSheet('psWeight'); hideSheet('psPrice'); hideSheet('psRsv');
         weightCtx = null; priceKey = null;
         resumeIfIdle();
       }
@@ -1232,6 +1387,7 @@
     });
     window.EaOfflineSync?.onSyncComplete?.(() => setTimeout(renderTally, 1500));
     window.addEventListener('ea:data-refreshed', () => { if (dlg.open) renderTally(); });
+    window.addEventListener('ea:reservations-changed', () => { if (dlg.open && !$('psRsv')?.hidden) renderRsvList(); });
 
     // Opened from the hub QR code: ?cashier=<station name>
     let fromQr = false;
@@ -1318,7 +1474,15 @@
     setPhoneCashierMode,
     sendPhoneScan,
     newPhoneScanBill,
-    cancelLastPhoneScanBill
+    cancelLastPhoneScanBill,
+    phoneReserve,
+    openPhoneReservations,
+    closePhoneReservations,
+    setPhoneRsvTab,
+    phoneRsvSearch,
+    cancelPhoneReservationPickup,
+    eaPhoneLoadReservation: loadReservationToBill,
+    eaPromptPayQrSvg: promptPayQrFor
   });
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

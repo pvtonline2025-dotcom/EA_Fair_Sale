@@ -20,6 +20,7 @@
   let search = '';
   let form = null;           // ข้อมูลฟอร์มที่กำลังกรอก
   let slip = null;           // { blob, url, file }
+  let formOpts = null;       // มือถือ: { items, onSaved(row), onClose() }
 
   const st = () => window.getEaAppState?.() || null;
   const sb = () => window.getEaSupabaseClient?.() || null;
@@ -218,8 +219,9 @@
     const d = new Date(); const p = x => String(x).padStart(2, '0');
     return `R${String(d.getFullYear()).slice(2)}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${Math.floor(Math.random() * 90 + 10)}`;
   }
-  function openReservationForm(id) {
+  function openReservationForm(id, opts) {
     const r = id ? list.find(x => x.id === id) : null;
+    formOpts = opts && typeof opts === 'object' ? opts : null;
     form = r ? {
       id: r.id, res_no: r.res_no, customer_name: r.customer_name, customer_phone: r.customer_phone || '',
       items: (r.items || []).map(i => ({ ...i })), deal_total: isDeal(r) ? String(Number(r.total_amount)) : '', deposit_amount: Number(r.deposit_amount || 0), deposit_method: r.deposit_method || 'cash',
@@ -228,11 +230,23 @@
       res_no: newResNo(), customer_name: '', customer_phone: '', items: [], deal_total: '', deposit_amount: '', deposit_method: 'cash',
       pickup_date: addDays(todayIso(), 1), pickup_place: 'booth', requisition_mode: 'day_before', note: '', q: ''
     };
+    // สินค้าที่สแกนไว้ในมือถือ → เป็นรายการจองทันที
+    if (!r && Array.isArray(formOpts?.items)) {
+      form.items = formOpts.items.filter(i => i && String(i.name || '').trim()).map(i => ({
+        product_id: i.product_id || null, name: String(i.name), unit: i.unit || 'ชิ้น', qty: Number(i.qty) || 1, unit_price: r2(i.unit_price)
+      }));
+    }
     let dlg = document.getElementById('rsvFormDialog');
-    if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'rsvFormDialog'; dlg.className = 'rsv-dialog'; document.body.appendChild(dlg); }
+    if (!dlg) {
+      dlg = document.createElement('dialog'); dlg.id = 'rsvFormDialog'; dlg.className = 'rsv-dialog'; document.body.appendChild(dlg);
+      // ปิดฟอร์มโดยไม่บันทึก (ปุ่มยกเลิก / ✕ / ปุ่มย้อนกลับ)
+      dlg.addEventListener('close', () => { const o = formOpts; formOpts = null; form = null; try { o?.onClose?.(); } catch (_) {} });
+    }
+    dlg.classList.toggle('is-phone', phoneMode());
     renderForm();
     if (!dlg.open) dlg.showModal();
-    setTimeout(() => document.getElementById('rsvName')?.focus(), 60);
+    // มือถือ: ไม่เด้งคีย์บอร์ดทันที (ให้เห็นรายการที่สแกนมาก่อน)
+    if (!phoneMode()) setTimeout(() => document.getElementById('rsvName')?.focus(), 60);
   }
   function seg(name, value, opts) {
     return `<div class="rsv-seg">${opts.map(([v, t]) => `<button type="button" class="${value === v ? 'is-on' : ''}" onclick="rsvSet('${name}','${v}')">${t}</button>`).join('')}</div>`;
@@ -284,7 +298,8 @@
             <input id="rsvDep" type="number" inputmode="decimal" min="0" step="any" value="${form.deposit_amount}" ${form.editing ? 'disabled' : ''} oninput="rsvField('deposit_amount', this.value, true)" placeholder="0">
             ${form.editing ? '' : `<div class="rsv-chips">${[[0.3, '30%'], [0.5, '50%'], [1, 'จ่ายเต็ม']].map(([f, t]) => `<button type="button" onclick="rsvDepPct(${f})">${t}</button>`).join('')}</div>`}
           </div>
-          <div class="rsv-f"><span>มัดจำจ่ายด้วย</span>${form.editing ? `<div class="rsv-ro">${isQr(form.deposit_method) ? 'โอน/QR' : 'เงินสด'}</div>` : seg('deposit_method', form.deposit_method, [['cash', 'เงินสด'], ['promptpay', 'โอน/QR']])}</div>
+          <div class="rsv-f"><span>มัดจำจ่ายด้วย</span>${form.editing ? `<div class="rsv-ro">${isQr(form.deposit_method) ? 'โอน/QR' : 'เงินสด'}</div>` : seg('deposit_method', form.deposit_method, [['cash', 'เงินสด'], ['promptpay', 'โอน/QR']])}
+            ${!form.editing && isQr(form.deposit_method) && typeof window.eaPromptPayQrSvg === 'function' ? '<button type="button" class="rsv-btn rsv-qr-btn" onclick="rsvDepositQr()">⛶ แสดง QR ให้ลูกค้าสแกนจ่ายมัดจำ</button>' : ''}</div>
         </div>
         <div class="rsv-sum is-due" id="rsvDue"><span>คงค้าง (จ่ายวันรับของ)</span><strong>฿${money(Math.max(0, total - dep))}</strong></div>
 
@@ -302,7 +317,24 @@
       </div>`;
     if (focusId) { const n = document.getElementById(focusId); if (n) { n.focus(); const l = String(n.value).length; try { n.setSelectionRange(l, l); } catch (_) {} } }
   }
-  function closeReservationForm() { document.getElementById('rsvFormDialog')?.close(); form = null; }
+  function closeReservationForm() { const d = document.getElementById('rsvFormDialog'); if (d?.open) d.close(); else { formOpts = null; form = null; } }
+  // QR พร้อมเพย์ยอดมัดจำ (เต็มจอ ในหน้าฟอร์ม)
+  function rsvDepositQr() {
+    if (!form) return;
+    const amt = r2(Number(form.deposit_amount || 0));
+    if (amt <= 0) { toast('กรุณาใส่ยอดเงินมัดจำก่อน'); document.getElementById('rsvDep')?.focus(); return; }
+    const q = window.eaPromptPayQrSvg?.(amt);
+    if (!q?.svg) { toast('ยังไม่ได้ตั้งเบอร์พร้อมเพย์ (แอปเต็ม → ตั้งค่า)', 4000); return; }
+    const dlg = document.getElementById('rsvFormDialog'); if (!dlg) return;
+    let box = document.getElementById('rsvQrFull');
+    if (!box) { box = document.createElement('div'); box.id = 'rsvQrFull'; box.className = 'rsv-qrfull'; box.onclick = () => box.remove(); }
+    box.innerHTML = `<div class="rsv-qrfull-t">สแกนจ่ายมัดจำ • พร้อมเพย์</div>
+      <div class="rsv-qrfull-amt">฿${money(amt)}</div>
+      <div class="rsv-qrfull-code">${q.svg}</div>
+      <div class="rsv-qrfull-id">พร้อมเพย์ ${escapeHtml(q.raw || '')}${form.customer_name ? ` • ${escapeHtml(form.customer_name)}` : ''}</div>
+      <button type="button" class="rsv-qrfull-x">แตะเพื่อกลับ • ตรวจว่าเงินเข้าแล้วจึงกดบันทึก</button>`;
+    dlg.appendChild(box);
+  }
   function rsvField(k, v, soft) {
     if (!form) return;
     form[k] = v;
@@ -376,7 +408,9 @@
     try {
       const row = await save(payload);
       const wasEdit = form.editing;
+      const opts = formOpts; formOpts = null;   // บันทึกแล้ว: ไม่เรียก onClose
       closeReservationForm();
+      try { opts?.onSaved?.(row); } catch (_) {}
       toast(wasEdit ? `บันทึกการแก้ไข ${row.res_no} แล้ว` : `บันทึกใบจอง ${row.res_no} แล้ว • มัดจำ ฿${money(row.deposit_amount)}`, 4000);
       if (!wasEdit) { tab = 'booked'; window.dispatchEvent(new Event('ea:reservations-changed')); }
       if (st()?.page === 'reservations') render();
@@ -457,7 +491,10 @@
     const file = new File([blob], `ใบจอง-${r.res_no}.png`, { type: 'image/png' });
     slip = { blob, url: URL.createObjectURL(blob), file };
     let dlg = document.getElementById('rsvSlipDialog');
-    if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'rsvSlipDialog'; dlg.className = 'restock-img-dialog'; document.body.appendChild(dlg); }
+    if (!dlg) {
+      dlg = document.createElement('dialog'); dlg.id = 'rsvSlipDialog'; dlg.className = 'restock-img-dialog'; document.body.appendChild(dlg);
+      dlg.addEventListener('close', () => window.dispatchEvent(new Event('ea:rsv-slip-closed')));
+    }
     const canShare = !!(navigator.canShare && navigator.canShare({ files: [file] }));
     const canCopy = !!(window.ClipboardItem && navigator.clipboard?.write);
     dlg.innerHTML = `
@@ -560,13 +597,21 @@
         <div class="rsv-sum"><span>มัดจำแล้ว (${isQr(r.deposit_method) ? 'โอน' : 'สด'})</span><strong>−฿${money(r.deposit_amount)}</strong></div>
         ${r.status === 'booked' ? `<div class="rsv-scan-due"><span>ต้องชำระอีก</span><strong>฿${money(remaining(r))}</strong></div>`
           : r.status === 'picked_up' ? `<div class="rsv-sum"><span>รับเงินแล้ว</span><strong>${Number(r.final_amount) > 0 ? '฿' + money(r.final_amount) : r.sale_no ? 'บิล ' + escapeHtml(r.sale_no) : 'ครบ'}</strong></div>` : ''}
-        ${r.status === 'booked' && posFlow && phoneMode() ? '<div class="rsv-hint">สินค้าในบูธ: ให้กด "ลูกค้ามารับ" ที่แท็บเล็ต (ตัดสต็อกและหักมัดจำให้อัตโนมัติ)</div>' : ''}
+        ${r.status === 'booked' && posFlow && phoneMode() ? '<div class="rsv-hint">กด "ลูกค้ามารับ" → สินค้าเข้าบิลในมือถือ หักมัดจำให้อัตโนมัติ แล้วรับเงินคงค้างตามปกติ (ตัดสต็อกให้)</div>' : ''}
       </div>
       <div class="rsv-dlg-foot">
         <button type="button" class="rsv-btn" onclick="reservationStickers('${r.id}')">🏷️ สติ๊กเกอร์</button>
         <button type="button" class="rsv-btn" onclick="eaMiniPrintReservation('${r.id}')">🖨️ พิมพ์ใบจอง</button>
         ${r.status === 'booked' && !(posFlow && phoneMode()) ? `<button type="button" class="rsv-btn rsv-main" onclick="rsvScanPickup('${r.id}')">✅ ส่งของ + รับเงิน ฿${money(remaining(r))}</button>` : ''}
+        ${r.status === 'booked' && posFlow && phoneMode() && typeof window.eaPhoneLoadReservation === 'function' ? `<button type="button" class="rsv-btn rsv-main" onclick="rsvPhonePickup('${r.id}')">✅ ลูกค้ามารับ • เก็บอีก ฿${money(remaining(r))}</button>` : ''}
+        ${r.status === 'booked' && phoneMode() ? `<button type="button" class="rsv-btn" onclick="reservationSlip('${r.id}')">🧾 ใบรับมัดจำ</button>` : ''}
       </div>`;
+  }
+  // มือถือ: ใส่สินค้าในบิลมือถือ + หักมัดจำ → รับเงิน → checkoutCart (hookCheckout บันทึกว่ารับของแล้ว)
+  function rsvPhonePickup(id) {
+    const r = list.find(x => x.id === id); if (!r || r.status !== 'booked') return;
+    if (window.eaPhoneLoadReservation?.(r) === false) return;
+    document.getElementById('rsvScanDialog')?.close();
   }
   function rsvScanPickup(id) {
     const r = list.find(x => x.id === id); if (!r) return;
@@ -844,7 +889,8 @@
     rsvTab, rsvSearch, rsvField, rsvSet, rsvQuery, rsvAdd, rsvAddFirst, rsvAddCustom, rsvText,
     rsvPaySet, rsvPayClose, rsvPayConfirm, rsvQty, rsvLine, rsvRemove, rsvDepPct,
     reservationSlip, rsvSlipShare, rsvSlipSave, rsvSlipCopy, reservationPickup, reservationPickupCancel,
-    reservationCancel, reservationToggleReq, reservationStickers, rsvStkGo, rsvScanPickup,
+    reservationCancel, reservationToggleReq, reservationStickers, rsvStkGo, rsvScanPickup, rsvPhonePickup, rsvDepositQr,
+    eaOpenReservationView: openScanView, eaReservationRemaining: remaining,
     eaReservationScan: reservationScan, eaReservationBarcode: barcodeText, eaDrawReservationBarcode: drawBarcode, eaOpenReservationByNo: openByNo,
     eaReservations: all, eaReservationRequisitions: requisitionList, eaMarkReservationsRequisitioned: markRequisitioned,
     eaReservationMoney: moneyToday, eaReservationPosBanner: posBanner, eaReservationsLoad: load

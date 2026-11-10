@@ -148,3 +148,32 @@ dialog.rsv-dialog[open] { display: flex; }
 .rsv-stk-act { display: grid; gap: 8px; margin-top: 6px; }
 .rsv-stk-act .rsv-btn { min-height: 50px; font-size: 16px; }
 .mp-gap input { width: 64px; height: 30px; text-align: center; font: inherit; border-radius: 4px; border: 1px solid #94a3b8; }
+
+/* v2.0.2 ใบจองบนมือถือ: ฟอร์มกระชับ + QR มัดจำเต็มจอ */
+.rsv-qr-btn { margin-top: 6px; width: 100%; min-height: 46px; }
+.rsv-qrfull { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  padding: 20px; background: #fff; color: #0f172a; text-align: center; cursor: pointer; }
+.rsv-qrfull-t { font-size: 20px; font-weight: 800; color: #1d4ed8; }
+.rsv-qrfull-amt { font-size: 44px; font-weight: 900; }
+.rsv-qrfull-code svg { width: min(78vw, 360px); height: auto; display: block; }
+.rsv-qrfull-id { font-size: 15px; color: #475569; }
+.rsv-qrfull-x { margin-top: 8px; min-height: 46px; padding: 0 18px; border-radius: 4px; border: 1px solid #cbd5e1; background: #f1f5f9; color: #0f172a; font: inherit; font-weight: 700; }
+dialog.rsv-dialog.is-phone .rsv-dlg-head { padding: calc(10px + env(safe-area-inset-top, 0px)) 14px 10px; font-size: 16px; }
+dialog.rsv-dialog.is-phone .rsv-dlg-body { padding: 12px 14px 20px; gap: 12px; }
+dialog.rsv-dialog.is-phone .rsv-dlg-foot { padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px)); }
+dialog.rsv-dialog.is-phone .rsv-sum strong { font-size: 22px; }
+dialog.rsv-dialog.is-phone .rsv-sugg { max-height: 46vh; }
+@media (max-width: 600px) {
+  .rsv-dlg-head strong span { display: block; margin: 2px 0 0; }
+  .rsv-line { grid-template-columns: auto minmax(0, 1fr) auto 40px; row-gap: 6px; padding: 8px; }
+  .rsv-line .n { grid-column: 1 / -1; font-size: 16px; }
+  .rsv-line.is-custom { grid-template-columns: auto 64px minmax(0, 1fr) auto 40px; }
+  .rsv-line.is-custom input.u { width: 100%; box-sizing: border-box; }
+  .rsv-line .p { width: 100%; min-width: 0; box-sizing: border-box; }
+  .rsv-line .s { grid-column: 3; }
+  .rsv-line > .u:not(input) { display: none; }
+  .rsv-step input { width: 52px; }
+  .rsv-chips button { flex: 1; }
+  .rsv-scan-dialog .rsv-dlg-foot { grid-template-columns: 1fr 1fr; }
+  .rsv-scan-dialog .rsv-dlg-foot .rsv-main { grid-column: 1 / -1; order: -1; }
+}

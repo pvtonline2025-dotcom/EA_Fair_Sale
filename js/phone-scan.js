@@ -572,9 +572,28 @@
     };
   }
 
+  // แถบชวนติดตั้งแอป (ไอคอนบนหน้าจอหลัก) • ปิดได้ แต่ยังติดตั้งได้ที่ 📊 → ตั้งค่าเครื่องนี้
+  const INSTALL_HIDE_KEY = 'ea_phone_install_hint_off';
+  function renderInstallHint() {
+    const list = $('psList'); if (!list) return;
+    let bar = $('psInstallBar');
+    const show = window.eaCanInstallApp?.() && lsGet(INSTALL_HIDE_KEY, '') !== '1';
+    if (!show) { bar?.remove(); return; }
+    if (!bar) {
+      bar = document.createElement('div'); bar.id = 'psInstallBar'; bar.className = 'ps-install-bar';
+      bar.innerHTML = `<img src="assets/icons/cashier-192.png?v=20261110" alt="" width="40" height="40">
+        <button type="button" class="ps-install-main" onclick="openPhoneInstall()"><b>ติดตั้งแอป "EA คิดเงิน"</b><small>ไอคอนสีเขียวบนหน้าจอหลัก แตะแล้วเข้าหน้าสแกนคิดเงินทันที</small></button>
+        <button type="button" class="ps-install-x" onclick="hidePhoneInstallHint()" aria-label="ซ่อน">✕</button>`;
+      list.parentNode.insertBefore(bar, list);
+    }
+  }
+  function openPhoneInstall() { window.eaOpenInstallApp?.(); }
+  function hidePhoneInstallHint() { lsSet(INSTALL_HIDE_KEY, '1'); $('psInstallBar')?.remove(); notice('ติดตั้งแอปภายหลังได้ที่ปุ่ม 📊 → ตั้งค่าเครื่องนี้', 'info'); }
+
   function renderList(highlightId) {
     const list = $('psList');
     if (!list) return;
+    renderInstallHint();
     if (pendingRsv && !items.length) setPendingRsv(null);
     let bar = $('psRsvBar');
     if (pendingRsv) {
@@ -752,6 +771,7 @@
           ${choices.map(c => `<option value="${escapeHtml(c)}" ${c === target ? 'selected' : ''}>${c === 'ALL' ? 'ส่งทุกเครื่องคิดเงิน' : 'ส่งไป ' + escapeHtml(c)}</option>`).join('')}
         </select>
       </label>` : ''}
+      ${window.eaCanInstallApp?.() ? '<button type="button" class="ps-btn-secondary ps-btn-block ps-install-btn" onclick="openPhoneInstall()">📲 ติดตั้งแอปเป็นไอคอนบนหน้าจอหลัก</button>' : ''}
       <button type="button" class="ps-btn-secondary ps-btn-block ps-admin-exit" onclick="exitToFullApp()">🔒 สำหรับผู้ดูแล: เปิดแอปเต็ม (สต็อก / รายงาน)</button>
     `;
   }
@@ -1387,6 +1407,7 @@
     });
     window.EaOfflineSync?.onSyncComplete?.(() => setTimeout(renderTally, 1500));
     window.addEventListener('ea:data-refreshed', () => { if (dlg.open) renderTally(); });
+    window.addEventListener('ea:install-state', () => { renderInstallHint(); if (!$('psSummary')?.hidden) renderSummary(); });
     window.addEventListener('ea:reservations-changed', () => { if (dlg.open && !$('psRsv')?.hidden) renderRsvList(); });
 
     // Opened from the hub QR code: ?cashier=<station name>
@@ -1412,6 +1433,8 @@
     // Phone cashier mode: open this screen when the app starts
     let fullSession = false;
     try { fullSession = sessionStorage.getItem(FULL_SESSION_KEY) === '1'; } catch (e) {}
+    // เปิดจากไอคอนแอป "EA คิดเงิน" (start_url /?app=cashier) → เข้าหน้าสแกนคิดเงินเสมอ
+    try { if (!fullSession && new URLSearchParams(location.search).get('app') === 'cashier') fromQr = fromQr || 'app'; } catch (e) {}
     applySendVisibility();
     if (!window.__eaCountMode && (fromQr || (autoOpenEnabled() && !fullSession))) {
       document.documentElement.classList.add('ps-booting');
@@ -1421,7 +1444,7 @@
         if ((st && !st.loading && st.products?.length) || Date.now() - started > 8000) {
           clearInterval(wait);
           document.documentElement.classList.remove('ps-booting');
-          openPhoneScan().then(() => { if (fromQr) notice(`พร้อมคิดเงินที่จุด "${terminalName()}"${window.getStaffName?.() ? ` • ผู้รับผิดชอบ: ${window.getStaffName()}` : ''} • ยอดเข้าศูนย์กลาง`, 'info'); });
+          openPhoneScan().then(() => { if (fromQr === true) notice(`พร้อมคิดเงินที่จุด "${terminalName()}"${window.getStaffName?.() ? ` • ผู้รับผิดชอบ: ${window.getStaffName()}` : ''} • ยอดเข้าศูนย์กลาง`, 'info'); });
         }
       }, 300);
     }
@@ -1482,6 +1505,8 @@
     phoneRsvSearch,
     cancelPhoneReservationPickup,
     eaPhoneLoadReservation: loadReservationToBill,
+    openPhoneInstall,
+    hidePhoneInstallHint,
     eaPromptPayQrSvg: promptPayQrFor
   });
 

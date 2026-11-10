@@ -16,6 +16,20 @@
   <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png?v=20261110">
   <link rel="manifest" href="manifest.json">
   <script>
+    // มือถือ = แอป "EA คิดเงิน" ไอคอนสีเขียว แยกจากแอปหลัก (แท็บเล็ต) • ติดตั้งคู่กันในเครื่องเดียวได้
+    (function(){ try {
+      var phone = Math.min(screen.width, screen.height, window.innerWidth) < 600;
+      if (!(phone || /[?&]app=cashier/.test(location.search))) return;
+      document.documentElement.classList.add('ea-cashier-app');
+      var v = '?v=20261110';
+      var q = function (sel) { return document.querySelector(sel); };
+      q('link[rel="manifest"]').setAttribute('href', '/assets/manifest-cashier.json' + v);
+      q('link[rel="apple-touch-icon"]').setAttribute('href', '/assets/icons/cashier-apple-touch.png' + v);
+      q('link[rel="icon"]').setAttribute('href', '/assets/icons/cashier-192.png' + v);
+      q('meta[name="apple-mobile-web-app-title"]').setAttribute('content', 'EA คิดเงิน');
+    } catch (e) {} })();
+  </script>
+  <script>
     (function(){
       try {
         var s = JSON.parse(localStorage.getItem("ea_cached_settings") || "{}");
@@ -36,7 +50,7 @@
       var v = localStorage.getItem('ea_phone_cashier_mode');
       var phone = Math.min(screen.width, screen.height, window.innerWidth) < 600;
       var full = sessionStorage.getItem('ea_full_app_session') === '1';
-      var qr = /[?&]cashier=/.test(location.search);
+      var qr = /[?&]cashier=/.test(location.search) || (!full && /[?&]app=cashier/.test(location.search));
       if (qr || (!full && (v === 'true' || (v === null && phone)))) document.documentElement.classList.add('ps-booting');
     } catch (e) {} })();
   </script>
@@ -722,7 +736,7 @@
         <img class="ea-install-icon" src="assets/icons/logo-192.png?v=20261110" alt="ไอคอน EA Fair Sale" width="62" height="62">
         <div>
           <h2 id="appInstallTitle">ติดตั้ง EA Fair Sale</h2>
-          <p class="ea-install-desc">เพิ่มแอปไว้บนหน้าจอหลักของแท็บเล็ต</p>
+          <p class="ea-install-desc">เพิ่มไอคอนแอปไว้บนหน้าจอหลัก</p>
         </div>
       </div>
       <p id="installAppSteps" class="ea-install-steps">เปิดเมนูเบราว์เซอร์ แล้วเลือก “ติดตั้งแอป” หรือ “เพิ่มไปยังหน้าจอหลัก”</p>

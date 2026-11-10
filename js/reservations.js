@@ -299,7 +299,7 @@
             ${form.editing ? '' : `<div class="rsv-chips">${[[0.3, '30%'], [0.5, '50%'], [1, 'จ่ายเต็ม']].map(([f, t]) => `<button type="button" onclick="rsvDepPct(${f})">${t}</button>`).join('')}</div>`}
           </div>
           <div class="rsv-f"><span>มัดจำจ่ายด้วย</span>${form.editing ? `<div class="rsv-ro">${isQr(form.deposit_method) ? 'โอน/QR' : 'เงินสด'}</div>` : seg('deposit_method', form.deposit_method, [['cash', 'เงินสด'], ['promptpay', 'โอน/QR']])}
-            ${!form.editing && isQr(form.deposit_method) && typeof window.eaPromptPayQrSvg === 'function' ? '<button type="button" class="rsv-btn rsv-qr-btn" onclick="rsvDepositQr()">⛶ แสดง QR ให้ลูกค้าสแกนจ่ายมัดจำ</button>' : ''}</div>
+            ${!form.editing && isQr(form.deposit_method) ? `<div id="rsvDepQr" class="rsv-depqr">${depQrInline()}</div>` : ''}</div>
         </div>
         <div class="rsv-sum is-due" id="rsvDue"><span>คงค้าง (จ่ายวันรับของ)</span><strong>฿${money(Math.max(0, total - dep))}</strong></div>
 
@@ -318,13 +318,40 @@
     if (focusId) { const n = document.getElementById(focusId); if (n) { n.focus(); const l = String(n.value).length; try { n.setSelectionRange(l, l); } catch (_) {} } }
   }
   function closeReservationForm() { const d = document.getElementById('rsvFormDialog'); if (d?.open) d.close(); else { formOpts = null; form = null; } }
+  // ---------- QR พร้อมเพย์ยอดมัดจำ ----------
+  function ppTarget() { const s = st()?.settings || {}; const raw = s.promptPayId || s.shopPhone || ''; return { raw, clean: String(raw).replace(/[^0-9]/g, '') }; }
+  function depositQr(amt) {
+    const pp = ppTarget();
+    if (!pp.clean) return { raw: pp.raw, html: '' };
+    let html = '';
+    try {
+      if (typeof window.qrcode === 'function' && typeof window.eaPromptPayPayload === 'function') {
+        const q = window.qrcode(0, 'M'); q.addData(window.eaPromptPayPayload(pp.clean, r2(amt))); q.make(); html = q.createSvgTag(8, 4);
+      }
+    } catch (_) { html = ''; }
+    // ตัวสร้าง QR ในเครื่องโหลดไม่ได้ → ใช้รูปจาก promptpay.io (ต้องมีเน็ต)
+    if (!html) html = `<img src="https://promptpay.io/${pp.clean}/${r2(amt).toFixed(2)}.png" alt="PromptPay QR">`;
+    return { raw: pp.raw, html };
+  }
+  // QR ในฟอร์ม (ขึ้นทันทีเมื่อเลือก โอน/QR และอัปเดตตามยอดมัดจำ)
+  function depQrInline() {
+    if (!form) return '';
+    const amt = r2(Number(form.deposit_amount || 0));
+    const pp = ppTarget();
+    if (!pp.clean) return '<div class="rsv-depqr-warn">ยังไม่ได้ตั้งเบอร์พร้อมเพย์ • ตั้งที่ แอปเต็ม → ตั้งค่า → พร้อมเพย์</div>';
+    if (amt <= 0) return '<div class="rsv-depqr-hint">ใส่ยอดเงินมัดจำ (หรือกด 30% / 50%) แล้ว QR จะขึ้นตรงนี้</div>';
+    return `<button type="button" class="rsv-depqr-tap" onclick="rsvDepositQr()" aria-label="แสดง QR เต็มจอ">${depositQr(amt).html}</button>
+      <div class="rsv-depqr-cap">พร้อมเพย์ ${escapeHtml(pp.raw)} • <b>฿${money(amt)}</b></div>
+      <button type="button" class="rsv-btn rsv-qr-btn" onclick="rsvDepositQr()">⛶ แสดง QR เต็มจอให้ลูกค้าสแกน</button>`;
+  }
+  function refreshDepQr() { const b = document.getElementById('rsvDepQr'); if (b) b.innerHTML = depQrInline(); }
   // QR พร้อมเพย์ยอดมัดจำ (เต็มจอ ในหน้าฟอร์ม)
   function rsvDepositQr() {
     if (!form) return;
     const amt = r2(Number(form.deposit_amount || 0));
     if (amt <= 0) { toast('กรุณาใส่ยอดเงินมัดจำก่อน'); document.getElementById('rsvDep')?.focus(); return; }
-    const q = window.eaPromptPayQrSvg?.(amt);
-    if (!q?.svg) { toast('ยังไม่ได้ตั้งเบอร์พร้อมเพย์ (แอปเต็ม → ตั้งค่า)', 4000); return; }
+    const q = depositQr(amt); q.svg = q.html;
+    if (!q.svg) { toast('ยังไม่ได้ตั้งเบอร์พร้อมเพย์ (แอปเต็ม → ตั้งค่า)', 4000); return; }
     const dlg = document.getElementById('rsvFormDialog'); if (!dlg) return;
     let box = document.getElementById('rsvQrFull');
     if (!box) { box = document.createElement('div'); box.id = 'rsvQrFull'; box.className = 'rsv-qrfull'; box.onclick = () => box.remove(); }
@@ -335,6 +362,7 @@
       <button type="button" class="rsv-qrfull-x">แตะเพื่อกลับ • ตรวจว่าเงินเข้าแล้วจึงกดบันทึก</button>`;
     dlg.appendChild(box);
   }
+  let qrTimer = null;
   function rsvField(k, v, soft) {
     if (!form) return;
     form[k] = v;
@@ -342,6 +370,7 @@
       const t = formTotal();
       const tot = document.getElementById('rsvTotal'); if (tot) tot.querySelector('strong').textContent = `฿${money(t)}`;
       const due = document.getElementById('rsvDue'); if (due) due.querySelector('strong').textContent = `฿${money(Math.max(0, t - Number(form.deposit_amount || 0)))}`;
+      if (k === 'deposit_amount') { clearTimeout(qrTimer); qrTimer = setTimeout(refreshDepQr, 250); }
       return;
     }
     if (k === 'pickup_date') renderForm();
@@ -351,6 +380,8 @@
     form[k] = v;
     if (k === 'pickup_place' && !form.editing) form.requisition_mode = v === 'shop' ? 'none' : 'day_before';
     renderForm();
+    // เลือก โอน/QR แล้วมียอดมัดจำ → เปิด QR เต็มจอให้ลูกค้าสแกนทันที
+    if (k === 'deposit_method' && isQr(v) && Number(form.deposit_amount) > 0 && ppTarget().clean) rsvDepositQr();
   }
   let qTimer = null;
   function rsvQuery(v) { form.q = v; clearTimeout(qTimer); qTimer = setTimeout(() => renderForm('rsvQ'), 200); }

@@ -187,3 +187,8 @@ dialog.rsv-dialog.is-phone .rsv-sugg { max-height: 46vh; }
 .rsv-depqr-warn { border-color: #f59e0b; color: #f59e0b; }
 [data-color-mode="light"] .rsv-depqr-warn { color: #b45309; }
 .rsv-qrfull-code svg, .rsv-qrfull-code img { width: min(78vw, 360px); height: auto; display: block; }
+.mp-share { display: grid; gap: 8px; }
+.mp-share label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+.mp-share input[type="checkbox"] { width: 20px; height: 20px; flex: none; margin: 1px 0 0; }
+.mp-bt-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.mp-release { min-height: 40px; }

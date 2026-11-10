@@ -220,7 +220,10 @@
     'bef8d6c9-9c21-4c9e-b632-bd58c1009f9f', '49535343-8841-43f4-a8d4-ecbe34729bb3', '6e400002-b5a3-f393-e0a9-e50e24dcca9e'];
   const GENERIC = [U16('1800'), U16('1801'), U16('180a'), U16('180f')];
   const BT_KEY = 'ea_bt_printer';
-  const bt = { device: null, ch: null, busy: false };
+  // ใช้เครื่องพิมพ์ร่วมกันหลายมือถือ: พิมพ์เสร็จแล้วตัดบลูทูธ ให้เครื่องอื่นต่อได้ (ค่าเริ่มต้น = เปิด)
+  const RELEASE_KEY = 'ea_bt_release';
+  const releaseOn = () => { try { return localStorage.getItem(RELEASE_KEY) !== '0'; } catch (_) { return true; } };
+  const bt = { device: null, ch: null, busy: false, svc: '', chr: '', listen: null, releaseTimer: null };
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const hasBle = () => !!navigator.bluetooth;
   const btName = () => bt.device?.name || (() => { try { return JSON.parse(localStorage.getItem(BT_KEY) || '{}').name || ''; } catch (_) { return ''; } })();
@@ -228,6 +231,13 @@
 
   async function gattSetup(dev) {
     const server = await dev.gatt.connect();
+    // เคยต่อเครื่องนี้แล้ว → ไปที่ช่องพิมพ์เดิมเลย (เร็วกว่าไล่หาใหม่ทุกครั้ง)
+    if (bt.device === dev && bt.svc && bt.chr) {
+      try {
+        bt.ch = await (await server.getPrimaryService(bt.svc)).getCharacteristic(bt.chr);
+        return;
+      } catch (_) { /* หาไม่เจอ → ไล่หาใหม่ด้านล่าง */ }
+    }
     const svcs = await server.getPrimaryServices();
     const list = [];
     for (const sv of svcs) {
@@ -237,14 +247,23 @@
     if (!list.length) throw new Error('เครื่องพิมพ์นี้ไม่รองรับการพิมพ์ตรงจากแอป (บลูทูธแบบเก่า) • ใช้วิธีบันทึกรูปแทน');
     const score = x => { const i = BLE_WRITE.indexOf(x.c.uuid); let n = i >= 0 ? 100 - i : 0; if (BLE_SERVICES.includes(x.svc)) n += 50; if (GENERIC.includes(x.svc)) n -= 200; if (x.c.properties.writeWithoutResponse) n += 5; return n; };
     list.sort((a, b) => score(b) - score(a));
-    bt.device = dev; bt.ch = list[0].c;
-    dev.addEventListener('gattserverdisconnected', () => { bt.ch = null; });
+    if (bt.device && bt.device !== dev && bt.listen) { try { bt.device.removeEventListener('gattserverdisconnected', bt.listen); } catch (_) {} bt.listen = null; }
+    bt.device = dev; bt.ch = list[0].c; bt.svc = list[0].svc; bt.chr = list[0].c.uuid;
+    if (!bt.listen) { bt.listen = () => { bt.ch = null; }; dev.addEventListener('gattserverdisconnected', bt.listen); }
     try { localStorage.setItem(BT_KEY, JSON.stringify({ id: dev.id, name: dev.name || '' })); } catch (_) {}
   }
   // เชื่อมต่ออัตโนมัติกับเครื่องที่เคยจับคู่ (ไม่ต้องเลือกใหม่ทุกครั้ง)
-  async function btReconnect() {
+  async function btReconnect(onWait) {
+    clearTimeout(bt.releaseTimer);
     if (btConnected()) return true;
-    if (bt.device) { try { await gattSetup(bt.device); return true; } catch (_) {} }
+    if (bt.device) {
+      // เครื่องพิมพ์ต่อได้ทีละเครื่อง: มือถืออื่นกำลังพิมพ์อยู่ → รอแล้วลองใหม่ (รวม ~12 วินาที)
+      for (let i = 0; i < 5; i++) {
+        try { await gattSetup(bt.device); return true; }
+        catch (_) { if (i < 4) { onWait?.(i + 1); await sleep(1500 + i * 500); } }
+      }
+      return false;
+    }
     try {
       if (!navigator.bluetooth?.getDevices) return false;
       const saved = JSON.parse(localStorage.getItem(BT_KEY) || '{}');
@@ -298,6 +317,24 @@
     }
     await btWrite(new Uint8Array([0x1b, 0x4a, 80]));   // ป้อนกระดาษเผื่อฉีก
   }
+  // ตัดการเชื่อมต่อ → เครื่องพิมพ์ว่าง ให้มือถือเครื่องอื่นต่อได้ (จำเครื่องไว้ ครั้งหน้ากดพิมพ์ได้เลย)
+  function btRelease(manual) {
+    clearTimeout(bt.releaseTimer);
+    const was = btConnected();
+    try { if (bt.device?.gatt?.connected) bt.device.gatt.disconnect(); } catch (_) {}
+    bt.ch = null;
+    refreshBtUi();
+    if (manual) toast(was ? `ปล่อยเครื่องพิมพ์แล้ว${btName() ? ` (${btName()})` : ''} • มือถือเครื่องอื่นต่อได้` : 'ตอนนี้ไม่ได้ต่อเครื่องพิมพ์อยู่', 3000);
+  }
+  function refreshBtUi() {
+    const st = document.getElementById('mpBtState');
+    if (st) st.textContent = btConnected() ? `🟢 ต่ออยู่กับ ${btName() || 'เครื่องพิมพ์'}` : (btName() ? `⚪ ว่าง • ${btName()}` : '');
+  }
+  function setRelease(on) {
+    try { localStorage.setItem(RELEASE_KEY, on ? '1' : '0'); } catch (_) {}
+    if (on && btConnected() && !bt.busy) btRelease(false);
+    refreshBtUi();
+  }
   // พิมพ์ตรง: เชื่อมเครื่องเดิมอัตโนมัติ • ยังไม่เคยเลือก → ให้เลือกเครื่อง
   async function btPrint(cv, choose) {
     if (bt.busy) return;
@@ -306,25 +343,30 @@
     const setBtn = t => { if (btn) btn.textContent = t; };
     try {
       let saved = {}; try { saved = JSON.parse(localStorage.getItem(BT_KEY) || '{}'); } catch (_) {}
-      if (choose || bt.nextChoose || (!bt.device && !saved.id)) {
+      // เบราว์เซอร์ที่จำเครื่องข้ามการเปิดแอปไม่ได้ (getDevices) → เลือกเครื่องตอนแตะเลย ไม่ต้องแตะ 2 รอบ
+      if (choose || bt.nextChoose || (!bt.device && !(saved.id && navigator.bluetooth?.getDevices))) {
         bt.nextChoose = false;
         await btChoose();                       // ต้องเรียกทันทีจากการแตะ (ข้อกำหนดของเบราว์เซอร์)
       } else {
         setBtn('กำลังเชื่อมต่อ...');
-        if (!(await btReconnect())) {
-          bt.nextChoose = true;
-          toast('เชื่อมเครื่องเดิมไม่ได้ • แตะ "พิมพ์ตรง" อีกครั้งเพื่อเลือกเครื่อง', 5000);
+        if (!(await btReconnect(n => setBtn(`⏳ เครื่องพิมพ์ไม่ว่าง รอคิว... (${n})`)))) {
+          if (!bt.device) bt.nextChoose = true;
+          toast(bt.device
+            ? 'ต่อเครื่องพิมพ์ไม่ได้ • มือถือเครื่องอื่นอาจต่อค้างอยู่ (ให้เครื่องนั้นกด "ปล่อยเครื่องพิมพ์") หรือเครื่องพิมพ์ปิด/ไกลเกิน แล้วแตะพิมพ์อีกครั้ง'
+            : 'เชื่อมเครื่องเดิมไม่ได้ • แตะ "พิมพ์ตรง" อีกครั้งเพื่อเลือกเครื่อง', 6000);
           return;
         }
       }
       setBtn('กำลังพิมพ์...');
       await btPrintCanvas(cv);
-      toast(`✅ ส่งพิมพ์แล้ว (${btName() || 'เครื่องพิมพ์'})`, 2500);
+      toast(`✅ ส่งพิมพ์แล้ว (${btName() || 'เครื่องพิมพ์'})${releaseOn() ? ' • ปล่อยเครื่องพิมพ์ให้เครื่องอื่นแล้ว' : ''}`, 2500);
+      // รอให้ข้อมูลถึงเครื่องพิมพ์ครบก่อนตัดการเชื่อมต่อ (ตัดเร็วไป บางรุ่นพิมพ์ไม่จบ)
+      if (releaseOn()) { clearTimeout(bt.releaseTimer); bt.releaseTimer = setTimeout(() => { if (!bt.busy) btRelease(false); }, 2000); }
       document.getElementById('miniPrintDialog')?.close();
     } catch (e) {
       if (e?.name === 'NotFoundError') { setBtn('🔵 พิมพ์ตรง (บลูทูธ)'); return; }   // กดยกเลิกการเลือกเครื่อง
       try { window.alert(`พิมพ์ไม่สำเร็จ: ${e?.message || e}\n\n• เปิดบลูทูธ/ตำแหน่ง และเปิดเครื่องพิมพ์\n• ปิดแอป PeriPage ก่อน (เครื่องพิมพ์ต่อได้ทีละแอป)`); } catch (_) {}
-    } finally { bt.busy = false; setBtn(bt.nextChoose ? '🔵 แตะเพื่อเลือกเครื่องพิมพ์' : `🔵 พิมพ์ตรง${btName() ? ` • ${btName()}` : ' (บลูทูธ)'}`); }
+    } finally { bt.busy = false; setBtn(bt.nextChoose ? '🔵 แตะเพื่อเลือกเครื่องพิมพ์' : `🔵 พิมพ์ตรง${btName() ? ` • ${btName()}` : ' (บลูทูธ)'}`); refreshBtUi(); }
   }
 
   async function preview(cv, name, title, labels) {
@@ -354,11 +396,16 @@
         <button type="button" class="rid-btn ${canShare || hasBle() ? '' : 'rid-primary'}" onclick="eaMiniPrintSave()">💾 บันทึกรูป</button>
       </div>
       ${labels ? `<div class="rid-hint mp-gap">ใช้สติ๊กเกอร์ 57×30 มม. • วางกระดาษให้ดวงแรกอยู่ที่หัวพิมพ์ • ระยะห่างระหว่างดวง <input type="number" min="0" max="10" step="0.5" value="${gapMm()}" onchange="eaMiniLabelGap(this.value)"> มม. (ถ้าพิมพ์เลื่อนลงทีละนิด ให้ลด • เลื่อนขึ้น ให้เพิ่ม)</div>` : ''}
-      ${hasBle() ? `<div class="rid-hint">พิมพ์ตรง: ครั้งแรกเลือกเครื่อง PeriPage จากรายการ (เปิดบลูทูธ + ตำแหน่ง และ <b>ปิดแอป PeriPage ก่อน</b>) • ครั้งต่อไปกดพิมพ์ได้เลย ${btName() ? `<a href="#" onclick="eaMiniPrintBt(true);return false;">เปลี่ยนเครื่อง</a>` : ''}</div>` : ''}
+      ${hasBle() ? `<div class="rid-hint">พิมพ์ตรง: ครั้งแรกเลือกเครื่อง PeriPage จากรายการ (เปิดบลูทูธ + ตำแหน่ง และ <b>ปิดแอป PeriPage ก่อน</b>) • ครั้งต่อไปกดพิมพ์ได้เลย ${btName() ? `<a href="#" onclick="eaMiniPrintBt(true);return false;">เปลี่ยนเครื่อง</a>` : ''}</div>
+      <div class="rid-hint mp-share">
+        <label><input type="checkbox" ${releaseOn() ? 'checked' : ''} onchange="eaMiniPrintSetRelease(this.checked)"> ใช้เครื่องพิมพ์ร่วมกันหลายมือถือ (พิมพ์เสร็จปล่อยเครื่องพิมพ์ให้เครื่องอื่นทันที)</label>
+        <span class="mp-bt-row"><span id="mpBtState"></span><button type="button" class="rid-btn mp-release" onclick="eaMiniPrintRelease()">⏏ ปล่อยเครื่องพิมพ์</button></span>
+      </div>` : ''}
       <div class="rid-hint">${canShare
         ? 'กด "ส่งไปแอป PeriPage" → เลือกแอป PeriPage → กดพิมพ์ • ใช้กระดาษม้วนต่อเนื่อง 57 มม. (สติ๊กเกอร์ 57×30 บิลยาวจะพิมพ์ข้ามดวง)'
         : 'เครื่องนี้ส่งรูปไปแอปโดยตรงไม่ได้ • บันทึกรูปแล้วเปิดในแอป PeriPage เพื่อพิมพ์ (แนะนำใช้จากแท็บเล็ต/มือถือ)'}</div>`;
     if (!dlg.open) dlg.showModal();
+    refreshBtUi();
   }
   function btPrintCurrent(choose) { if (cur?.canvas) return btPrint(cur.canvas, !!choose); }
   async function share() {
@@ -499,10 +546,14 @@
     row.appendChild(b);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', addReceiptButton); else addReceiptButton();
+  // พับแอป / ล็อกจอ / ปิดแอป → ปล่อยเครื่องพิมพ์ (กันมือถือที่วางไว้ต่อค้างจนเครื่องอื่นพิมพ์ไม่ได้)
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && releaseOn() && !bt.busy) btRelease(false); });
+  window.addEventListener('pagehide', () => { if (!bt.busy) btRelease(false); });
 
   Object.assign(window, {
     eaMiniPrintBill: printBill, eaMiniPrintReservation: printReservation,
     eaMiniPrintShare: share, eaMiniPrintSave: save, eaMiniPrintBt: btPrintCurrent,
+    eaMiniPrintRelease: () => btRelease(true), eaMiniPrintSetRelease: setRelease,
     eaMiniPrintProductLabels: printProductStickers, eaMiniPrintReservationLabels: printReservationStickers, eaMiniLabelGap: setGap,
     eaDrawThermalBill: drawBill, eaDrawThermalReservation: drawReservation
   });

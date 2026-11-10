@@ -219,3 +219,5 @@ dialog.rsv-dialog.is-phone .rsv-sugg { max-height: 46vh; }
 .mp-seg button { min-height: 38px; padding: 0 14px; border: 0; border-left: 1px solid #94a3b8; background: transparent; color: inherit; font: inherit; font-weight: 700; cursor: pointer; }
 .mp-seg button:first-child { border-left: 0; }
 .mp-seg button.is-on { background: #2563eb; color: #fff; }
+.mp-slow { flex-basis: 100%; display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+.mp-slow input { width: 20px; height: 20px; flex: none; margin: 1px 0 0; }

@@ -510,21 +510,10 @@
         console.log('✅ Service Worker registered successfully with scope:', registration.scope);
         try { registration.update(); } catch (_) {}
 
-        // เมื่อมีเวอร์ชันใหม่เข้ามาแทน: โหลดหน้าใหม่อัตโนมัติ 1 ครั้ง (ถ้าไม่ได้กำลังขาย/เปิดหน้าต่างอยู่)
-        if (hadController) {
-          let reloaded = false;
-          navigator.serviceWorker.addEventListener('controllerchange', () => {
-            if (reloaded) return;
-            const st = (typeof window.getEaAppState === 'function') ? window.getEaAppState() : null;
-            const busy = (st && Array.isArray(st.cart) && st.cart.length > 0) || !!document.querySelector('dialog[open]');
-            if (busy) {
-              if (typeof window.toast === 'function') window.toast('🔄 มีแอปเวอร์ชันใหม่ — ปิดบิล/หน้าต่างแล้วกดรีเฟรชเพื่ออัปเดต', 6000);
-              return;
-            }
-            reloaded = true;
-            window.location.reload();
-          });
-        }
+        // ไม่รีโหลดหน้าเองเมื่อ Service Worker เวอร์ชันใหม่เข้ามาแทน:
+        // หน้าเว็บ/JS/CSS/โลโก้ โหลดจากเน็ตก่อนเสมอ (network-first) จึงเป็นเวอร์ชันล่าสุดตั้งแต่โหลดแรกแล้ว
+        // การ reload ตอน controllerchange ทำให้แอปโหลดซ้ำ 2 รอบ (เห็นหน้าโหลด/สแปลชสองครั้ง)
+        void hadController;
 
         // Listen for messages from Service Worker
         navigator.serviceWorker.addEventListener('message', (event) => {

@@ -1465,7 +1465,7 @@ function loadFromLocalStorageFallback(){
     console.warn("Storage fallback load warning:", e);
   }
 
-  if (!state.products || state.products.length === 0) {
+  if (!sb && (!state.products || state.products.length === 0)) {   // ข้อมูลตัวอย่าง เฉพาะโหมดเดโม (ไม่ได้ต่อฐานข้อมูล)
     state.products = [
       { id: "off-1", product_code: "P001", barcode: "8850000000001", product_name: "สินค้าตัวอย่าง 1 (น้ำดื่ม)", stock_qty: 50, min_stock: 10, sale_price: 15, cost_price: 8, is_active: true },
       { id: "off-2", product_code: "P002", barcode: "8850000000002", product_name: "สินค้าตัวอย่าง 2 (ขนมทานเล่น)", stock_qty: 8, min_stock: 10, sale_price: 35, cost_price: 20, is_active: true },
@@ -1474,7 +1474,7 @@ function loadFromLocalStorageFallback(){
     saveLocalState();
   }
 
-  if (!state.sales || state.sales.length === 0) {
+  if (!sb && (!state.sales || state.sales.length === 0)) {   // ข้อมูลตัวอย่าง เฉพาะโหมดเดโม
     const now = new Date();
     const dayOfWeek = now.getDay();
     const diffToMonday = (dayOfWeek === 0 ? -6 : 1 - dayOfWeek);
@@ -1541,7 +1541,7 @@ function loadFromLocalStorageFallback(){
     saveLocalState();
   }
 
-  if (!state.auditBatchHistory || state.auditBatchHistory.length === 0) {
+  if (!sb && (!state.auditBatchHistory || state.auditBatchHistory.length === 0)) {   // ข้อมูลตัวอย่าง เฉพาะโหมดเดโม
     const today = todayISO();
     const yest = getNDaysAgoISO(1);
     const d3 = getNDaysAgoISO(3);
@@ -4254,7 +4254,7 @@ function renderHome(){
   }
 
   // Filter low stock and out of stock items
-  const allProds = (state.products && state.products.length > 0) ? state.products : [
+  const allProds = (state.products && state.products.length > 0) ? state.products : sb ? [] : [
     { product_name: "ท่อดำ LD [PN. 2.5] 20 mm. 200 m. [ เขียว ]", stock_qty: 3, min_stock: 5, category: "อุปกรณ์ท่อ" },
     { product_name: "ท่อดำ LD [PN. 2.5] 25 mm. 200 m. [ ส้ม ]", stock_qty: 2, min_stock: 5, category: "อุปกรณ์ท่อ" },
     { product_name: "ท่อดำ LD [PN. 2.5] 25 mm. 200 m. [ เขียว ]", stock_qty: 1, min_stock: 5, category: "อุปกรณ์ท่อ" },
@@ -4497,6 +4497,8 @@ function renderMenu(){
         { icon: "🧾", title: "ประวัติการขาย", hint: billsToday ? `วันนี้ ${billsToday} บิล • ดูย้อนหลัง` : "ดูบิลย้อนหลัง", on: "go('salesHistory')", accent: "green" },
         { icon: "📌", title: "ใบสั่งจอง / มัดจำ", hint: "จองของ นัดวันรับ หักมัดจำ", on: "openReservations()", accent: "green", badge: (() => { const t = todayISO(); const n = (window.eaReservations?.() || []).filter(r => r.status === "booked" && r.pickup_date <= t).length; return n ? `${n} รับวันนี้` : ""; })(), badgeWarn: true },
         { icon: "💰", title: "กล่องเงิน (เรียลไทม์)", hint: "ดูบิล รับมา/ทอน • นับเงินตรวจ", on: "openCashbox()", accent: "green" },
+        { icon: "⚡", title: "โหมดเร่งด่วน", hint: "คนเยอะ: แตะ +1 จดไว้ก่อน ปิดยอดทีเดียว", on: "eaOpenRush()", accent: "green", badge: (() => { const t = window.eaRushTotals?.(); return t?.qty ? `฿${money(t.amt)} ค้าง` : ""; })(), badgeWarn: true },
+        { icon: "🔧", title: "แก้ไขรายการตกหล่น", hint: "เจ้าของ: ลงบิลภายหลัง • ใบจองตกหล่น • ปิดยอด", on: "eaOpenMissed()", accent: "green" },
         { icon: "🏢", title: "ศูนย์กลาง", hint: "ยอดทุกเครื่อง • รับเงินสด", on: "go('hub')", accent: "green" },
         { icon: "📲", title: "QR จุดขาย", hint: "ให้เจ้าหน้าที่สแกนด้วยมือถือตัวเอง", on: "go('qrStations')", accent: "green" },
         { icon: "💸", title: "เงินสำรองจ่าย", hint: "เบิก / จ่าย / คงเหลือ", on: "go('expenses')", accent: "green" }
@@ -8793,6 +8795,14 @@ function closeReceiptModal(){
   else render();
 }
 
+// ป้ายบิลลงภายหลัง / บิลรวมเร่งด่วน (อยู่ในหมายเหตุบิล "[...]")
+function saleTagBadge(sale){
+  const m=/^\[([^\]]+)\]/.exec(String(sale?.note||""));
+  if(!m) return "";
+  const t=m[1], rush=/^บิลรวมเร่งด่วน/.test(t);
+  return `<span class="sh-tag ${rush?"is-rush":"is-late"}" title="${escapeHtml(t)}">${rush?"⚡ เร่งด่วน":"🔧 ลงภายหลัง"}</span>`;
+}
+
 // Price label stored with each sale line (report groups by product + price + label)
 // e.g. "3 กิโล 100", "แถม...", or the discount reason when the price was lowered.
 function cartLinePriceNote(c){
@@ -8908,7 +8918,9 @@ async function checkoutCart(){
   const changeVal = recVal >= totalAmt ? (recVal - totalAmt) : 0;
   const billDiscReason = String(state.billDiscount?.note || '').trim();
   const staffName = getStaffName();
-  const saleNote = `ขายจาก ${state.terminal}${billDiscAmt > 0 ? ` (ส่วนลดท้ายบิล ฿${money(billDiscAmt)}${billDiscReason ? ` - ${billDiscReason}` : ''})` : ''}${staffName ? ` • ผู้รับผิดชอบ: ${staffName}` : ''}`;
+  // ป้ายบิล (missed-sales.js): [ลงภายหลัง ...] / [บิลรวมเร่งด่วน hh:mm-hh:mm]
+  const saleTagPrefix = state.saleTag ? `[${String(state.saleTag).replace(/[\[\]]/g, "").slice(0, 80)}] ` : "";
+  const saleNote = `${saleTagPrefix}ขายจาก ${state.terminal}${billDiscAmt > 0 ? ` (ส่วนลดท้ายบิล ฿${money(billDiscAmt)}${billDiscReason ? ` - ${billDiscReason}` : ''})` : ''}${staffName ? ` • ผู้รับผิดชอบ: ${staffName}` : ''}`;
 
   // One stable id per bill. Used by the idempotent RPC online AND by the offline
   // queue, so an ambiguous network failure can be queued without double charging.
@@ -17526,7 +17538,7 @@ function renderSalesHistory(){
                       <td>
                         <span class="sh-sale-no" onclick="openSaleDetailModal('${sale.id || sale.sale_no}')" title="คลิกเพื่อดูใบเสร็จ">
                           🧾 ${escapeHtml(sale.sale_no || sale.id)}
-                        </span>
+                        </span>${saleTagBadge(sale)}
                       </td>
                       <td>
                         <div style="font-weight:700; color:#f1f5f9;">${formatThaiDateStr(sale.sale_date)}</div>
@@ -17581,7 +17593,7 @@ function renderSalesHistory(){
               return `
                 <div class="sh-sale-card-mobile" onclick="openSaleDetailModal('${sale.id || sale.sale_no}')">
                   <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span class="sh-sale-no">🧾 ${escapeHtml(sale.sale_no || sale.id)}</span>
+                    <span class="sh-sale-no">🧾 ${escapeHtml(sale.sale_no || sale.id)}${saleTagBadge(sale)}</span>
                     <strong style="font-size:15px; color:${isCash ? '#34d399' : '#c084fc'}; font-variant-numeric:tabular-nums;">
                       ฿${money(sale.total_amount)}
                     </strong>

@@ -12038,6 +12038,7 @@ function renderStockCardItem(p){
             <span style="font-size:12px; color:#94a3b8; font-weight:600; margin-left:2px;">${escapeHtml(unitStr)}</span>
           </div>
         </div>
+        ${stockPromoCellHtml(p, true)}
         <div class="stock-item-actions">
           <button class="mini-btn receive" onclick="quickReceive('${p.id}')">+ รับเข้า</button>
           <button class="mini-btn edit" onclick="editProduct('${p.id}')">แก้ไข</button>
@@ -12045,6 +12046,30 @@ function renderStockCardItem(p){
       </div>
     </div>
   `;
+}
+
+// ช่อง "ราคาโปร" ในหน้าสต็อก (ตาราง + การ์ด) — แตะแล้วเปิดฟอร์มแก้ไขที่ช่องราคาโปรโมชั่น
+function stockPromoCellHtml(p, compact){
+  const promos = Array.isArray(p?.promotions) ? p.promotions : [];
+  const unitStr = p?.unit || "ชิ้น";
+  const tap = `onclick="event.stopPropagation(); editProductPromo('${p.id}')"`;
+  if(!promos.length){
+    return compact ? "" : `<button type="button" class="stock-promo-add" ${tap} title="เพิ่มราคาโปรโมชั่น">+ โปร</button>`;
+  }
+  const chips = promos.map(x => {
+    const per = promoUnitPrice(x);
+    const perTxt = Number(x.qty) === 1 ? "" : ` <small>(฿${money(per)}/${escapeHtml(unitStr)})</small>`;
+    return `<span class="stock-promo-chip">${escapeHtml(x.label)}${perTxt}</span>`;
+  }).join("");
+  return `<div class="stock-promo-list${compact ? " compact" : ""}" ${tap} title="แตะเพื่อแก้ราคาโปรโมชั่น">${compact ? `<span class="stock-promo-tag">โปร</span>` : ""}${chips}</div>`;
+}
+function editProductPromo(id){
+  openProductModal(id);
+  setTimeout(() => {
+    const t = el("pPromos");
+    if(t){ t.scrollIntoView({ block: "center" }); t.focus(); }
+    else toast("⚠️ ยังเปิดใช้ราคาโปรไม่ได้ ต้องรัน migration_v11_promo_weights.sql ก่อน", 4000);
+  }, 80);
 }
 
 function renderStockTableRow(p){
@@ -12067,6 +12092,7 @@ function renderStockTableRow(p){
         </a>
       </td>
       <td class="col-price"><strong style="color:#4ade80; font-size:14px; font-weight:900;">฿${money(p.sale_price)}</strong> <small style="color:#94a3b8; font-size:11px; font-weight:normal;">/ ${escapeHtml(unitStr)}</small></td>
+      <td class="col-promo">${stockPromoCellHtml(p)}</td>
       <td class="col-qty"><strong style="font-size:15px; color:${qtyColor}; font-weight:900;">${p.stock_qty}</strong> <span style="font-size:12px; color:#cbd5e1; font-weight:600; margin-left:3px;">${escapeHtml(unitStr)}</span></td>
       <td class="col-status">${statusForProduct(p)}</td>
       <td class="col-actions">
@@ -12177,7 +12203,7 @@ function renderStock(){
 
   const tableRowsHtml = pageItems.length 
     ? pageItems.map(renderStockTableRow).join("") 
-    : `<tr><td colspan="8" class="empty">ไม่พบสินค้าในหมวดนี้</td></tr>`;
+    : `<tr><td colspan="9" class="empty">ไม่พบสินค้าในหมวดนี้</td></tr>`;
 
   const tableHtml = `
     <div class="table-wrap">
@@ -12188,6 +12214,7 @@ function renderStock(){
             <th class="col-barcode">Barcode</th>
             <th class="col-name sortable" onclick="toggleStockTableSort('name')" title="คลิกเพื่อเรียงตามชื่อสินค้า">สินค้า ${getSortIndicator('name')}</th>
             <th class="col-price sortable" onclick="toggleStockTableSort('price')" title="คลิกเพื่อเรียงตามราคา">ราคา ${getSortIndicator('price')}</th>
+            <th class="col-promo" title="ราคาโปรโมชั่น (แตะช่องเพื่อแก้)">ราคาโปร</th>
             <th class="col-qty sortable" onclick="toggleStockTableSort('stock')" title="คลิกเพื่อเรียงตามสต็อกคงเหลือ">คงเหลือ ${getSortIndicator('stock')}</th>
             <th class="col-status">สถานะ</th>
             <th class="col-actions">จัดการ</th>

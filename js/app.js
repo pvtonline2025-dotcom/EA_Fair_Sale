@@ -12056,12 +12056,27 @@ function stockPromoCellHtml(p, compact){
   if(!promos.length){
     return compact ? "" : `<button type="button" class="stock-promo-add" ${tap} title="เพิ่มราคาโปรโมชั่น">+ โปร</button>`;
   }
-  const chips = promos.map(x => {
+  const chip = x => {
     const per = promoUnitPrice(x);
     const perTxt = Number(x.qty) === 1 ? "" : ` <small>(฿${money(per)}/${escapeHtml(unitStr)})</small>`;
     return `<span class="stock-promo-chip">${escapeHtml(x.label)}${perTxt}</span>`;
-  }).join("");
-  return `<div class="stock-promo-list${compact ? " compact" : ""}" ${tap} title="แตะเพื่อแก้ราคาโปรโมชั่น">${compact ? `<span class="stock-promo-tag">โปร</span>` : ""}${chips}</div>`;
+  };
+  // มีหลายโปร: แสดงโปรแรก + ปุ่มย่อ/ขยาย (จำสถานะไว้ระหว่างเปลี่ยนหน้า/ค้นหา)
+  const many = promos.length > 1;
+  const open = many && stockPromoOpen.has(String(p.id));
+  const shown = many && !open ? promos.slice(0, 1) : promos;
+  const toggle = many
+    ? `<button type="button" class="stock-promo-toggle" onclick="event.stopPropagation(); toggleStockPromo(this, '${p.id}')" aria-expanded="${open}">${open ? "▴ ย่อ" : `▾ อีก ${promos.length - 1} โปร`}</button>`
+    : "";
+  return `<div class="stock-promo-list${compact ? " compact" : ""}" ${tap} title="แตะเพื่อแก้ราคาโปรโมชั่น">${compact ? `<span class="stock-promo-tag">โปร</span>` : ""}${shown.map(chip).join("")}${toggle}</div>`;
+}
+const stockPromoOpen = new Set();
+function toggleStockPromo(btn, id){
+  id = String(id);
+  if(stockPromoOpen.has(id)) stockPromoOpen.delete(id); else stockPromoOpen.add(id);
+  const p = (state.products || []).find(x => String(x.id) === id);
+  const box = btn?.closest(".stock-promo-list");
+  if(p && box) box.outerHTML = stockPromoCellHtml(p, box.classList.contains("compact"));
 }
 function editProductPromo(id){
   openProductModal(id);

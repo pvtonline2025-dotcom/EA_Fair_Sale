@@ -11051,3 +11051,6 @@ dialog {
 [data-color-mode="light"] .stock-promo-chip { background: #fff3e8; color: #c2410c; border-color: #fdba74; }
 [data-color-mode="light"] .stock-promo-chip small { color: #9a3412; }
 [data-color-mode="light"] .stock-promo-add { border-color: #cbd5e1; color: #64748b; }
+.stock-promo-toggle { background: transparent; border: 0; color: #38bdf8; font-size: 12px; font-weight: 800; padding: 2px 2px; cursor: pointer; min-height: 24px; }
+.stock-promo-toggle:hover { text-decoration: underline; }
+[data-color-mode="light"] .stock-promo-toggle { color: #0369a1; }

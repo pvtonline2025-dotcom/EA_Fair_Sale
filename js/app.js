@@ -13251,9 +13251,18 @@ function renderMovement(){
   
   const recentMovements = (state.movements || []).slice(0, 15);
 
+  const lastRolls = state._lastRollReceive;
+  const lastRollProd = lastRolls ? productById(lastRolls.pid) : null;
   el("content").innerHTML=`
     ${connectionNotice()}
     <div class="stock-move-container">
+      ${lastRollProd ? `<div class="move-w-done">
+        <div><b>✅ รับเข้า ${escapeHtml(lastRollProd.product_name)} ${lastRolls.weights.length} ม้วน</b><br><span>${lastRolls.weights.join(", ")} กก.</span></div>
+        <div class="move-w-done-act">
+          <button type="button" class="btn btn-primary" onclick="printLastRollLabels()">🖨️ พิมพ์บาร์โค้ดน้ำหนัก ${lastRolls.weights.length} ดวง</button>
+          <button type="button" class="btn btn-light" onclick="state._lastRollReceive=null; renderMovement()">ปิด</button>
+        </div>
+      </div>` : ''}
       ${card("📦 บันทึกการเคลื่อนไหว Stock (Stock Adjustment)", `
         <div class="stock-move-form">
           <div class="stock-move-field full-width">
@@ -13269,7 +13278,7 @@ function renderMovement(){
           <div class="stock-move-row-2col">
             <div class="stock-move-field">
               <label for="moveType" class="stock-move-label">ประเภทรายการ</label>
-              <select id="moveType" class="stock-type-select">
+              <select id="moveType" class="stock-type-select" onchange="syncMoveWeightsBox()">
                 <option value="IN">📥 รับเข้าสินค้า (+)</option>
                 <option value="OUT">📤 เบิกสินค้าออก (-)</option>
                 <option value="ADJUST">⚖️ ปรับยอดคงเหลือจริง (=)</option>
@@ -13285,6 +13294,14 @@ function renderMovement(){
             </div>
           </div>
 
+          <div id="moveWeightsBox" class="stock-move-field full-width move-w" hidden style="display:none">
+            <label for="moveWeights" class="stock-move-label">
+              <span>⚖️ น้ำหนักแต่ละม้วน (กก.) ตามใบเบิก</span>
+              <span id="moveWeightsInfo" class="move-w-info"></span>
+            </label>
+            <textarea id="moveWeights" rows="3" class="stock-note-input" placeholder="เช่น 3.1, 3.2, 3.1, 3.3 (คั่นด้วยจุลภาค / เว้นวรรค / ขึ้นบรรทัดใหม่) • จำนวนจะนับให้อัตโนมัติ แล้วพิมพ์บาร์โค้ดน้ำหนักรายม้วนต่อได้เลย" oninput="onMoveWeightsInput()"></textarea>
+          </div>
+
           <div class="stock-move-field full-width">
             <label for="moveNote" class="stock-move-label">หมายเหตุ / เหตุผลการบันทึก</label>
             <input id="moveNote" class="stock-note-input" placeholder="เช่น รับของเข้าจากโกดังใหญ่, เติมสต็อกหน้าร้าน, สินค้าชำรุด, ตรวจนับสต็อก">
@@ -13294,7 +13311,7 @@ function renderMovement(){
             <button class="btn btn-primary stock-save-btn" onclick="saveMovement()">
               💾 บันทึก Stock
             </button>
-            <button type="button" class="btn" style="background:linear-gradient(135deg, #0f766e 0%, #115e59 100%); color:#ffffff; border:1.5px solid #2dd4bf; font-weight:800;" onclick="openBarcodePrintModal(el('moveProduct')?.value, 'single', el('moveQty')?.value)" title="พิมพ์บาร์โค้ดสำหรับสินค้าและจำนวนที่ระบุ">
+            <button type="button" class="btn" style="background:linear-gradient(135deg, #0f766e 0%, #115e59 100%); color:#ffffff; border:1.5px solid #2dd4bf; font-weight:800;" onclick="printMoveBarcodes()" title="พิมพ์บาร์โค้ดสำหรับสินค้าและจำนวนที่ระบุ">
               🖨️ พิมพ์บาร์โค้ดสินค้าที่เลือก
             </button>
           </div>
@@ -13348,6 +13365,34 @@ function renderMovement(){
       </div>
     </div>
   `;
+  if (lastRollProd && el("moveProduct")) el("moveProduct").value = lastRollProd.id;
+  onMoveProductChange(el("moveProduct")?.value);
+}
+
+// ---- น้ำหนักรายม้วน (สายยาง) ตอนรับเข้า ----
+function syncMoveWeightsBox(){
+  const prod = productById(el("moveProduct")?.value);
+  const box = el("moveWeightsBox");
+  if(!box) return;
+  const show = !!prod?.track_weight && el("moveType")?.value === "IN";
+  box.hidden = !show; box.style.display = show ? "" : "none";
+  if(show) onMoveWeightsInput();
+}
+function onMoveWeightsInput(){
+  const ws = parseRollWeights(el("moveWeights")?.value);
+  const info = el("moveWeightsInfo");
+  if(ws.length && el("moveQty")) el("moveQty").value = ws.length;
+  if(info) info.textContent = ws.length ? `${ws.length} ม้วน` : "";
+}
+function printMoveBarcodes(){
+  const pid = el("moveProduct")?.value;
+  const prod = productById(pid);
+  const text = prod?.track_weight && el("moveType")?.value === "IN" ? (el("moveWeights")?.value || "") : "";
+  openBarcodePrintModal(pid, "single", el("moveQty")?.value, text);
+}
+function printLastRollLabels(){
+  const r = state._lastRollReceive; if(!r) return;
+  openBarcodePrintModal(r.pid, "single", r.weights.length, r.weights.join(", "));
 }
 
 function onMoveProductChange(prodId){
@@ -13358,12 +13403,17 @@ function onMoveProductChange(prodId){
     if(span) span.textContent = prod.unit || "ชิ้น";
     if(badge) badge.innerHTML = `คงเหลือปัจจุบัน: <strong>${prod.stock_qty}</strong> ${escapeHtml(prod.unit || "ชิ้น")}`;
   }
+  syncMoveWeightsBox();
 }
 async function saveMovement(){
   const prodId = el("moveProduct")?.value;
   const moveType = el("moveType")?.value;
-  const qty = Number(el("moveQty")?.value || 0);
-  const note = el("moveNote")?.value.trim() || null;
+  const moveProd = productById(prodId);
+  const rollWs = moveProd?.track_weight && moveType === "IN" ? parseRollWeights(el("moveWeights")?.value) : [];
+  const qty = rollWs.length || Number(el("moveQty")?.value || 0);
+  const baseNote = el("moveNote")?.value.trim() || "";
+  const note = [baseNote, rollWs.length ? `น้ำหนัก ${rollWs.join(", ")} กก.` : ""].filter(Boolean).join(" • ") || null;
+  state._lastRollReceive = null;
 
   if (!prodId || qty <= 0) {
     toast("กรุณาเลือกสินค้าและระบุจำนวนที่ถูกต้อง");
@@ -13388,6 +13438,7 @@ async function saveMovement(){
     }
   }
 
+  if (rollWs.length) state._lastRollReceive = { pid: prodId, weights: rollWs };
   if (remoteSuccess) {
     toast("บันทึก Stock แล้ว");
     await loadAll();
@@ -20606,8 +20657,9 @@ function openBarcodePrintFromScanner() {
   openBarcodePrintModal();
 }
 
-function openBarcodePrintModal(productId = null, initialMode = null, initialQty = null) {
+function openBarcodePrintModal(productId = null, initialMode = null, initialQty = null, rollWeights = null) {
   if (productId) {
+    if (rollWeights !== null || barcodePrintState.productId !== productId) barcodePrintState.rollWeights = rollWeights || "";
     barcodePrintState.productId = productId;
     const p = productById(productId);
     if (initialQty !== null && initialQty !== undefined) {
@@ -22060,7 +22112,7 @@ Object.assign(window,{
   clearExpenseSearch,calculateFinancials,openExpenseModal,closeExpenseModal,saveExpenseFromModal,
   deleteExpense,renderExpenses,exportExpensesExcel,exportExpensesCSV,printExpensesReport,
   showReceiptModal,closeReceiptModal,printReceipt,saveReceiptAsJPEG,toast,el,
-  openBarcodePrintModal,closeBarcodePrintModal,openBarcodePrintFromScanner,setBarcodeMode,setBarcodeFormat,setBarcodeQty,onBarcodeQtyChange,onBarcodeSearchInput,clearBarcodeSearch,onBarcodeProductSelect,toggleBarcodeOption,setRollWeights,barcodeSingleItems,setBarcodeBatchType,setBarcodeBatchExtra,toggleBarcodeFillPage,batchLabelItems,toggleBarcodeBatchOnlyInStock,assignGeneratedBarcode,promptEditBarcode,printBarcodeLabels,openBarcodePrintWindow,downloadBarcodeImage,
+  openBarcodePrintModal,closeBarcodePrintModal,openBarcodePrintFromScanner,setBarcodeMode,setBarcodeFormat,setBarcodeQty,onBarcodeQtyChange,onBarcodeSearchInput,clearBarcodeSearch,onBarcodeProductSelect,toggleBarcodeOption,setRollWeights,syncMoveWeightsBox,onMoveWeightsInput,printMoveBarcodes,printLastRollLabels,barcodeSingleItems,setBarcodeBatchType,setBarcodeBatchExtra,toggleBarcodeFillPage,batchLabelItems,toggleBarcodeBatchOnlyInStock,assignGeneratedBarcode,promptEditBarcode,printBarcodeLabels,openBarcodePrintWindow,downloadBarcodeImage,
   openLowStockPdfModal,updateLowStockModalContent,printLowStockSummaryPDF,copyLowStockSummaryText,setDashboardChartMode,exportRestockOrderPDF,downloadRestockOrderText,copyRestockOrderText,setRestockMultiplier,resetRestockOrder,updateRestockItemQty,receivePOItems,updatePOStatus,viewPODetailModal,selectProductForPOTimeline,saveSmartPODraft,setReplenishmentOption,updateSmartPODraftQty,setStockForecastUrgencyFilter,setStockForecastCatFilter,onStockForecastSearchInput,setLowStockSubTab,setPosFilter,setDashboardPeriod,onDashboardDateInputChange,applyDashboardCustomDate,updateProductModalBarcodePreview,generateAndSetProductModalBarcode,applyReportCustomDate,exportAccountingJournalExcel,exportAccountingJournalCSV,updateLiveReceiptPreview,buildReportBasketTab
 });
 function render(){

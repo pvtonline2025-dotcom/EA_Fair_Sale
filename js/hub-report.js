@@ -685,7 +685,7 @@
               <td class="c">${escapeHtml(r.unit)}</td>
               <td class="r b">${money(r.amount)}</td>
             </tr>
-            ${r.weights.length ? `<tr class="w"><td></td><td colspan="5">${r.weights.map(w => fmtQty(w)).join(', ')} <span class="muted">(รวม ${fmtQty(Math.round(r.weights.reduce((a, x) => a + x, 0) * 1000) / 1000)} กก.)</span></td></tr>` : ''}`).join('')}
+            ${r.weights.length ? `<tr class="w"><td></td><td colspan="5">⚖️ ${r.weights.map(w => fmtQty(w)).join(', ')}</td></tr>` : ''}`).join('')}
         </tbody>
       </table>
       <div class="grand"><span>รวมทั้งหมด</span><strong>${money([...d.sold, ...d.resvRows].reduce((a, r) => a + r.amount, 0))}</strong></div>

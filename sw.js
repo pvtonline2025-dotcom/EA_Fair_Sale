@@ -1,5 +1,5 @@
 // EA Fair Sale - Service Worker with Background Sync & Offline Support
-const CACHE_NAME = 'ea-fair-sale-v128';
+const CACHE_NAME = 'ea-fair-sale-v98';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -21,18 +21,13 @@ const STATIC_ASSETS = [
   '/css/requisition.css',
   '/css/petty-cash.css',
   '/css/clean.css',
-  '/css/toast-popup.css',
   '/manifest.json',
   '/js/offline-sync.js',
   '/js/install-app.js',
   '/js/remote-cart.js',
   '/css/remote-cart.css',
   '/js/phone-scan.js',
-  '/js/scan-engine.js',
-  '/js/missed-sales.js',
   '/css/phone-scan.css',
-  '/css/phone-scan-clean.css',
-  '/css/light-calm.css',
   '/js/hub.js',
   '/js/hub-report.js',
   '/js/cashbox.js',
@@ -64,7 +59,6 @@ const STATIC_ASSETS = [
   '/css/pages/reports.css',
   '/css/pages/settings.css',
   '/css/pages/modals.css',
-  '/css/missed-sales.css',
   '/images/btn-sale.png',
   '/images/btn-dashboard-today.png',
   '/images/btn-dashboard-all.png',
@@ -75,19 +69,8 @@ const STATIC_ASSETS = [
   '/images/btn-low-stock.png',
   '/images/btn-export.png',
   '/images/btn-setting.png',
-  '/assets/icons/logo-192.png?v=20261110',
-  '/assets/icons/logo-512.png?v=20261110',
-  '/assets/icons/logo-maskable-512.png?v=20261110',
-  '/assets/icons/apple-touch-icon.png?v=20261110',
-  '/assets/icons/splash-logo.webp?v=20261110',
-  '/assets/icons/app-emblem.png?v=20261110',
-  '/assets/manifest-cashier.json?v=20261110',
-  '/assets/vendor/barcode-detector-3.0.8.js',
-  '/assets/vendor/zxing_reader-2.2.4.wasm',
-  '/assets/icons/cashier-192.png?v=20261110',
-  '/assets/icons/cashier-512.png?v=20261110',
-  '/assets/icons/cashier-maskable-512.png?v=20261110',
-  '/assets/icons/cashier-apple-touch.png?v=20261110',
+  '/assets/icons/logo-192.png',
+  '/assets/icons/logo-512.png',
   // CDN libraries (pinned versions) so the POS still opens offline
   'https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js',
@@ -104,10 +87,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       return Promise.all(STATIC_ASSETS.map(async (asset) => {
-        // cache:'reload' bypasses the browser HTTP cache so a new deploy never
-        // precaches yesterday's logo/JS/CSS.
-        const sameOrigin = asset.startsWith('/');
-        try { await cache.add(sameOrigin ? new Request(asset, { cache: 'reload' }) : asset); }
+        try { await cache.add(asset); }
         catch (err) { console.warn('[SW] Optional asset not cached:', asset, err); }
       }));
     }).then(() => self.skipWaiting())
@@ -177,10 +157,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-first (with timeout) for ALL of the app's own files (JS, CSS, logos,
-  // images, manifest) so a new deploy - including a replaced logo that keeps the
-  // same file name - shows on the very first load; fall back to cache offline.
-  if (url.origin === self.location.origin) {
+  // Network-first (with timeout) for the app's own JS/CSS so a new deploy takes
+  // effect on the very next load; fall back to cache when offline / slow.
+  if (url.origin === self.location.origin && (url.pathname.endsWith('.js') || url.pathname.endsWith('.css'))) {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME);
       try {

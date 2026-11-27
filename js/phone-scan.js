@@ -30,10 +30,6 @@
   let noticeTimer = null;
   let feedbackTimer = null;
   let pay = { method: 'cash', received: '' };
-  const RSV_PENDING_KEY = 'ea_phone_pending_rsv';
-  let pendingRsv = (() => { try { return JSON.parse(localStorage.getItem(RSV_PENDING_KEY) || 'null'); } catch (e) { return null; } })();   // ใบจองที่ลูกค้ามารับ กำลังคิดเงินในบิลนี้
-  function setPendingRsv(v) { pendingRsv = v || null; lsSet(RSV_PENDING_KEY, JSON.stringify(pendingRsv)); }
-  let rsvView = { tab: 'today', q: '' };
 
   const $ = (id) => document.getElementById(id);
 
@@ -68,7 +64,7 @@
     const dlg = $('phoneScanDialog');
     if (!dlg) return;
     try { if (typeof stopScanner === 'function') stopScanner(); } catch (e) {}
-    hideSheet('psPay'); hideSheet('psSummary'); hideSheet('psDone'); hideSheet('psWeight'); hideSheet('psPrice'); hideSheet('psRsv');
+    hideSheet('psPay'); hideSheet('psSummary'); hideSheet('psDone'); hideSheet('psWeight'); hideSheet('psPrice');
     renderList();
     renderTally();
     if (!dlg.open) dlg.showModal();
@@ -96,10 +92,8 @@
 
   function showSheet(id) { const s = $(id); if (s) s.hidden = false; paused = true; }
   function hideSheet(id) { const s = $(id); if (s) s.hidden = true; }
-  function anySheetOpen() { return ['psPay', 'psSummary', 'psDone', 'psWeight', 'psPrice', 'psRsv'].some(id => $(id) && !$(id).hidden); }
-  // ฟอร์ม/หน้าใบจอง (dialog ซ้อนบนหน้าคิดเงิน) เปิดอยู่ → หยุดรับบาร์โค้ดจากกล้อง
-  function rsvDialogOpen() { return ['rsvFormDialog', 'rsvSlipDialog', 'rsvScanDialog', 'rsvPayDialog', 'rsvStkDialog'].some(id => $(id)?.open); }
-  function resumeIfIdle() { if (!anySheetOpen() && !rsvDialogOpen()) paused = false; }
+  function anySheetOpen() { return ['psPay', 'psSummary', 'psDone', 'psWeight', 'psPrice'].some(id => $(id) && !$(id).hidden); }
+  function resumeIfIdle() { if (!anySheetOpen()) paused = false; }
 
   // ---------------------------------------------------------
   // Camera
@@ -116,27 +110,13 @@
       return;
     }
     showCamMsg('กำลังเปิดกล้อง...');
-    const myRun = ++camRun;
     try {
-      const stream = await openStream();
-      if (myRun !== camRun) { stream.getTracks().forEach(t => t.stop()); return; }
-      video.srcObject = stream;
-      try { await video.play(); } catch (_) {}
-      await tuneTrack(stream.getVideoTracks()[0]);
-      // ตัวอ่าน: ① Android ตัวอ่านในเครื่อง ② ZXing-C++ (WebAssembly ฝากในแอป) ③ ZXing JS เดิม
-      // ZXing JS อ่านป้ายใบจองไม่ออกเมื่อมีไอคอน/กรอบดำข้างบาร์โค้ด • ZXing-C++ อ่านได้ทั้งป้าย
-      const det = (await nativeDetector()) || (await wasmDetector());
-      if (myRun !== camRun) return;
-      if (det) startNativeLoop(det, video, myRun);
-      else {
-        // TRY_HARDER (3) + จำกัดชนิดบาร์โค้ด (2) → อ่านป้ายที่มีของรอบข้างได้ดีขึ้น
-        let hints;
-        try { const F = ZXingBrowser.BarcodeFormat; hints = new Map([[3, true], [2, [F.CODE_128, F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_39, F.ITF, F.QR_CODE]]]); } catch (_) {}
-        reader = new ZXingBrowser.BrowserMultiFormatReader(hints);
-        controls = await reader.decodeFromStream(stream, video, (result) => { if (result) onCode(result.getText()); });
-      }
-      const sw = $('psCamSwitch');
-      if (sw) sw.hidden = camList.length < 2;
+      reader = new ZXingBrowser.BrowserMultiFormatReader();
+      controls = await reader.decodeFromConstraints(
+        { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+        video,
+        (result) => { if (result) onCode(result.getText()); }
+      );
       const msg = $('psCamMsg');
       if (msg) msg.hidden = true;
       const torchBtn = $('psTorchBtn');
@@ -152,120 +132,12 @@
   }
 
   function stopCamera() {
-    camRun++;
-    clearTimeout(detectTimer); detectTimer = null;
     try { controls?.stop(); } catch (e) {}
     controls = null;
     reader = null;
     const video = $('psVideo');
     try { video?.srcObject?.getTracks?.().forEach(t => t.stop()); } catch (e) {}
     if (video) video.srcObject = null;
-  }
-
-  // ---------- เลือกกล้อง / โฟกัส / ตัวอ่าน (แก้ Android สแกนยาก) ----------
-  // Android หลายรุ่นมีกล้องหลังหลายตัว เบราว์เซอร์มักเลือกกล้องมุมกว้าง (โฟกัสใกล้ไม่ได้) → ภาพบาร์โค้ดเบลอ
-  const CAM_KEY = 'ea_phone_cam_id';
-  const isAndroid = /Android/i.test(navigator.userAgent);
-  let camList = [], camRun = 0, detectTimer = null;
-  async function listBackCams() {
-    try {
-      const all = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
-      const back = all.filter(d => !/front|user|selfie|หน้า/i.test(d.label));
-      camList = back.length ? back : all;
-    } catch (_) { camList = []; }
-    return camList;
-  }
-  function bestCam() {
-    const saved = lsGet(CAM_KEY, '');
-    if (saved && camList.some(d => d.deviceId === saved)) return saved;
-    const main = camList.find(d => /camera2 0\b|camera 0\b/i.test(d.label))
-      || camList.find(d => /back|rear|environment|หลัง/i.test(d.label) && !/wide|ultra|tele|depth|macro|infrared|\bir\b/i.test(d.label))
-      || camList[0];
-    return main?.deviceId || '';
-  }
-  const HI = { width: { ideal: 1920 }, height: { ideal: 1080 } };
-  async function openStream() {
-    let stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, ...HI }, audio: false });
-    if (isAndroid) {
-      await listBackCams();          // ชื่อกล้องอ่านได้หลังอนุญาตกล้องแล้ว
-      const want = bestCam();
-      const cur = stream.getVideoTracks()[0]?.getSettings?.().deviceId;
-      if (want && want !== cur) {
-        try {
-          const s2 = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: want }, ...HI }, audio: false });
-          stream.getTracks().forEach(t => t.stop()); stream = s2;
-        } catch (_) { /* ใช้กล้องเดิมต่อ */ }
-      }
-    }
-    return stream;
-  }
-  // โฟกัสอัตโนมัติต่อเนื่อง + ซูมเล็กน้อย (ถือห่างได้ ไม่ต้องจ่อใกล้จนโฟกัสไม่ทัน)
-  async function tuneTrack(track) {
-    if (!track?.getCapabilities) return;
-    let caps = {}; try { caps = track.getCapabilities() || {}; } catch (_) {}
-    const adv = {};
-    if (Array.isArray(caps.focusMode) && caps.focusMode.includes('continuous')) adv.focusMode = 'continuous';
-    if (isAndroid && caps.zoom && caps.zoom.max >= 2) adv.zoom = Math.min(caps.zoom.max, Math.max(caps.zoom.min || 1, 1.5));
-    if (Object.keys(adv).length) { try { await track.applyConstraints({ advanced: [adv] }); } catch (_) {} }
-  }
-  async function nativeDetector() {
-    if (!isAndroid || !('BarcodeDetector' in window)) return null;
-    try {
-      const sup = await window.BarcodeDetector.getSupportedFormats();
-      const want = ['code_128', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_39', 'itf', 'qr_code'].filter(f => sup.includes(f));
-      if (!want.includes('code_128')) return null;
-      return new window.BarcodeDetector({ formats: want });
-    } catch (_) { return null; }
-  }
-  // ZXing-C++ (WebAssembly) ผ่าน barcode-detector • ไฟล์อยู่ในแอป (assets/vendor) ใช้ได้ตอนออฟไลน์
-  const BD_JS = 'assets/vendor/barcode-detector-3.0.8.js', BD_WASM = 'assets/vendor/zxing_reader-2.2.4.wasm';
-  let wasmDet = null, wasmFailed = false;
-  function loadScript(src) {
-    return new Promise((ok, bad) => { const s = document.createElement('script'); s.src = src; s.async = true; s.onload = ok; s.onerror = bad; document.head.appendChild(s); });
-  }
-  async function wasmDetector() {
-    if (wasmDet) return wasmDet;
-    if (wasmFailed || typeof WebAssembly !== 'object') return null;
-    try {
-      if (!window.BarcodeDetectionAPI) await loadScript(BD_JS);
-      const API = window.BarcodeDetectionAPI;
-      API.setZXingModuleOverrides({ locateFile: (path, prefix) => path.endsWith('.wasm') ? new URL(BD_WASM, location.href).href : prefix + path });
-      const det = new API.BarcodeDetector({ formats: ['code_128', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_39', 'itf', 'qr_code'] });
-      // อุ่นเครื่อง: โหลด wasm ก่อนเริ่มสแกน (ไม่เกิน 10 วินาที)
-      const c = document.createElement('canvas'); c.width = c.height = 8;
-      await Promise.race([det.detect(c), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 10000))]);
-      wasmDet = det; return det;
-    } catch (e) { console.warn('[phone-scan] wasm detector', e); wasmFailed = true; return null; }
-  }
-  function startNativeLoop(det, video, run) {
-    // ย่อภาพไม่เกิน 1280 px ก่อนอ่าน (เร็วพอบนมือถือรุ่นเล็ก)
-    const cv = document.createElement('canvas'), cx = cv.getContext('2d', { willReadFrequently: true });
-    const frame = () => {
-      const vw = video.videoWidth, vh = video.videoHeight;
-      if (!vw || !vh) return null;
-      const k = Math.min(1, 1280 / Math.max(vw, vh));
-      cv.width = Math.round(vw * k); cv.height = Math.round(vh * k);
-      cx.drawImage(video, 0, 0, cv.width, cv.height);
-      return cv;
-    };
-    const tick = async () => {
-      if (run !== camRun) return;
-      if (!paused && video.readyState >= 2) {
-        try { const f = frame(); const r = f ? await det.detect(f) : []; if (r && r.length && run === camRun) onCode(r[0].rawValue); } catch (_) {}
-      }
-      if (run === camRun) detectTimer = setTimeout(tick, 100);
-    };
-    tick();
-  }
-  // 🔄 สลับกล้อง (Android ที่มีกล้องหลังหลายตัว) → จำกล้องที่เลือกไว้
-  function switchPhoneScanCamera() {
-    if (camList.length < 2) return;
-    const cur = videoTrack()?.getSettings?.().deviceId || bestCam();
-    const i = camList.findIndex(d => d.deviceId === cur);
-    const next = camList[(i + 1) % camList.length];
-    lsSet(CAM_KEY, next.deviceId);
-    notice(`กล้อง ${(i + 1) % camList.length + 1}/${camList.length}${next.label ? ` • ${next.label}` : ''} • เลือกตัวที่ภาพบาร์โค้ดคมที่สุด`, 'info');
-    startCamera();
   }
 
   function showCamMsg(text, withRetry) {
@@ -366,9 +238,21 @@
       return false;
     }
     // Weighed products (e.g. hose rolls): ask the weight of this unit first
+    let rollCode = null;
     if (p.track_weight && weight === undefined) {
-      openWeightPad(p, null);
-      return false;
+      // บาร์โค้ดน้ำหนักรายม้วน → ได้น้ำหนักเลย ไม่ต้องพิมพ์
+      const sw = window.eaTakeScanWeight?.(p.id);
+      if (sw) {
+        if (items.some(x => Array.isArray(x.roll_codes) && x.roll_codes.includes(sw.code))) {
+          sound('beepError'); vibrate([80, 60, 80]);
+          feedback(`ม้วนนี้ (${sw.weight} กก.) อยู่ในบิลแล้ว`, 'warn');
+          return false;
+        }
+        weight = sw.weight; rollCode = sw.code;
+      } else {
+        openWeightPad(p, null);
+        return false;
+      }
     }
     let it = items.find(x => x.product_id === p.id && !x.opt);
     if (it) {
@@ -388,6 +272,7 @@
       items.unshift(it);
     }
     if (weight !== undefined && weight !== null) it.weights = [...(it.weights || []), weight];
+    if (rollCode) it.roll_codes = [...(it.roll_codes || []), rollCode];
     saveItems();
     renderList(lineKey(it));
     sound('beepBatchAdd');
@@ -667,7 +552,6 @@
   function clearPhoneScan() {
     if (!items.length) return;
     if (!confirm('ล้างรายการทั้งหมดในบิลนี้?')) return;
-    setPendingRsv(null);
     items = [];
     saveItems();
     renderList();
@@ -694,34 +578,9 @@
     };
   }
 
-  // แถบชวนติดตั้งแอป (ไอคอนบนหน้าจอหลัก) • ปิดได้ แต่ยังติดตั้งได้ที่ 📊 → ตั้งค่าเครื่องนี้
-  const INSTALL_HIDE_KEY = 'ea_phone_install_hint_off';
-  function renderInstallHint() {
-    const list = $('psList'); if (!list) return;
-    let bar = $('psInstallBar');
-    const show = window.eaCanInstallApp?.() && lsGet(INSTALL_HIDE_KEY, '') !== '1';
-    if (!show) { bar?.remove(); return; }
-    if (!bar) {
-      bar = document.createElement('div'); bar.id = 'psInstallBar'; bar.className = 'ps-install-bar';
-      bar.innerHTML = `<img src="assets/icons/cashier-192.png?v=20261110" alt="" width="40" height="40">
-        <button type="button" class="ps-install-main" onclick="openPhoneInstall()"><b>ติดตั้งแอป "EA คิดเงิน"</b><small>ไอคอนสีเขียวบนหน้าจอหลัก แตะแล้วเข้าหน้าสแกนคิดเงินทันที</small></button>
-        <button type="button" class="ps-install-x" onclick="hidePhoneInstallHint()" aria-label="ซ่อน">✕</button>`;
-      list.parentNode.insertBefore(bar, list);
-    }
-  }
-  function openPhoneInstall() { window.eaOpenInstallApp?.(); }
-  function hidePhoneInstallHint() { lsSet(INSTALL_HIDE_KEY, '1'); $('psInstallBar')?.remove(); notice('ติดตั้งแอปภายหลังได้ที่ปุ่ม 📊 → ตั้งค่าเครื่องนี้', 'info'); }
-
   function renderList(highlightId) {
     const list = $('psList');
     if (!list) return;
-    renderInstallHint();
-    if (pendingRsv && !items.length) setPendingRsv(null);
-    let bar = $('psRsvBar');
-    if (pendingRsv) {
-      if (!bar) { bar = document.createElement('div'); bar.id = 'psRsvBar'; bar.className = 'ps-rsv-bar'; list.parentNode.insertBefore(bar, list); }
-      bar.innerHTML = `<span>📅 รับของใบจอง <b>${escapeHtml(pendingRsv.res_no)}</b> • ${escapeHtml(pendingRsv.customer)} • หักมัดจำ ฿${money(pendingRsv.deposit)}</span><button type="button" onclick="cancelPhoneReservationPickup()">ยกเลิก</button>`;
-    } else if (bar) bar.remove();
     if (!items.length) {
       list.innerHTML = `
         <div class="ps-empty">
@@ -737,7 +596,7 @@
         <div class="ps-row ${key === highlightId ? 'is-new' : ''}">
           <button type="button" class="ps-row-info" onclick="openPhonePriceSheet('${escapeHtml(key)}')" aria-label="เลือกราคา / โปร / แถม">
             <div class="ps-row-name">${escapeHtml(it.product_name)}${note ? ` <span class="ps-row-tag ${it.opt === 'free' ? 'is-free' : ''}">** ${escapeHtml(note)} **</span>` : ''}</div>
-            <div class="ps-row-price">฿${fmtPrice(it.price)} × ${it.qty} = <strong>฿${money(it.price * it.qty)}</strong> <span class="ps-row-edit">ลดราคา/โปร</span></div>
+            <div class="ps-row-price">฿${fmtPrice(it.price)} × ${it.qty} = <strong>฿${money(it.price * it.qty)}</strong> <span class="ps-row-edit">ลดราคา/โปร ›</span></div>
             ${Array.isArray(it.weights) && it.weights.length ? `<div class="ps-row-weights">⚖️ ${it.weights.map(w => escapeHtml(String(w))).join(', ')} กก.</div>` : ''}
           </button>
           <div class="ps-qty">
@@ -893,7 +752,6 @@
           ${choices.map(c => `<option value="${escapeHtml(c)}" ${c === target ? 'selected' : ''}>${c === 'ALL' ? 'ส่งทุกเครื่องคิดเงิน' : 'ส่งไป ' + escapeHtml(c)}</option>`).join('')}
         </select>
       </label>` : ''}
-      ${window.eaCanInstallApp?.() ? '<button type="button" class="ps-btn-secondary ps-btn-block ps-install-btn" onclick="openPhoneInstall()">📲 ติดตั้งแอปเป็นไอคอนบนหน้าจอหลัก</button>' : ''}
       <button type="button" class="ps-btn-secondary ps-btn-block ps-admin-exit" onclick="exitToFullApp()">🔒 สำหรับผู้ดูแล: เปิดแอปเต็ม (สต็อก / รายงาน)</button>
     `;
   }
@@ -1034,7 +892,6 @@
     syncPrices();
     renderList();
     pay = { method: 'cash', received: '', disc: 0, discNote: '', discOpen: false };
-    if (pendingRsv) { pay.disc = Math.min(pendingRsv.deposit, totals().amount); pay.discNote = `หักมัดจำ ใบจอง ${pendingRsv.res_no}`; }
     renderPay();
     showSheet('psPay');
   }
@@ -1253,8 +1110,6 @@
       : { type: 'none', value: 0, note: '' };
     st.paymentMethod = pay.method;
     st.receivedCash = pay.method === 'cash' ? (rec || total) : 0;
-    const rsvPicked = pendingRsv;
-    st.pendingReservation = rsvPicked ? { ...rsvPicked } : null;
 
     try {
       await checkoutCart();
@@ -1268,7 +1123,6 @@
 
     const ok = st.cart.length === 0 && st.lastBill && st.lastBill !== prevBill;
     busy = false;
-    if (!ok) st.pendingReservation = null;
     if (!ok) {
       st.cart = prevCart || [];
       try { saveCartLocal(); } catch (e) {}
@@ -1279,7 +1133,6 @@
 
     const bill = st.lastBill;
     items = [];
-    setPendingRsv(null);
     saveItems();
     renderList();
     hideSheet('psPay');
@@ -1290,7 +1143,7 @@
       title: pay.method === 'cash' ? 'รับเงินสดแล้ว' : 'รับเงินโอน/QR แล้ว',
       label: pay.method === 'cash' ? 'เงินทอน' : 'ยอดที่รับ',
       big: `฿${money(pay.method === 'cash' ? bill.change : bill.total)}`,
-      meta: `บิล ${bill.saleNo} · ยอด ฿${money(bill.total)}${pay.method === 'cash' ? ` · รับมา ฿${money(bill.received)}` : ''}${rsvPicked ? ` · ใบจอง ${rsvPicked.res_no} รับของแล้ว` : ''}`,
+      meta: `บิล ${bill.saleNo} · ยอด ฿${money(bill.total)}${pay.method === 'cash' ? ` · รับมา ฿${money(bill.received)}` : ''}`,
       offline: /^S\d/.test(String(bill.saleNo || '')),
       canPrint: true,
       canCancel: false
@@ -1371,144 +1224,6 @@
   }
 
   // ---------------------------------------------------------
-  // ใบสั่งจอง (มือถือ)
-  // ---------------------------------------------------------
-  // QR พร้อมเพย์สำหรับยอดใดก็ได้ (ใช้ในฟอร์มใบจอง: มัดจำ)
-  function promptPayQrFor(amount) {
-    const pp = promptPayTarget();
-    return { svg: pp.clean ? promptPayQrSvg(pp.clean, r2(amount)) : '', raw: pp.raw };
-  }
-
-  // 📅 สั่งจอง: สินค้าที่สแกนไว้ในบิลนี้ → เป็นรายการในใบจอง (withItems=false = ใบเปล่า)
-  function phoneReserve(withItems = true) {
-    if (busy) return;
-    if (typeof window.openReservationForm !== 'function') { notice('ระบบใบจองยังโหลดไม่เสร็จ ลองอีกครั้ง', 'warn'); return; }
-    if (withItems && pendingRsv) { notice('บิลนี้เป็นการรับของใบจอง • กดยกเลิกที่แถบด้านบนก่อน', 'warn'); return; }
-    ensureStaffName();
-    const pre = [];
-    if (withItems) {
-      for (const it of items) {
-        const price = r2(it.price);
-        const note = optNote(it);
-        const ex = pre.find(x => x.product_id === it.product_id && x.unit_price === price);
-        if (ex) ex.qty += it.qty;
-        else pre.push({ product_id: it.product_id, name: note ? `${it.product_name} (${note})` : it.product_name, unit: it.unit || 'ชิ้น', qty: it.qty, unit_price: price });
-      }
-    }
-    paused = true;
-    window.openReservationForm(null, {
-      items: pre,
-      onSaved: () => {
-        if (pre.length) { items = []; saveItems(); renderList(); }   // ของในบิลย้ายไปอยู่ในใบจองแล้ว
-        if (!$('psRsv')?.hidden) renderRsvList();
-        waitRsvDialogs();
-      },
-      onClose: () => { lastCode = ''; waitRsvDialogs(); }
-    });
-  }
-  // กลับมาสแกนต่อเมื่อปิดหน้าต่างใบจองทั้งหมดแล้ว (ใบรับมัดจำเปิดตามหลังการบันทึก)
-  function waitRsvDialogs() {
-    let n = 0;
-    const tick = () => { if (rsvDialogOpen() && n++ < 600) { setTimeout(tick, 500); return; } lastCode = ''; resumeIfIdle(); };
-    setTimeout(tick, 900);
-  }
-
-  // ลูกค้ามารับของที่จองไว้: ใส่สินค้าเข้าบิลมือถือ + หักมัดจำ แล้วรับเงินคงค้าง
-  function loadReservationToBill(r) {
-    if (!r || busy) return false;
-    if (items.length && !confirm('บิลนี้มีสินค้าค้างอยู่ จะล้างแล้วใช้รายการจากใบจองนี้?')) return false;
-    const next = [];
-    for (const i of (Array.isArray(r.items) ? r.items : [])) {
-      const p = products().find(x => x.id === i.product_id);
-      if (!p) { notice(`ไม่พบสินค้า "${i.name}" ในระบบแล้ว`, 'error'); return false; }
-      const unitPrice = r2(i.unit_price);
-      const custom = Math.abs(unitPrice - Number(p.sale_price || 0)) > 0.0001;
-      next.push({
-        product_id: p.id, product_name: p.product_name, barcode: p.barcode || '', unit: p.unit || p.unit_name || 'ชิ้น',
-        price: unitPrice, stock: Number(p.stock_qty || 0), qty: Number(i.qty) || 1,
-        opt: custom ? `custom:${unitPrice}` : '', ...(custom ? { disc_note: `ใบจอง ${r.res_no}` } : {})
-      });
-    }
-    if (!next.length) return false;
-    const short = next.find(it => it.qty > it.stock);
-    if (short) notice(`${short.product_name}: สต็อกในระบบเหลือ ${short.stock} (จอง ${short.qty}) • ตรวจของก่อนส่ง`, 'warn');
-    items = next;
-    setPendingRsv({ id: r.id, res_no: r.res_no, customer: r.customer_name, deposit: Number(r.deposit_amount || 0), deposit_amount: Number(r.deposit_amount || 0), deposit_method: r.deposit_method });
-    saveItems();
-    hideSheet('psRsv');
-    renderList();
-    openPhonePay();
-    return true;
-  }
-  function cancelPhoneReservationPickup() {
-    if (!pendingRsv) return;
-    if (!confirm(`ยกเลิกการรับของใบจอง ${pendingRsv.res_no}? (รายการในบิลจะถูกล้าง)`)) return;
-    setPendingRsv(null); items = []; saveItems(); renderList();
-  }
-
-  // รายการใบจองในมือถือ
-  function openPhoneReservations() {
-    renderRsvList();
-    showSheet('psRsv');
-    window.eaReservationsLoad?.(true).then(() => { if (!$('psRsv')?.hidden) renderRsvList(); });
-  }
-  function closePhoneReservations() { hideSheet('psRsv'); resumeIfIdle(); }
-  function setPhoneRsvTab(t) { rsvView.tab = t; renderRsvList(); }
-  let rsvSearchTimer = null;
-  function phoneRsvSearch(v) {
-    rsvView.q = String(v || '');
-    clearTimeout(rsvSearchTimer);
-    rsvSearchTimer = setTimeout(() => { renderRsvList(); const n = $('psRsvQ'); if (n) { n.focus(); const l = n.value.length; try { n.setSelectionRange(l, l); } catch (_) {} } }, 250);
-  }
-  function thShortDate(iso) {
-    if (!iso) return '-';
-    return new Date(String(iso).slice(0, 10) + 'T00:00:00').toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' });
-  }
-  function renderRsvList() {
-    const box = $('psRsvBody');
-    if (!box) return;
-    const all = window.eaReservations?.() || [];
-    const today = todayISO();
-    const me = terminalName().trim().toUpperCase();
-    const mineToday = all.filter(r => r.deposit_date === today && String(r.deposit_terminal || '').trim().toUpperCase() === me);
-    const booked = all.filter(r => r.status === 'booked');
-    const tabs = [
-      ['today', 'รับวันนี้', booked.filter(r => r.pickup_date <= today).length],
-      ['booked', 'รอรับทั้งหมด', booked.length],
-      ['mine', 'เครื่องนี้จองวันนี้', mineToday.length]
-    ];
-    let rows = rsvView.tab === 'today' ? booked.filter(r => r.pickup_date <= today)
-      : rsvView.tab === 'mine' ? mineToday.slice().reverse() : booked;
-    const q = rsvView.q.trim().toLowerCase();
-    if (q) rows = all.filter(r => `${r.res_no} ${r.customer_name} ${r.customer_phone}`.toLowerCase().includes(q));
-    const dep = mineToday.filter(r => Number(r.deposit_amount) > 0);
-    const depCash = r2(dep.filter(r => !isQr(r.deposit_method)).reduce((a, r) => a + Number(r.deposit_amount), 0));
-    const depQr = r2(dep.filter(r => isQr(r.deposit_method)).reduce((a, r) => a + Number(r.deposit_amount), 0));
-    const remain = r => r2(Number(r.total_amount || 0) - Number(r.deposit_amount || 0));
-    box.innerHTML = `
-      <button type="button" class="ps-rsv-new" onclick="phoneReserve(false)">＋ สร้างใบจองใหม่</button>
-      ${dep.length ? `<div class="ps-rsv-dep">มัดจำที่เครื่องนี้รับวันนี้ ${dep.length} ใบ • เงินสด <b>฿${money(depCash)}</b> • โอน <b>฿${money(depQr)}</b>
-        <small>เงินสดมัดจำเก็บแยกใน "ซองมัดจำ" ไม่รวมกับเงินขาย</small></div>` : ''}
-      <input id="psRsvQ" class="ps-rsv-q" type="search" placeholder="ค้นหา ชื่อ / เบอร์ / เลขใบจอง" value="${escapeHtml(rsvView.q)}" oninput="phoneRsvSearch(this.value)">
-      ${q ? '' : `<div class="ps-rsv-tabs">${tabs.map(([k, t, n]) => `<button type="button" class="${rsvView.tab === k ? 'is-on' : ''}" onclick="setPhoneRsvTab('${k}')">${t} <b>${n}</b></button>`).join('')}</div>`}
-      <div class="ps-rsv-list">
-        ${rows.length ? rows.slice(0, 80).map(r => {
-          const late = r.status === 'booked' && r.pickup_date < today;
-          const isToday = r.status === 'booked' && r.pickup_date === today;
-          const its = Array.isArray(r.items) ? r.items : [];
-          return `
-          <button type="button" class="ps-rsv-card ${late ? 'is-late' : ''} ${isToday ? 'is-today' : ''} is-${escapeHtml(r.status)}" onclick="eaOpenReservationView('${escapeHtml(r.id)}')">
-            <span class="ps-rsv-top"><b>${escapeHtml(r.customer_name)}</b><span class="ps-rsv-date">${r.status === 'picked_up' ? 'รับแล้ว' : r.status === 'cancelled' ? 'ยกเลิก' : `รับ ${escapeHtml(thShortDate(r.pickup_date))}${late ? ' (เลย)' : isToday ? ' (วันนี้)' : ''}`}</span></span>
-            <span class="ps-rsv-items">${escapeHtml(its.map(i => `${i.name} ×${Number(i.qty)}`).join(', '))}</span>
-            ${(() => { const q = window.eaReservationReqState?.(r); return q ? `<span class="ps-rsv-req is-${q.k}">${{ ready: '📦 ', transit: '🚚 ' }[q.k] || ''}${escapeHtml(q.short)}</span>` : ''; })()}
-            <span class="ps-rsv-bot"><span>${escapeHtml(r.res_no)}${r.customer_phone ? ` • ${escapeHtml(r.customer_phone)}` : ''}</span>${r.status === 'booked' ? `<span>มัดจำ ฿${money(r.deposit_amount)} • ค้าง <b>฿${money(remain(r))}</b></span>` : ''}</span>
-          </button>`;
-        }).join('') : `<div class="ps-empty-small">${q ? 'ไม่พบใบจอง' : rsvView.tab === 'today' ? 'วันนี้ไม่มีลูกค้านัดรับของ' : 'ยังไม่มีใบจอง'}</div>`}
-      </div>
-      <div class="ps-rsv-hint">แตะใบจองเพื่อดูรายละเอียด / รับของ / ส่งใบรับมัดจำ • ลูกค้านำบาร์โค้ดใบจองมาให้สแกนที่กล้องได้เลย</div>`;
-  }
-
-  // ---------------------------------------------------------
   function init() {
     const dlg = $('phoneScanDialog');
     if (!dlg) return;
@@ -1518,7 +1233,7 @@
       e.preventDefault();   // staff cannot leave the cashier screen by accident
       if ($('psQrFull') && !$('psQrFull').hidden) { closeQrFull(); return; }
       if (anySheetOpen()) {
-        hideSheet('psPay'); hideSheet('psSummary'); hideSheet('psDone'); hideSheet('psWeight'); hideSheet('psPrice'); hideSheet('psRsv');
+        hideSheet('psPay'); hideSheet('psSummary'); hideSheet('psDone'); hideSheet('psWeight'); hideSheet('psPrice');
         weightCtx = null; priceKey = null;
         resumeIfIdle();
       }
@@ -1530,8 +1245,6 @@
     });
     window.EaOfflineSync?.onSyncComplete?.(() => setTimeout(renderTally, 1500));
     window.addEventListener('ea:data-refreshed', () => { if (dlg.open) renderTally(); });
-    window.addEventListener('ea:install-state', () => { renderInstallHint(); if (!$('psSummary')?.hidden) renderSummary(); });
-    window.addEventListener('ea:reservations-changed', () => { if (dlg.open && !$('psRsv')?.hidden) renderRsvList(); });
 
     // Opened from the hub QR code: ?cashier=<station name>
     let fromQr = false;
@@ -1556,8 +1269,6 @@
     // Phone cashier mode: open this screen when the app starts
     let fullSession = false;
     try { fullSession = sessionStorage.getItem(FULL_SESSION_KEY) === '1'; } catch (e) {}
-    // เปิดจากไอคอนแอป "EA คิดเงิน" (start_url /?app=cashier) → เข้าหน้าสแกนคิดเงินเสมอ
-    try { if (!fullSession && new URLSearchParams(location.search).get('app') === 'cashier') fromQr = fromQr || 'app'; } catch (e) {}
     applySendVisibility();
     if (!window.__eaCountMode && (fromQr || (autoOpenEnabled() && !fullSession))) {
       document.documentElement.classList.add('ps-booting');
@@ -1567,7 +1278,7 @@
         if ((st && !st.loading && st.products?.length) || Date.now() - started > 8000) {
           clearInterval(wait);
           document.documentElement.classList.remove('ps-booting');
-          openPhoneScan().then(() => { if (fromQr === true) notice(`พร้อมคิดเงินที่จุด "${terminalName()}"${window.getStaffName?.() ? ` • ผู้รับผิดชอบ: ${window.getStaffName()}` : ''} • ยอดเข้าศูนย์กลาง`, 'info'); });
+          openPhoneScan().then(() => { if (fromQr) notice(`พร้อมคิดเงินที่จุด "${terminalName()}"${window.getStaffName?.() ? ` • ผู้รับผิดชอบ: ${window.getStaffName()}` : ''} • ยอดเข้าศูนย์กลาง`, 'info'); });
         }
       }, 300);
     }
@@ -1620,18 +1331,7 @@
     setPhoneCashierMode,
     sendPhoneScan,
     newPhoneScanBill,
-    cancelLastPhoneScanBill,
-    phoneReserve,
-    openPhoneReservations,
-    closePhoneReservations,
-    setPhoneRsvTab,
-    phoneRsvSearch,
-    cancelPhoneReservationPickup,
-    eaPhoneLoadReservation: loadReservationToBill,
-    openPhoneInstall,
-    hidePhoneInstallHint,
-    switchPhoneScanCamera,
-    eaPromptPayQrSvg: promptPayQrFor
+    cancelLastPhoneScanBill
   });
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

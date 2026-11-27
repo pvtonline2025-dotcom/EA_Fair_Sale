@@ -28,12 +28,6 @@ if (configured && !window.supabase) {
   console.error("Supabase library not loaded correctly from CDN.");
 }
 
-// ข้อความราคาเฉพาะงาน: พิมพ์บนใบเสร็จ (ทุกแบบ) และป้ายบาร์โค้ดที่มีราคา • เปลี่ยนงาน → แก้บรรทัดนี้ ("" = ไม่พิมพ์)
-const EA_EVENT_PRICE_NOTE = "ราคานี้เฉพาะในงาน เกษตรกำแพงแสน ปี 69";
-window.EA_EVENT_PRICE_NOTE = EA_EVENT_PRICE_NOTE;
-const LBL_NOTE_STYLE = "display:block; width:100%; text-align:center; font-weight:800; line-height:1.15; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#000;";
-function lblPriceNote(sizePt){ return EA_EVENT_PRICE_NOTE && barcodePrintState.showPrice ? `<div class="lbl-note" style="${LBL_NOTE_STYLE} font-size:${sizePt}pt;">${escapeHtml(EA_EVENT_PRICE_NOTE)}</div>` : ""; }
-
 const TERMINAL_KEY = "ea_fairsale_terminal";
 const CART_KEY = "ea_fairsale_cart";
 const BILL_DISCOUNT_KEY = "ea_fairsale_bill_discount";
@@ -800,51 +794,10 @@ function saveBillDiscountLocal(){
 }
 function escapeHtml(v){return String(v??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
 let toastTimer=null;
-/* ---------- ป๊อปอัพแจ้งเตือนกลางจอ (แทน toast ขอบล่าง) ---------- */
-const TOAST_ICONS={
-  success:'<path d="M20 6 9 17l-5-5"/>',
-  error:'<path d="M18 6 6 18M6 6l12 12"/>',
-  warning:'<path d="M12 5.5v8.5"/><path d="M12 18.6h.01" stroke-width="3.4"/>',
-  info:'<path d="M12 10.5v8"/><path d="M12 5.8h.01" stroke-width="3.4"/>'
-};
-function toastKind(t){
-  const s=String(t||"");
-  if(/❌|⛔|🚫|ผิดพลาด|ไม่สำเร็จ|ล้มเหลว|ไม่ได้|ไม่ถูกต้อง|error|failed/i.test(s))return "error";
-  if(/⚠|❗|‼|หมด|ไม่พอ|เกิน|กรุณา|ไม่พบ|ไม่มี|ออฟไลน์|📴|ยังไม่/i.test(s))return "warning";
-  if(/✅|✔|☑|🎉|สำเร็จ|เรียบร้อย|บันทึก|คัดลอก|ส่งออก|ดาวน์โหลด|รับเข้า|เพิ่ม|ลบแล้ว|อัปเดต|กลับมาเชื่อมต่อ/i.test(s))return "success";
-  return "info";
-}
-// ตัดอิโมจิ/สัญลักษณ์นำหน้าข้อความออก เพราะป๊อปอัพมีไอคอนสถานะให้แล้ว
-function toastCleanText(t){return String(t??"").replace(/^[\s\p{Extended_Pictographic}\uFE0F\u200D\u20E3]+/u,"").trim()||String(t??"")}
-// While the launch screen is up, hold popups and show them (in order) once it closes.
-let splashToastQueue=[];
-function splashActive(){const s=document.getElementById("eaSplash");return !!(s&&!s.classList.contains("is-done"))}
-document.addEventListener("ea:splash-done",()=>{
-  const q=splashToastQueue.slice(-3);splashToastQueue=[];  // at most the last 3 messages
-  q.forEach(([t,d],i)=>setTimeout(()=>toast(t,d),250+i*2300));
-});
-function toast(t,duration=2100){
-  if(splashActive()){splashToastQueue.push([t,duration]);return;}
-  const x=el("toast");if(!x)return;
-  // Modal dialogs live in the browser top layer; move the popup into the top-most open dialog so it stays visible.
-  const host=[...document.querySelectorAll("dialog[open]")].pop()||document.body;
-  // blurred backdrop behind the popup (tap anywhere to close)
-  let bd=document.getElementById("toastBackdrop");
-  if(!bd){bd=document.createElement("div");bd.id="toastBackdrop";bd.className="toast-backdrop";bd.setAttribute("aria-hidden","true");
-    bd.addEventListener("click",()=>{clearTimeout(toastTimer);x.classList.remove("show");bd.classList.remove("show")});}
-  if(bd.parentElement!==host)host.appendChild(bd);
-  if(x.parentElement!==host||x.previousElementSibling!==bd)host.appendChild(x);
-  const kind=toastKind(t), msg=toastCleanText(t);
-  x.className="toast toast--"+kind;
-  x.innerHTML='<span class="toast-ico" aria-hidden="true"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">'+TOAST_ICONS[kind]+'</svg></span><span class="toast-msg"></span>';
-  x.querySelector(".toast-msg").textContent=msg;
-  x.setAttribute("role",kind==="error"?"alert":"status");
-  if(!x.dataset.bound){x.dataset.bound="1";x.addEventListener("click",()=>{clearTimeout(toastTimer);x.classList.remove("show");bd.classList.remove("show")});}
-  void x.offsetWidth; // restart the pop-in animation when messages arrive back-to-back
-  x.classList.add("show");bd.classList.add("show");clearTimeout(toastTimer);
-  // เวลาแสดง: ตามที่ขอ หรืออย่างน้อยพอให้อ่านข้อความยาวทัน (สูงสุด 6 วินาที)
-  const readMs=Math.min(6000,1300+msg.length*45);
-  toastTimer=setTimeout(()=>{x.classList.remove("show");bd.classList.remove("show")},Math.max(1500,Number(duration)||2100,readMs))}
+function toast(t,duration=2100){const x=el("toast");if(!x)return;
+  // Modal dialogs live in the browser top layer; move the toast into the top-most open dialog so it stays visible.
+  const host=[...document.querySelectorAll("dialog[open]")].pop()||document.body;if(x.parentElement!==host)host.appendChild(x);
+  x.textContent=t;x.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>x.classList.remove("show"),Math.max(1200,Number(duration)||2100))}
 function isQrPayment(pm){const v=String(pm||"").toLowerCase();return v==="promptpay"||v==="qr"||v==="transfer"}
 function card(title,body,action=""){return `<section class="card"><div class="card-head"><h2>${title}</h2>${action}</div><div class="card-body">${body}</div></section>`}
 /* ---------- ผู้รับผิดชอบประจำเครื่อง (ติดไปกับทุกบิล) ---------- */
@@ -1386,7 +1339,38 @@ function renderLowStockKpi(opts = {}) {
   `;
 }
 function productById(id){return state.products.find(x=>x.id===id)}
-function productByBarcode(code){return state.products.find(x=>String(x.barcode||"").trim()===String(code||"").trim())}
+function productByBarcode(code){
+  const c=String(code||"").trim();
+  const hit=state.products.find(x=>String(x.barcode||"").trim()===c);
+  if(hit) return hit;
+  // บาร์โค้ดน้ำหนักรายม้วน: <บาร์โค้ดสินค้า>9<ลำดับม้วน 2 หลัก><กรัม 5 หลัก> → จำน้ำหนักไว้ให้ตอนหยิบเข้าบิล (ไม่ต้องถาม)
+  // ลำดับม้วนทำให้ม้วนที่น้ำหนักเท่ากันได้บาร์โค้ดไม่ซ้ำกัน
+  const m=/^(\d{6,14})9(\d{2})(\d{5})$/.exec(c);
+  if(m){
+    const p=state.products.find(x=>String(x.barcode||"").trim()===m[1]);
+    if(p){ state._scanWeight={ pid:p.id, weight:Math.round(Number(m[3]))/1000, code:c, at:Date.now() }; return p; }
+  }
+  return undefined;
+}
+// น้ำหนักจากบาร์โค้ดที่เพิ่งสแกน (ใช้ได้ครั้งเดียว ภายใน 15 วินาที)
+function takeScanWeight(pid){
+  const w=state._scanWeight;
+  if(!w || w.pid!==pid || Date.now()-w.at>15000) return null;
+  state._scanWeight=null;
+  return w;
+}
+// ค่าบาร์โค้ดฉลากน้ำหนัก (ต้องมีบาร์โค้ดสินค้าเป็นตัวเลข)
+function weightBarcodeValue(p, w, seq = 1){
+  const base=String(p?.barcode||"").trim();
+  if(!/^\d{6,14}$/.test(base) || !(Number(w)>0)) return null;
+  const sq=String(((Math.max(1, Number(seq)||1) - 1) % 99) + 1).padStart(2,"0");
+  return `${base}9${sq}${String(Math.min(99999, Math.round(Number(w)*1000))).padStart(5,"0")}`;
+}
+function parseRollWeights(text){
+  return String(text||"").split(/[\s,;\/]+/).map(x=>Number(x.replace(/[^\d.]/g,""))).filter(x=>x>0 && x<100).map(x=>Math.round(x*1000)/1000);
+}
+window.eaTakeScanWeight = takeScanWeight;
+window.eaWeightBarcodeValue = weightBarcodeValue;
 function cartCount(){return state.cart.reduce((s,x)=>s+Number(x.qty||0),0)}
 
 // ยอดรวมตามราคาปกติ (ก่อนลด)
@@ -1465,7 +1449,7 @@ function loadFromLocalStorageFallback(){
     console.warn("Storage fallback load warning:", e);
   }
 
-  if (!sb && (!state.products || state.products.length === 0)) {   // ข้อมูลตัวอย่าง เฉพาะโหมดเดโม (ไม่ได้ต่อฐานข้อมูล)
+  if (!state.products || state.products.length === 0) {
     state.products = [
       { id: "off-1", product_code: "P001", barcode: "8850000000001", product_name: "สินค้าตัวอย่าง 1 (น้ำดื่ม)", stock_qty: 50, min_stock: 10, sale_price: 15, cost_price: 8, is_active: true },
       { id: "off-2", product_code: "P002", barcode: "8850000000002", product_name: "สินค้าตัวอย่าง 2 (ขนมทานเล่น)", stock_qty: 8, min_stock: 10, sale_price: 35, cost_price: 20, is_active: true },
@@ -1474,7 +1458,7 @@ function loadFromLocalStorageFallback(){
     saveLocalState();
   }
 
-  if (!sb && (!state.sales || state.sales.length === 0)) {   // ข้อมูลตัวอย่าง เฉพาะโหมดเดโม
+  if (!state.sales || state.sales.length === 0) {
     const now = new Date();
     const dayOfWeek = now.getDay();
     const diffToMonday = (dayOfWeek === 0 ? -6 : 1 - dayOfWeek);
@@ -1541,7 +1525,7 @@ function loadFromLocalStorageFallback(){
     saveLocalState();
   }
 
-  if (!sb && (!state.auditBatchHistory || state.auditBatchHistory.length === 0)) {   // ข้อมูลตัวอย่าง เฉพาะโหมดเดโม
+  if (!state.auditBatchHistory || state.auditBatchHistory.length === 0) {
     const today = todayISO();
     const yest = getNDaysAgoISO(1);
     const d3 = getNDaysAgoISO(3);
@@ -4254,7 +4238,7 @@ function renderHome(){
   }
 
   // Filter low stock and out of stock items
-  const allProds = (state.products && state.products.length > 0) ? state.products : sb ? [] : [
+  const allProds = (state.products && state.products.length > 0) ? state.products : [
     { product_name: "ท่อดำ LD [PN. 2.5] 20 mm. 200 m. [ เขียว ]", stock_qty: 3, min_stock: 5, category: "อุปกรณ์ท่อ" },
     { product_name: "ท่อดำ LD [PN. 2.5] 25 mm. 200 m. [ ส้ม ]", stock_qty: 2, min_stock: 5, category: "อุปกรณ์ท่อ" },
     { product_name: "ท่อดำ LD [PN. 2.5] 25 mm. 200 m. [ เขียว ]", stock_qty: 1, min_stock: 5, category: "อุปกรณ์ท่อ" },
@@ -4497,8 +4481,6 @@ function renderMenu(){
         { icon: "🧾", title: "ประวัติการขาย", hint: billsToday ? `วันนี้ ${billsToday} บิล • ดูย้อนหลัง` : "ดูบิลย้อนหลัง", on: "go('salesHistory')", accent: "green" },
         { icon: "📌", title: "ใบสั่งจอง / มัดจำ", hint: "จองของ นัดวันรับ หักมัดจำ", on: "openReservations()", accent: "green", badge: (() => { const t = todayISO(); const n = (window.eaReservations?.() || []).filter(r => r.status === "booked" && r.pickup_date <= t).length; return n ? `${n} รับวันนี้` : ""; })(), badgeWarn: true },
         { icon: "💰", title: "กล่องเงิน (เรียลไทม์)", hint: "ดูบิล รับมา/ทอน • นับเงินตรวจ", on: "openCashbox()", accent: "green" },
-        { icon: "⚡", title: "โหมดเร่งด่วน", hint: "คนเยอะ: แตะ +1 จดไว้ก่อน ปิดยอดทีเดียว", on: "eaOpenRush()", accent: "green", badge: (() => { const t = window.eaRushTotals?.(); return t?.qty ? `฿${money(t.amt)} ค้าง` : ""; })(), badgeWarn: true },
-        { icon: "🔧", title: "แก้ไขรายการตกหล่น", hint: "เจ้าของ: ลงบิลภายหลัง • ใบจองตกหล่น • ปิดยอด", on: "eaOpenMissed()", accent: "green" },
         { icon: "🏢", title: "ศูนย์กลาง", hint: "ยอดทุกเครื่อง • รับเงินสด", on: "go('hub')", accent: "green" },
         { icon: "📲", title: "QR จุดขาย", hint: "ให้เจ้าหน้าที่สแกนด้วยมือถือตัวเอง", on: "go('qrStations')", accent: "green" },
         { icon: "💸", title: "เงินสำรองจ่าย", hint: "เบิก / จ่าย / คงเหลือ", on: "go('expenses')", accent: "green" }
@@ -6840,7 +6822,7 @@ function updateCartDOMOnly(){
 }
 
 async function startCartLiveScanner(){
-  if(!window.eaScanEngine?.available() && !window.ZXingBrowser){
+  if(!window.ZXingBrowser){
     toast("โหลด Barcode Scanner ไม่สำเร็จ");
     return;
   }
@@ -6855,11 +6837,13 @@ async function startCartLiveScanner(){
   cartLiveZoomVal = 1.0;
 
   try {
-    // ตัวสแกนกลาง (js/scan-engine.js): ตัวอ่านในเครื่อง / ZXing-C++ → อ่านไวและแม่นกว่า ZXing JS เดิม
-    cartScannerControls = await window.eaScanEngine.start(
+    cartScannerReader = new ZXingBrowser.BrowserMultiFormatReader();
+    cartScannerControls = await cartScannerReader.decodeFromConstraints(
+      { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
       video,
-      (code) => {
-        if(!code) return;
+      (result) => {
+        if(!result) return;
+        const code = result.getText();
         const now = Date.now();
         if(code === lastCartScannedCode && (now - lastCartScannedAt < 900)) return;
         lastCartScannedCode = code;
@@ -7834,13 +7818,20 @@ function addProductToCart(p){
   if(!p){toast("ไม่พบสินค้า");return false}
   if(Number(p.stock_qty)<=0){toast("สินค้าหมด");return false}
   const row=state.cart.find(x=>x.product_id===p.id && !x.price_note && !x.is_discounted);
-  let weight=null;
-  if(p.track_weight){ weight=askUnitWeight(p); if(weight===null) return false; }
+  let weight=null, rollCode=null;
+  if(p.track_weight){
+    const sw=takeScanWeight(p.id);
+    if(sw){
+      if(state.cart.some(x=>Array.isArray(x.roll_codes)&&x.roll_codes.includes(sw.code))){ toast(`⚠️ ม้วนนี้ (${sw.weight} กก.) อยู่ในบิลแล้ว`); return false; }
+      weight=sw.weight; rollCode=sw.code;
+    } else { weight=askUnitWeight(p); if(weight===null) return false; }
+  }
   const inCart=state.cart.filter(x=>x.product_id===p.id).reduce((a,x)=>a+Number(x.qty||0),0);
   if(row){
     if(inCart+1>Number(p.stock_qty)){toast("จำนวนในตะกร้าเกิน Stock");return false}
     row.qty++;
     if(weight!==null) row.weights=[...(row.weights||[]),weight];
+    if(rollCode) row.roll_codes=[...(row.roll_codes||[]),rollCode];
   } else {
     if(inCart+1>Number(p.stock_qty)){toast("จำนวนในตะกร้าเกิน Stock");return false}
     state.cart.push({
@@ -7854,7 +7845,8 @@ function addProductToCart(p){
       stock: Number(p.stock_qty),
       discount_note: "",
       is_discounted: false,
-      ...(weight!==null ? { weights: [weight] } : {})
+      ...(weight!==null ? { weights: [weight] } : {}),
+      ...(rollCode ? { roll_codes: [rollCode] } : {})
     });
   }
   saveCartLocal();
@@ -8097,8 +8089,6 @@ function generateInvoicePrintHTML(bill){
       </div>
 
       <div class="print-divider">--------------------------------</div>
-
-      ${EA_EVENT_PRICE_NOTE ? `<div class="print-event-note" style="margin:6px 0; padding:4px 6px; border:1.5px solid #000; border-radius:4px; text-align:center; font-weight:800; font-size:12px; color:#000;">${escapeHtml(EA_EVENT_PRICE_NOTE)}</div>` : ''}
 
       <div class="print-footer">
         <div style="font-weight:700;">${escapeHtml(footerNote)}</div>
@@ -8795,14 +8785,6 @@ function closeReceiptModal(){
   else render();
 }
 
-// ป้ายบิลลงภายหลัง / บิลรวมเร่งด่วน (อยู่ในหมายเหตุบิล "[...]")
-function saleTagBadge(sale){
-  const m=/^\[([^\]]+)\]/.exec(String(sale?.note||""));
-  if(!m) return "";
-  const t=m[1], rush=/^บิลรวมเร่งด่วน/.test(t);
-  return `<span class="sh-tag ${rush?"is-rush":"is-late"}" title="${escapeHtml(t)}">${rush?"⚡ เร่งด่วน":"🔧 ลงภายหลัง"}</span>`;
-}
-
 // Price label stored with each sale line (report groups by product + price + label)
 // e.g. "3 กิโล 100", "แถม...", or the discount reason when the price was lowered.
 function cartLinePriceNote(c){
@@ -8918,9 +8900,7 @@ async function checkoutCart(){
   const changeVal = recVal >= totalAmt ? (recVal - totalAmt) : 0;
   const billDiscReason = String(state.billDiscount?.note || '').trim();
   const staffName = getStaffName();
-  // ป้ายบิล (missed-sales.js): [ลงภายหลัง ...] / [บิลรวมเร่งด่วน hh:mm-hh:mm]
-  const saleTagPrefix = state.saleTag ? `[${String(state.saleTag).replace(/[\[\]]/g, "").slice(0, 80)}] ` : "";
-  const saleNote = `${saleTagPrefix}ขายจาก ${state.terminal}${billDiscAmt > 0 ? ` (ส่วนลดท้ายบิล ฿${money(billDiscAmt)}${billDiscReason ? ` - ${billDiscReason}` : ''})` : ''}${staffName ? ` • ผู้รับผิดชอบ: ${staffName}` : ''}`;
+  const saleNote = `ขายจาก ${state.terminal}${billDiscAmt > 0 ? ` (ส่วนลดท้ายบิล ฿${money(billDiscAmt)}${billDiscReason ? ` - ${billDiscReason}` : ''})` : ''}${staffName ? ` • ผู้รับผิดชอบ: ${staffName}` : ''}`;
 
   // One stable id per bill. Used by the idempotent RPC online AND by the offline
   // queue, so an ambiguous network failure can be queued without double charging.
@@ -9372,7 +9352,7 @@ async function initScannerBatteryMonitor(){
 }
 
 async function startScanner(){
-  if(!window.eaScanEngine?.available() && !window.ZXingBrowser){toast("โหลด Barcode Scanner ไม่สำเร็จ");return}
+  if(!window.ZXingBrowser){toast("โหลด Barcode Scanner ไม่สำเร็จ");return}
   const dialog=el("scannerDialog"),video=el("scannerVideo"),status=el("scannerStatus");
   dialog.showModal();
   status.textContent="กำลังขอสิทธิ์กล้อง...";
@@ -9421,10 +9401,10 @@ async function startScanner(){
   updateBatchScanQueueUI();
 
   try{
-    // ตัวสแกนกลาง (js/scan-engine.js) • ซูมใช้ตัวปรับในหน้าต่างเดิม
-    scannerControls=await window.eaScanEngine.start(video,(code)=>{
-      if(!code)return;
-      const now=Date.now();
+    scannerReader=new ZXingBrowser.BrowserMultiFormatReader();
+    scannerControls=await scannerReader.decodeFromConstraints({video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720}},audio:false},video,(result)=>{
+      if(!result)return;
+      const code=result.getText(),now=Date.now();
       if(code===lastScannedCode && now-lastScannedAt<1100)return;
       lastScannedCode=code;
       lastScannedAt=now;
@@ -12038,7 +12018,6 @@ function renderStockCardItem(p){
             <span style="font-size:12px; color:#94a3b8; font-weight:600; margin-left:2px;">${escapeHtml(unitStr)}</span>
           </div>
         </div>
-        ${stockPromoCellHtml(p, true)}
         <div class="stock-item-actions">
           <button class="mini-btn receive" onclick="quickReceive('${p.id}')">+ รับเข้า</button>
           <button class="mini-btn edit" onclick="editProduct('${p.id}')">แก้ไข</button>
@@ -12046,45 +12025,6 @@ function renderStockCardItem(p){
       </div>
     </div>
   `;
-}
-
-// ช่อง "ราคาโปร" ในหน้าสต็อก (ตาราง + การ์ด) — แตะแล้วเปิดฟอร์มแก้ไขที่ช่องราคาโปรโมชั่น
-function stockPromoCellHtml(p, compact){
-  const promos = Array.isArray(p?.promotions) ? p.promotions : [];
-  const unitStr = p?.unit || "ชิ้น";
-  const tap = `onclick="event.stopPropagation(); editProductPromo('${p.id}')"`;
-  if(!promos.length){
-    return compact ? "" : `<button type="button" class="stock-promo-add" ${tap} title="เพิ่มราคาโปรโมชั่น">+ โปร</button>`;
-  }
-  const chip = x => {
-    const per = promoUnitPrice(x);
-    const perTxt = Number(x.qty) === 1 ? "" : ` <small>(฿${money(per)}/${escapeHtml(unitStr)})</small>`;
-    return `<span class="stock-promo-chip">${escapeHtml(x.label)}${perTxt}</span>`;
-  };
-  // มีหลายโปร: แสดงโปรแรก + ปุ่มย่อ/ขยาย (จำสถานะไว้ระหว่างเปลี่ยนหน้า/ค้นหา)
-  const many = promos.length > 1;
-  const open = many && stockPromoOpen.has(String(p.id));
-  const shown = many && !open ? promos.slice(0, 1) : promos;
-  const toggle = many
-    ? `<button type="button" class="stock-promo-toggle" onclick="event.stopPropagation(); toggleStockPromo(this, '${p.id}')" aria-expanded="${open}">${open ? "▴ ย่อ" : `▾ อีก ${promos.length - 1} โปร`}</button>`
-    : "";
-  return `<div class="stock-promo-list${compact ? " compact" : ""}" ${tap} title="แตะเพื่อแก้ราคาโปรโมชั่น">${compact ? `<span class="stock-promo-tag">โปร</span>` : ""}${shown.map(chip).join("")}${toggle}</div>`;
-}
-const stockPromoOpen = new Set();
-function toggleStockPromo(btn, id){
-  id = String(id);
-  if(stockPromoOpen.has(id)) stockPromoOpen.delete(id); else stockPromoOpen.add(id);
-  const p = (state.products || []).find(x => String(x.id) === id);
-  const box = btn?.closest(".stock-promo-list");
-  if(p && box) box.outerHTML = stockPromoCellHtml(p, box.classList.contains("compact"));
-}
-function editProductPromo(id){
-  openProductModal(id);
-  setTimeout(() => {
-    const t = el("pPromos");
-    if(t){ t.scrollIntoView({ block: "center" }); t.focus(); }
-    else toast("⚠️ ยังเปิดใช้ราคาโปรไม่ได้ ต้องรัน migration_v11_promo_weights.sql ก่อน", 4000);
-  }, 80);
 }
 
 function renderStockTableRow(p){
@@ -12107,7 +12047,6 @@ function renderStockTableRow(p){
         </a>
       </td>
       <td class="col-price"><strong style="color:#4ade80; font-size:14px; font-weight:900;">฿${money(p.sale_price)}</strong> <small style="color:#94a3b8; font-size:11px; font-weight:normal;">/ ${escapeHtml(unitStr)}</small></td>
-      <td class="col-promo">${stockPromoCellHtml(p)}</td>
       <td class="col-qty"><strong style="font-size:15px; color:${qtyColor}; font-weight:900;">${p.stock_qty}</strong> <span style="font-size:12px; color:#cbd5e1; font-weight:600; margin-left:3px;">${escapeHtml(unitStr)}</span></td>
       <td class="col-status">${statusForProduct(p)}</td>
       <td class="col-actions">
@@ -12218,7 +12157,7 @@ function renderStock(){
 
   const tableRowsHtml = pageItems.length 
     ? pageItems.map(renderStockTableRow).join("") 
-    : `<tr><td colspan="9" class="empty">ไม่พบสินค้าในหมวดนี้</td></tr>`;
+    : `<tr><td colspan="8" class="empty">ไม่พบสินค้าในหมวดนี้</td></tr>`;
 
   const tableHtml = `
     <div class="table-wrap">
@@ -12229,7 +12168,6 @@ function renderStock(){
             <th class="col-barcode">Barcode</th>
             <th class="col-name sortable" onclick="toggleStockTableSort('name')" title="คลิกเพื่อเรียงตามชื่อสินค้า">สินค้า ${getSortIndicator('name')}</th>
             <th class="col-price sortable" onclick="toggleStockTableSort('price')" title="คลิกเพื่อเรียงตามราคา">ราคา ${getSortIndicator('price')}</th>
-            <th class="col-promo" title="ราคาโปรโมชั่น (แตะช่องเพื่อแก้)">ราคาโปร</th>
             <th class="col-qty sortable" onclick="toggleStockTableSort('stock')" title="คลิกเพื่อเรียงตามสต็อกคงเหลือ">คงเหลือ ${getSortIndicator('stock')}</th>
             <th class="col-status">สถานะ</th>
             <th class="col-actions">จัดการ</th>
@@ -17580,7 +17518,7 @@ function renderSalesHistory(){
                       <td>
                         <span class="sh-sale-no" onclick="openSaleDetailModal('${sale.id || sale.sale_no}')" title="คลิกเพื่อดูใบเสร็จ">
                           🧾 ${escapeHtml(sale.sale_no || sale.id)}
-                        </span>${saleTagBadge(sale)}
+                        </span>
                       </td>
                       <td>
                         <div style="font-weight:700; color:#f1f5f9;">${formatThaiDateStr(sale.sale_date)}</div>
@@ -17635,7 +17573,7 @@ function renderSalesHistory(){
               return `
                 <div class="sh-sale-card-mobile" onclick="openSaleDetailModal('${sale.id || sale.sale_no}')">
                   <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span class="sh-sale-no">🧾 ${escapeHtml(sale.sale_no || sale.id)}${saleTagBadge(sale)}</span>
+                    <span class="sh-sale-no">🧾 ${escapeHtml(sale.sale_no || sale.id)}</span>
                     <strong style="font-size:15px; color:${isCash ? '#34d399' : '#c084fc'}; font-variant-numeric:tabular-nums;">
                       ฿${money(sale.total_amount)}
                     </strong>
@@ -20460,8 +20398,8 @@ function buildA4DailyReportHTML(targetDate, daySales, daySaleItems) {
     else if (p.unitPrice === 0) parts.push(`<span class="a4-note-promo">** แถม **</span>`);
     else if (p.originalPrice > p.unitPrice) parts.push(`<span class="a4-note-promo">ลดจาก ${money(p.originalPrice)}</span>`);
     if (p.weights.length) {
-      const sumW = p.weights.reduce((a, x) => a + x, 0);
-      parts.push(`<span class="a4-note-w">${p.weights.map(x => Number(x).toLocaleString("th-TH", { maximumFractionDigits: 3 })).join(", ")} <b>(รวม ${sumW.toLocaleString("th-TH", { maximumFractionDigits: 3 })} กก.)</b></span>`);
+      // แยกน้ำหนักรายม้วน (ไม่รวมเป็นยอดเดียว)
+      parts.push(`<span class="a4-note-w">${p.weights.map(x => Number(x).toLocaleString("th-TH", { maximumFractionDigits: 3 })).join(", ")}</span>`);
     }
     return parts.join("<br>");
   };
@@ -20756,6 +20694,7 @@ function clearBarcodeSearch() {
 }
 
 function onBarcodeProductSelect(productId) {
+  if (barcodePrintState.productId !== productId) barcodePrintState.rollWeights = "";
   barcodePrintState.productId = productId;
   renderBarcodePrintModalContent();
 }
@@ -20952,6 +20891,7 @@ function getBarcodePrintStyles(format) {
         font-weight: 700;
         color: #334155;
       }
+      .lbl-weight { font-size: 12pt; font-weight: 900; color: #000; white-space: nowrap; }
       .barcode-label-thermal .lbl-price {
         font-size: 10.5pt;
         font-weight: 900;
@@ -21175,11 +21115,12 @@ function getBarcodePrintStyles(format) {
   `;
 }
 
-function renderSingleBarcodeLabelHTML(product, format = "thermal-50x30", isPreview = false) {
+function renderSingleBarcodeLabelHTML(product, format = "thermal-50x30", isPreview = false, weight = null, seq = 1) {
   const p = product;
   if (!p) return "";
   const shopName = state.settings?.shopName || "EA Fair Sale";
-  const barcodeValue = String(p.barcode || p.product_code || "000000").trim();
+  const wv = weight ? weightBarcodeValue(p, weight, seq) : null;
+  const barcodeValue = wv || String(p.barcode || p.product_code || "000000").trim();
   const unitStr = p.unit || p.unit_name || "ชิ้น";
   const barcodeSvg = generateCode128Svg(barcodeValue, {
     height: format === "shelf-tag" ? 44 : (format === "thermal-42x30" ? 34 : 36),
@@ -21206,7 +21147,6 @@ function renderSingleBarcodeLabelHTML(product, format = "thermal-50x30", isPrevi
             </div>
           ` : ''}
         </div>
-        ${lblPriceNote(7)}
       </div>
     `;
   }
@@ -21221,9 +21161,8 @@ function renderSingleBarcodeLabelHTML(product, format = "thermal-50x30", isPrevi
       </div>
       <div class="lbl-bottom-row">
         ${barcodePrintState.showCode ? `<span class="lbl-code">${escapeHtml(p.product_code)}</span>` : '<span></span>'}
-        ${barcodePrintState.showPrice ? `<span class="lbl-price">฿${money(p.sale_price)}</span>` : ''}
+        ${wv ? `<span class="lbl-weight">${Number(weight).toLocaleString("th-TH",{minimumFractionDigits:2,maximumFractionDigits:3})} กก.</span>` : (barcodePrintState.showPrice ? `<span class="lbl-price">฿${money(p.sale_price)}</span>` : '')}
       </div>
-      ${lblPriceNote(format === 'thermal-42x30' ? 4.6 : 5.4)}
     </div>
   `;
 }
@@ -21237,10 +21176,11 @@ function buildAllBarcodeLabelsPrintHTML(itemsList, format) {
     itemsList.forEach(item => {
       const p = item.product;
       const count = Math.max(1, Number(item.qty) || 1);
-      const barcodeValue = String(p.barcode || p.product_code || "000000").trim();
+      const wv = item.weight ? weightBarcodeValue(p, item.weight, item.seq) : null;
+      const barcodeValue = wv || String(p.barcode || p.product_code || "000000").trim();
       for (let i = 0; i < count; i++) {
         flatCells.push(`
-          <div class="barcode-label-a4-cell">
+          <div class="barcode-label-a4-cell${wv ? ' has-weight' : ''}">
             ${barcodePrintState.showShop ? `<span class="lbl-shop">${escapeHtml(state.settings?.shopName || "EA Fair Sale")}</span>` : ''}
             ${barcodePrintState.showName ? `<div class="lbl-name">${escapeHtml(p.product_name)}</div>` : ''}
             <div class="lbl-svg-wrap">
@@ -21248,9 +21188,8 @@ function buildAllBarcodeLabelsPrintHTML(itemsList, format) {
             </div>
             <div class="lbl-bottom-row">
               ${barcodePrintState.showCode ? `<span class="lbl-code">${escapeHtml(p.product_code)}</span>` : '<span></span>'}
-              ${barcodePrintState.showPrice ? `<span class="lbl-price">฿${money(p.sale_price)}</span>` : ''}
+              ${wv ? `<span class="lbl-weight">${Number(item.weight).toLocaleString("th-TH",{minimumFractionDigits:2,maximumFractionDigits:3})} กก.</span>` : (barcodePrintState.showPrice ? `<span class="lbl-price">฿${money(p.sale_price)}</span>` : '')}
             </div>
-            ${lblPriceNote(format === "a4-grid-36" ? 4.8 : 5.6)}
           </div>
         `);
       }
@@ -21269,7 +21208,7 @@ function buildAllBarcodeLabelsPrintHTML(itemsList, format) {
   itemsList.forEach(item => {
     const count = Math.max(1, Number(item.qty) || 1);
     for (let i = 0; i < count; i++) {
-      labels.push(renderSingleBarcodeLabelHTML(item.product, format, false));
+      labels.push(renderSingleBarcodeLabelHTML(item.product, format, false, item.weight, item.seq));
     }
   });
   return labels.join("");
@@ -21415,7 +21354,16 @@ function renderBarcodePrintModalContent() {
           </div>
         </div>
 
-        ${barcodePrintState.mode === 'single' ? `
+        ${barcodePrintState.mode === 'single' && currentP?.track_weight ? `
+          <div class="field roll-w">
+            <label style="font-weight:800; font-size:13px;">⚖️ ฉลากน้ำหนักรายม้วน (บาร์โค้ดมีน้ำหนัก สแกนขายแล้วไม่ต้องชั่ง/พิมพ์น้ำหนัก)</label>
+            ${/^\d{6,14}$/.test(String(currentP.barcode || "").trim()) ? `
+              <textarea rows="3" placeholder="วางน้ำหนักทุกม้วนตามใบเบิกได้เลย (กก.) คั่นด้วยเว้นวรรค / จุลภาค / ขึ้นบรรทัดใหม่ เช่น 3.1, 3.2, 3.1 • ม้วนที่ฉลากชำรุด ใส่เฉพาะน้ำหนักม้วนนั้นแล้วพิมพ์ใหม่" oninput="setRollWeights(this.value)">${escapeHtml(barcodePrintState.rollWeights || "")}</textarea>
+              <div id="rollWeightInfo" class="roll-w-info">${rollWeightInfoText(barcodePrintState.rollWeights)}</div>
+            ` : `<div class="roll-w-warn">สินค้านี้ยังไม่มีบาร์โค้ดตัวเลข • กด <button type="button" class="btn btn-light" onclick="assignGeneratedBarcode('${currentP.id}')">✨ สร้างบาร์โค้ดให้สินค้านี้</button> ก่อน แล้วค่อยใส่น้ำหนัก</div>`}
+          </div>
+        ` : ''}
+        ${barcodePrintState.mode === 'single' && !(currentP?.track_weight && parseRollWeights(barcodePrintState.rollWeights).length) ? `
           <!-- Quantity Controls for Single Item -->
           <div class="field">
             <label for="barcodeQuantityInput" style="font-weight:700; font-size:13px; color:#e2e8f0;">จำนวนดวงที่ต้องการพิมพ์ (Copies / Labels)</label>
@@ -21500,6 +21448,22 @@ function updateBarcodePreview() {
   }
 }
 
+// สินค้าเดี่ยว: ถ้าใส่น้ำหนักรายม้วนไว้ → พิมพ์ 1 ดวงต่อม้วน (บาร์โค้ดมีน้ำหนัก)
+function barcodeSingleItems(p){
+  const ws = p?.track_weight ? parseRollWeights(barcodePrintState.rollWeights) : [];
+  if(ws.length && weightBarcodeValue(p, ws[0])) return ws.map((w, i) => ({ product: p, qty: 1, weight: w, seq: i + 1 }));
+  return [{ product: p, qty: barcodePrintState.quantity }];
+}
+function rollWeightInfoText(v){
+  const n = parseRollWeights(v);
+  if(!n.length) return "ยังไม่ได้ใส่น้ำหนัก → พิมพ์บาร์โค้ดปกติตามจำนวน";
+  const p = state.products.find(x => x.id === barcodePrintState.productId);
+  const stock = Number(p?.stock_qty || 0);
+  const cmp = stock ? (n.length === stock ? ` • ครบตามสต็อก ${stock} ม้วน ✓` : ` • สต็อกมี ${stock} ม้วน`) : "";
+  return `ใส่แล้ว ${n.length} ม้วน → พิมพ์ทีเดียว ${n.length} ดวง (แต่ละดวงมีน้ำหนักของม้วนนั้น)${cmp}`;
+}
+function setRollWeights(v){ barcodePrintState.rollWeights = v; const c = el("rollWeightInfo"); if(c) c.textContent = rollWeightInfoText(v); }
+
 // จำนวนดวงชุดรวม: 1 ดวง/ตามสต็อก + เผื่อเสีย (+N ดวงต่อสินค้า) + เติมให้เต็มแผ่น A4 สุดท้าย
 function batchLabelItems(list){
   const extra = Math.max(0, Number(barcodePrintState.batchExtra) || 0);
@@ -21524,7 +21488,7 @@ function printBarcodeLabelsMini() {
   if (barcodePrintState.mode === "single") {
     const p = state.products.find(x => x.id === barcodePrintState.productId) || state.products[0];
     if (!p) { toast("กรุณาเลือกสินค้า"); return; }
-    items = [{ product: p, qty: barcodePrintState.quantity }];
+    items = barcodeSingleItems(p);
   } else {
     items = batchLabelItems(getBatchPrintList());
     if (!items.length) { toast("ไม่มีสินค้าในเงื่อนไขการพิมพ์ชุดรวม"); return; }
@@ -21540,7 +21504,7 @@ function printBarcodeLabels() {
       toast("กรุณาเลือกสินค้า");
       return;
     }
-    itemsToPrint = [{ product: currentP, qty: barcodePrintState.quantity }];
+    itemsToPrint = barcodeSingleItems(currentP);
   } else {
     const list = getBatchPrintList();
     if (!list.length) {
@@ -21618,7 +21582,7 @@ function openBarcodePrintWindow() {
       toast("กรุณาเลือกสินค้า");
       return;
     }
-    itemsToPrint = [{ product: currentP, qty: barcodePrintState.quantity }];
+    itemsToPrint = barcodeSingleItems(currentP);
   } else {
     const list = getBatchPrintList();
     if (!list.length) {
@@ -22096,7 +22060,7 @@ Object.assign(window,{
   clearExpenseSearch,calculateFinancials,openExpenseModal,closeExpenseModal,saveExpenseFromModal,
   deleteExpense,renderExpenses,exportExpensesExcel,exportExpensesCSV,printExpensesReport,
   showReceiptModal,closeReceiptModal,printReceipt,saveReceiptAsJPEG,toast,el,
-  openBarcodePrintModal,closeBarcodePrintModal,openBarcodePrintFromScanner,setBarcodeMode,setBarcodeFormat,setBarcodeQty,onBarcodeQtyChange,onBarcodeSearchInput,clearBarcodeSearch,onBarcodeProductSelect,toggleBarcodeOption,setBarcodeBatchType,setBarcodeBatchExtra,toggleBarcodeFillPage,batchLabelItems,toggleBarcodeBatchOnlyInStock,assignGeneratedBarcode,promptEditBarcode,printBarcodeLabels,openBarcodePrintWindow,downloadBarcodeImage,
+  openBarcodePrintModal,closeBarcodePrintModal,openBarcodePrintFromScanner,setBarcodeMode,setBarcodeFormat,setBarcodeQty,onBarcodeQtyChange,onBarcodeSearchInput,clearBarcodeSearch,onBarcodeProductSelect,toggleBarcodeOption,setRollWeights,barcodeSingleItems,setBarcodeBatchType,setBarcodeBatchExtra,toggleBarcodeFillPage,batchLabelItems,toggleBarcodeBatchOnlyInStock,assignGeneratedBarcode,promptEditBarcode,printBarcodeLabels,openBarcodePrintWindow,downloadBarcodeImage,
   openLowStockPdfModal,updateLowStockModalContent,printLowStockSummaryPDF,copyLowStockSummaryText,setDashboardChartMode,exportRestockOrderPDF,downloadRestockOrderText,copyRestockOrderText,setRestockMultiplier,resetRestockOrder,updateRestockItemQty,receivePOItems,updatePOStatus,viewPODetailModal,selectProductForPOTimeline,saveSmartPODraft,setReplenishmentOption,updateSmartPODraftQty,setStockForecastUrgencyFilter,setStockForecastCatFilter,onStockForecastSearchInput,setLowStockSubTab,setPosFilter,setDashboardPeriod,onDashboardDateInputChange,applyDashboardCustomDate,updateProductModalBarcodePreview,generateAndSetProductModalBarcode,applyReportCustomDate,exportAccountingJournalExcel,exportAccountingJournalCSV,updateLiveReceiptPreview,buildReportBasketTab
 });
 function render(){
@@ -22129,8 +22093,4 @@ function render(){
   else if(state.page==="reservations" && typeof window.renderReservations==="function")window.renderReservations();
   else renderSettings();
 }
-if (typeof window.eaSplashStatus === "function") window.eaSplashStatus("กำลังโหลดข้อมูลร้าน…");
-Promise.resolve()
-  .then(() => loadAll())
-  .catch((err) => console.warn("[startup] loadAll failed:", err))
-  .finally(() => { if (typeof window.eaSplashHide === "function") window.eaSplashHide(); });
+loadAll();

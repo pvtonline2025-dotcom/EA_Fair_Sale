@@ -20448,10 +20448,7 @@ function buildA4DailyReportHTML(targetDate, daySales, daySaleItems) {
     if (p.priceNote) parts.push(`<span class="a4-note-promo">** ${escapeHtml(p.priceNote)} **</span>`);
     else if (p.unitPrice === 0) parts.push(`<span class="a4-note-promo">** แถม **</span>`);
     else if (p.originalPrice > p.unitPrice) parts.push(`<span class="a4-note-promo">ลดจาก ${money(p.originalPrice)}</span>`);
-    if (p.weights.length) {
-      // แยกน้ำหนักรายม้วน (ไม่รวมเป็นยอดเดียว)
-      parts.push(`<span class="a4-note-w">${p.weights.map(x => Number(x).toLocaleString("th-TH", { maximumFractionDigits: 3 })).join(", ")}</span>`);
-    }
+    // (ไม่ลงน้ำหนักในรายงานขายรายวันแล้ว)
     return parts.join("<br>");
   };
   const a4LineSum = productSummaryList.reduce((a, p) => a + p.total, 0);

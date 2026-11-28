@@ -1029,6 +1029,7 @@
         <span class="hub-tool-group">
           <button type="button" class="hub-tool" onclick="printDailyReport()">📄 พิมพ์ยอดขายรายวัน</button>
           <button type="button" class="hub-tool hub-tool-sm" onclick="copyDailyReportText()" title="คัดลอกยอดขายรายวันส่ง LINE">📋 LINE</button>
+          <button type="button" class="hub-tool hub-tool-sm" onclick="openSalesImage()" title="รูปรายงานยอดขายรายวัน ส่งไลน์กลุ่มบริษัท">📷 รูปยอดขาย</button>
         </span>
         <span class="hub-tool-group">
           <button type="button" class="hub-tool" onclick="printCashSummary()">💵 พิมพ์สรุปเงินสด</button>
@@ -1058,6 +1059,187 @@
   setInterval(checkRestockReminder, 60000);
   setTimeout(checkRestockReminder, 8000);
 
+  // =========================================================
+  // รูปรายงานยอดขายรายวัน (ส่งไลน์กลุ่มบริษัทตอนเย็น)
+  // =========================================================
+  const SALES_IMG_OPT = 'ea_sales_img_opts';
+  function salesImgOpts() { try { return { items: false, pay: false, ...JSON.parse(localStorage.getItem(SALES_IMG_OPT) || '{}') }; } catch (_) { return { items: false, pay: false }; } }
+  function setSalesImgOpt(k, v) { const o = salesImgOpts(); o[k] = !!v; lsSet(SALES_IMG_OPT, JSON.stringify(o)); refreshSalesImage(); }
+  function beYear(d = new Date()) { return d.getFullYear() + 543; }
+  function dateSlashBE(d = new Date()) { return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${beYear(d)}`; }
+  function eventTitle() {
+    const b = String(st()?.settings?.shopBranch || '').trim();
+    if (!b) return `ปี ${beYear()}`;
+    return /ปี\s*\d{4}/.test(b) ? b : `${b} ปี ${beYear()}`;
+  }
+  let salesLogo = null;
+  function loadSalesLogo() {
+    if (salesLogo) return Promise.resolve(salesLogo);
+    return new Promise(res => {
+      const im = new Image();
+      im.onload = () => { salesLogo = im; res(im); };
+      im.onerror = () => res(null);
+      im.src = 'assets/icons/logo-512.png';
+      setTimeout(() => res(null), 2500);
+    });
+  }
+  function drawSalesImage(d, opt, logo) {
+    const font = window.getAppFontStack?.() || 'sans-serif';
+    const W = 1200, PAD = 48, BLUE = '#1f4ea8', INK = '#0f172a', MUTED = '#64748b', LINE = '#cbd5e1';
+    const rows = opt.items ? [...d.sold, ...d.resvRows] : [];
+    const total = d.total + d.resvSales;
+    const HEAD = 230, ROW = 58;
+    let H = HEAD + 36;
+    if (rows.length) H += 64 + rows.length * ROW + 16;
+    H += 190;                                  // กล่องรวมทั้งหมด
+    if (opt.pay) H += 120;
+    H += 70;                                   // ท้ายภาพ
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const c = cv.getContext('2d');
+    c.fillStyle = '#ffffff'; c.fillRect(0, 0, W, H);
+    // ---- หัวสีน้ำเงิน ----
+    c.fillStyle = BLUE; c.fillRect(0, 0, W, HEAD);
+    const LG = 170, lx = PAD - 8, ly = (HEAD - LG) / 2;
+    if (logo) {
+      // โลโก้ logo-512.png ทั้งรูป (ไม่ตัดขอบ)
+      c.imageSmoothingQuality = 'high';
+      c.drawImage(logo, lx, ly, LG, LG);
+    } else {
+      c.fillStyle = '#ffffff'; c.beginPath(); c.arc(lx + LG / 2, ly + LG / 2, LG / 2, 0, Math.PI * 2); c.fill();
+      c.fillStyle = BLUE; c.font = `900 58px ${font}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('EA', lx + LG / 2, ly + LG / 2);
+    }
+    c.textBaseline = 'alphabetic';
+    const tx = lx + LG + 34;
+    c.textAlign = 'left'; c.fillStyle = '#ffffff';
+    c.font = `800 46px ${font}`; c.fillText(shopName(), tx, 100);
+    c.font = `600 38px ${font}`;
+    c.font = `600 36px ${font}`; const dateW = c.measureText(`วันที่   ${dateSlashBE()}`).width; c.font = `600 38px ${font}`;
+    const ev = wrapLines(c, eventTitle(), W - PAD - dateW - 30 - tx, 1)[0] || '';
+    c.fillText(ev, tx, 162);
+    c.textAlign = 'right';
+    c.font = `800 52px ${font}`; c.fillText('รายงานยอดขายรายวัน', W - PAD, 100);
+    c.font = `600 36px ${font}`; c.fillText(`วันที่   ${dateSlashBE()}`, W - PAD, 162);
+    let y = HEAD + 36;
+    // ---- รายการสินค้า (ถ้าเลือก) ----
+    if (rows.length) {
+      const cx = { no: PAD + 10, name: PAD + 70, price: 760, qty: 900, amt: W - PAD - 10 };
+      c.fillStyle = '#eef3fb'; c.fillRect(PAD, y, W - PAD * 2, 54);
+      c.fillStyle = BLUE; c.font = `700 26px ${font}`;
+      c.textAlign = 'left'; c.fillText('#', cx.no, y + 36); c.fillText('สินค้า', cx.name, y + 36);
+      c.textAlign = 'right'; c.fillText('ราคา', cx.price, y + 36); c.fillText('จำนวน', cx.qty + 40, y + 36); c.fillText('ผลรวม', cx.amt, y + 36);
+      y += 64;
+      rows.forEach((r, i) => {
+        c.fillStyle = INK; c.font = `500 28px ${font}`; c.textAlign = 'left';
+        c.fillStyle = MUTED; c.fillText(String(i + 1), cx.no, y + 38);
+        c.fillStyle = INK;
+        const nm = r.name + (r.note ? ` (${r.note})` : '');
+        c.fillText(wrapLines(c, nm, cx.price - cx.name - 110, 1)[0] || '', cx.name, y + 38);
+        c.textAlign = 'right';
+        c.fillText(r.price === 0 ? 'แถม' : fmtPrice(r.price), cx.price, y + 38);
+        c.fillText(`${fmtQty(r.qty)} ${r.unit || ''}`.trim(), cx.qty + 40, y + 38);
+        c.font = `700 28px ${font}`; c.fillText(money(r.amount), cx.amt, y + 38);
+        c.strokeStyle = LINE; c.lineWidth = 1; c.beginPath(); c.moveTo(PAD, y + ROW - 0.5); c.lineTo(W - PAD, y + ROW - 0.5); c.stroke();
+        y += ROW;
+      });
+      y += 16;
+    }
+    // ---- รวมทั้งหมด ----
+    c.strokeStyle = BLUE; c.lineWidth = 3; c.strokeRect(PAD + 1.5, y + 1.5, W - PAD * 2 - 3, 160);
+    c.fillStyle = '#f5f8fe'; c.fillRect(PAD + 3, y + 3, W - PAD * 2 - 6, 156);
+    c.textAlign = 'left'; c.fillStyle = INK; c.font = `800 44px ${font}`; c.fillText('รวมทั้งหมด', PAD + 36, y + 80);
+    c.fillStyle = MUTED; c.font = `700 24px ${font}`; c.fillText('TOTAL', PAD + 36, y + 120);
+    c.textAlign = 'right'; c.fillStyle = INK; c.font = `600 36px ${font}`; c.fillText('บาท', W - PAD - 36, y + 104);
+    const bw = c.measureText('บาท').width;
+    c.fillStyle = BLUE; c.font = `900 84px ${font}`;
+    c.fillText(money(total), W - PAD - 36 - bw - 22, y + 108);
+    y += 190;
+    // ---- เงินสด / โอน (ถ้าเลือก) ----
+    if (opt.pay) {
+      const cash = d.cashTotal + (d.resvCash || 0), qr = d.qrTotal + (d.resvQr || 0);
+      const cells = [['เงินสด', `${money(cash)}`], ['โอน / QR', `${money(qr)}`], ['จำนวนบิล', `${d.bills.toLocaleString('th-TH')} บิล`]];
+      const cw = (W - PAD * 2) / 3;
+      cells.forEach(([k, v], i) => {
+        const x0 = PAD + i * cw;
+        c.strokeStyle = LINE; c.lineWidth = 2; c.strokeRect(x0 + 1, y + 1, cw - 2 - (i < 2 ? 8 : 0), 96);
+        c.textAlign = 'left'; c.fillStyle = MUTED; c.font = `600 24px ${font}`; c.fillText(k, x0 + 22, y + 36);
+        c.fillStyle = INK; c.font = `800 36px ${font}`; c.fillText(v, x0 + 22, y + 80);
+      });
+      y += 120;
+    }
+    // ---- ท้ายภาพ ----
+    c.textAlign = 'left'; c.fillStyle = MUTED; c.font = `500 22px ${font}`;
+    c.fillText(`ส่ง ณ ${timeTh()} น.${d.pending ? `  •  มี ${d.pending} บิลยังไม่ซิงค์` : ''}`, PAD, H - 30);
+    c.textAlign = 'right'; c.fillText('EA Fair Sale', W - PAD, H - 30);
+    return cv;
+  }
+  let salesImg = null;
+  async function buildSalesImage() {
+    const logo = await loadSalesLogo();
+    const cv = drawSalesImage(reportData(), salesImgOpts(), logo);
+    const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+    if (!blob) return null;
+    if (salesImg?.url) URL.revokeObjectURL(salesImg.url);
+    const d = new Date(); const p = n => String(n).padStart(2, '0');
+    const file = new File([blob], `sales-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}.png`, { type: 'image/png' });
+    salesImg = { blob, url: URL.createObjectURL(blob), file };
+    return salesImg;
+  }
+  async function refreshSalesImage() {
+    const img = await buildSalesImage();
+    const el = document.querySelector('#salesImgDialog .rid-body img');
+    if (img && el) el.src = img.url;
+  }
+  async function openSalesImage() {
+    await loadImageFonts();
+    const img = await buildSalesImage();
+    if (!img) { toast('สร้างรูปไม่สำเร็จ'); return; }
+    let dlg = document.getElementById('salesImgDialog');
+    if (!dlg) {
+      dlg = document.createElement('dialog');
+      dlg.id = 'salesImgDialog';
+      dlg.className = 'restock-img-dialog';
+      document.body.appendChild(dlg);
+      dlg.addEventListener('close', () => { if (salesImg?.url) { URL.revokeObjectURL(salesImg.url); salesImg = null; } });
+    }
+    const o = salesImgOpts();
+    const canShare = !!(navigator.canShare && navigator.canShare({ files: [img.file] }));
+    const canCopy = !!(window.ClipboardItem && navigator.clipboard?.write);
+    dlg.innerHTML = `
+      <div class="rid-head">
+        <strong>📊 รายงานยอดขายรายวัน (รูป)</strong>
+        <button type="button" class="rid-close" onclick="document.getElementById('salesImgDialog').close()" aria-label="ปิด">✕</button>
+      </div>
+      <div class="rid-body"><img src="${img.url}" alt="รายงานยอดขายรายวัน"></div>
+      <div class="sid-opts">
+        <label><input type="checkbox" ${o.pay ? 'checked' : ''} onchange="setSalesImgOpt('pay', this.checked)"> แสดงเงินสด / โอน / จำนวนบิล</label>
+        <label><input type="checkbox" ${o.items ? 'checked' : ''} onchange="setSalesImgOpt('items', this.checked)"> แสดงรายการสินค้า</label>
+      </div>
+      <div class="rid-actions">
+        ${canShare ? '<button type="button" class="rid-btn rid-primary" onclick="shareSalesImage()">📤 แชร์ไป LINE</button>' : ''}
+        <button type="button" class="rid-btn ${canShare ? '' : 'rid-primary'}" onclick="downloadSalesImage()">💾 บันทึกรูป</button>
+        ${canCopy ? '<button type="button" class="rid-btn" onclick="copySalesImage()">📋 คัดลอกรูป</button>' : ''}
+      </div>
+      <div class="rid-hint">${canShare ? 'กด "แชร์ไป LINE" แล้วเลือก LINE → เลือกกลุ่มบริษัท' : 'บันทึกรูปแล้วส่งเข้า LINE หรือกด "คัดลอกรูป" แล้ววางในแชท LINE'}</div>`;
+    if (!dlg.open) dlg.showModal();
+  }
+  async function shareSalesImage() {
+    if (!salesImg) return;
+    try { await navigator.share({ files: [salesImg.file], title: 'รายงานยอดขายรายวัน', text: `รายงานยอดขายรายวัน ${dateSlashBE()}` }); }
+    catch (e) { if (e?.name !== 'AbortError') toast('แชร์ไม่สำเร็จ — ลองกด "บันทึกรูป" แทน'); }
+  }
+  function downloadSalesImage() {
+    if (!salesImg) return;
+    const a = document.createElement('a'); a.href = salesImg.url; a.download = salesImg.file.name;
+    document.body.appendChild(a); a.click(); a.remove();
+    toast('💾 บันทึกรูปรายงานยอดขายแล้ว');
+  }
+  async function copySalesImage() {
+    if (!salesImg) return;
+    try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': salesImg.blob })]); toast('📋 คัดลอกรูปแล้ว • วางในแชท LINE ได้เลย'); }
+    catch (e) { toast('คัดลอกรูปไม่สำเร็จ — ใช้ "บันทึกรูป" แทน'); }
+  }
+
   Object.assign(window, {
     renderHubToolbar: renderToolbar,
     renderHubRestockPanel: renderRestockPanel,
@@ -1073,6 +1255,8 @@
     hubRestockImageCanvas: () => drawRestockImage(restockList()),
     printDailyReport,
     copyDailyReportText,
+    openSalesImage, setSalesImgOpt, shareSalesImage, downloadSalesImage, copySalesImage,
+    hubSalesImageCanvas: (opt) => drawSalesImage(reportData(), { items: false, pay: false, ...(opt || {}) }, salesLogo),
     printCashSummary,
     copyCashSummaryText,
     hubCashSummaryText: cashSummaryText,

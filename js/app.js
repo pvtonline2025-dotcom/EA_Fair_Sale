@@ -4300,6 +4300,7 @@ function renderHome(){
               <h3 class="tdd-panel-title">
                 <span>ยอดขายวันนี้</span>
               </h3>
+              <button type="button" class="tdd-send-line" onclick="event.stopPropagation(); window.openSalesImage?.()" title="ส่งรูปยอดขายรายวันเข้าไลน์กลุ่มบริษัท">📷 ส่งยอดเข้าไลน์</button>
               <span class="tdd-panel-link-icon" title="ดูประวัติบิล">↗</span>
             </div>
 

@@ -198,3 +198,7 @@
 .sid-opts { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 10px 16px; font-size: 14px; font-weight: 700; }
 .sid-opts label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
 .sid-opts input { width: 20px; height: 20px; }
+
+/* ปุ่มส่งรูปยอดขายบนหน้าภาพรวมวันนี้ */
+.tdd-send-line { margin-left: auto; margin-right: 8px; padding: 6px 12px; min-height: 34px; border-radius: 0; border: 1px solid #06c755; background: #06c755; color: #fff; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; white-space: nowrap; }
+.tdd-send-line:hover { filter: brightness(1.08); }

@@ -1085,7 +1085,7 @@
   }
   function drawSalesImage(d, opt, logo) {
     const font = window.getAppFontStack?.() || 'sans-serif';
-    const W = 1200, PAD = 48, BLUE = '#1f4ea8', INK = '#0f172a', MUTED = '#64748b', LINE = '#cbd5e1';
+    const W = 1200, PAD = 48, BLUE = '#1f4ea8', RED = '#c8161d', INK = '#0f172a', MUTED = '#64748b', LINE = '#cbd5e1';
     const rows = opt.items ? [...d.sold, ...d.resvRows] : [];
     const total = d.total + d.resvSales;
     const HEAD = 230, ROW = 58;
@@ -1098,33 +1098,36 @@
     cv.width = W; cv.height = H;
     const c = cv.getContext('2d');
     c.fillStyle = '#ffffff'; c.fillRect(0, 0, W, H);
-    // ---- หัวสีน้ำเงิน ----
-    c.fillStyle = BLUE; c.fillRect(0, 0, W, HEAD);
-    const LG = 170, lx = PAD - 8, ly = (HEAD - LG) / 2;
+    // ---- หัวพื้นขาว + แถบฟ้าซ้าย + เส้นคั่น ----
+    c.fillStyle = '#fff6f6'; c.fillRect(0, 0, W, HEAD);   // หัวพื้นชมพูอ่อน
+    c.fillStyle = RED; c.fillRect(0, 0, 14, HEAD);
+    const LG = 166, lx = PAD, ly = (HEAD - LG) / 2;
     if (logo) {
-      // โลโก้ logo-512.png ทั้งรูป (ไม่ตัดขอบ)
+      // โลโก้ logo-512.png มุมโค้งแบบไอคอนแอป
       c.imageSmoothingQuality = 'high';
-      c.drawImage(logo, lx, ly, LG, LG);
+      c.save(); c.beginPath();
+      if (c.roundRect) c.roundRect(lx + 4, ly + 4, LG - 8, LG - 8, 30); else c.rect(lx + 4, ly + 4, LG - 8, LG - 8);
+      c.clip(); c.drawImage(logo, lx, ly, LG, LG); c.restore();
     } else {
-      c.fillStyle = '#ffffff'; c.beginPath(); c.arc(lx + LG / 2, ly + LG / 2, LG / 2, 0, Math.PI * 2); c.fill();
-      c.fillStyle = BLUE; c.font = `900 58px ${font}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('EA', lx + LG / 2, ly + LG / 2);
+      c.fillStyle = BLUE; c.beginPath(); c.arc(lx + LG / 2, ly + LG / 2, LG / 2, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#ffffff'; c.font = `900 58px ${font}`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('EA', lx + LG / 2, ly + LG / 2);
     }
     c.textBaseline = 'alphabetic';
     const tx = lx + LG + 34;
-    c.textAlign = 'left'; c.fillStyle = '#ffffff';
+    c.textAlign = 'left'; c.fillStyle = '#1f2937';
     c.font = `800 46px ${font}`; c.fillText(shopName(), tx, 100);
-    c.font = `600 38px ${font}`;
+    c.fillStyle = '#4b5563';
     c.font = `600 36px ${font}`; const dateW = c.measureText(`วันที่   ${dateSlashBE()}`).width; c.font = `600 38px ${font}`;
     const ev = wrapLines(c, eventTitle(), W - PAD - dateW - 30 - tx, 1)[0] || '';
     c.fillText(ev, tx, 162);
     c.textAlign = 'right';
-    c.font = `800 52px ${font}`; c.fillText('รายงานยอดขายรายวัน', W - PAD, 100);
-    c.font = `600 36px ${font}`; c.fillText(`วันที่   ${dateSlashBE()}`, W - PAD, 162);
+    c.fillStyle = RED; c.font = `800 50px ${font}`; c.fillText('รายงานยอดขายรายวัน', W - PAD, 100);
+    c.fillStyle = '#4b5563'; c.font = `600 36px ${font}`; c.fillText(`วันที่   ${dateSlashBE()}`, W - PAD, 162);
     let y = HEAD + 36;
     // ---- รายการสินค้า (ถ้าเลือก) ----
     if (rows.length) {
       const cx = { no: PAD + 10, name: PAD + 70, price: 760, qty: 900, amt: W - PAD - 10 };
-      c.fillStyle = '#eef3fb'; c.fillRect(PAD, y, W - PAD * 2, 54);
+      c.fillStyle = BLUE; c.fillRect(PAD, y + 52, W - PAD * 2, 2);
       c.fillStyle = BLUE; c.font = `700 26px ${font}`;
       c.textAlign = 'left'; c.fillText('#', cx.no, y + 36); c.fillText('สินค้า', cx.name, y + 36);
       c.textAlign = 'right'; c.fillText('ราคา', cx.price, y + 36); c.fillText('จำนวน', cx.qty + 40, y + 36); c.fillText('ผลรวม', cx.amt, y + 36);
@@ -1146,7 +1149,6 @@
     }
     // ---- รวมทั้งหมด ----
     c.strokeStyle = BLUE; c.lineWidth = 3; c.strokeRect(PAD + 1.5, y + 1.5, W - PAD * 2 - 3, 160);
-    c.fillStyle = '#f5f8fe'; c.fillRect(PAD + 3, y + 3, W - PAD * 2 - 6, 156);
     c.textAlign = 'left'; c.fillStyle = INK; c.font = `800 44px ${font}`; c.fillText('รวมทั้งหมด', PAD + 36, y + 80);
     c.fillStyle = MUTED; c.font = `700 24px ${font}`; c.fillText('TOTAL', PAD + 36, y + 120);
     c.textAlign = 'right'; c.fillStyle = INK; c.font = `600 36px ${font}`; c.fillText('บาท', W - PAD - 36, y + 104);

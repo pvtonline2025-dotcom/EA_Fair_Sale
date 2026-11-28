@@ -677,7 +677,7 @@
         <thead><tr><th class="c">วันที่</th><th>สินค้า</th><th class="r">ราคา</th><th class="c">จำนวน</th><th class="c">หน่วย</th><th class="r">ผลรวม</th></tr></thead>
         <tbody>
           ${[...d.sold, ...d.resvRows].map((r, i) => `
-            <tr class="${r.weights.length ? 'has-w' : ''}">
+            <tr>
               <td class="c b">${i === 0 ? shortDateBE() : ''}</td>
               <td>${escapeHtml(r.name)}${r.note ? ` <span class="promo">** ${escapeHtml(r.note)} **</span>` : ''}</td>
               <td class="r">${r.price === 0 ? '' : fmtPrice(r.price)}</td>
@@ -685,7 +685,7 @@
               <td class="c">${escapeHtml(r.unit)}</td>
               <td class="r b">${money(r.amount)}</td>
             </tr>
-            ${r.weights.length ? `<tr class="w"><td></td><td colspan="5">⚖️ ${r.weights.map(w => fmtQty(w)).join(', ')}</td></tr>` : ''}`).join('')}
+`).join('')}
         </tbody>
       </table>
       <div class="grand"><span>รวมทั้งหมด</span><strong>${money([...d.sold, ...d.resvRows].reduce((a, r) => a + r.amount, 0))}</strong></div>
@@ -812,7 +812,6 @@
     let t = `📊 ยอดขายรายวัน ${shopName()}\n${dateTh()} (ณ ${timeTh()} น.)\n\n`;
     [...d.sold, ...d.resvRows].forEach((r, i) => {
       t += `${i + 1}. ${r.name}${r.note ? ` **${r.note}**` : ''}  ${r.price === 0 ? 'แถม' : fmtPrice(r.price)} × ${fmtQty(r.qty)} ${r.unit} = ${money(r.amount)}\n`;
-      if (r.weights.length) t += `   ⚖️ ${r.weights.map(w => fmtQty(w)).join(', ')}\n`;
     });
     t += `\nรวมทั้งหมด ${money([...d.sold, ...d.resvRows].reduce((a, r) => a + r.amount, 0))}`;
     if (d.discount > 0) t += `\nส่วนลดท้ายบิล −${money(d.discount)}\nยอดขายสุทธิ ${money(d.total + d.resvSales)}`;
